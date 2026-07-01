@@ -1,0 +1,67 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`golden field hashes > seed 1: initial state and after 10 steps 1`] = `
+{
+  "after10Steps": {
+    "biome": "b0549dc5",
+    "crustAge": "b0549dc5",
+    "elevation": "82c5e946",
+    "iceFraction": "b0549dc5",
+    "precipitation": "b0549dc5",
+    "temperature": "9adb4901",
+    "timeYears": 10000000,
+  },
+  "initial": {
+    "biome": "b0549dc5",
+    "crustAge": "b0549dc5",
+    "elevation": "82c5e946",
+    "iceFraction": "b0549dc5",
+    "precipitation": "b0549dc5",
+    "temperature": "9adb4901",
+  },
+}
+`;
+
+exports[`golden field hashes > seed 42: initial state and after 10 steps 1`] = `
+{
+  "after10Steps": {
+    "biome": "b0549dc5",
+    "crustAge": "b0549dc5",
+    "elevation": "9b025581",
+    "iceFraction": "b0549dc5",
+    "precipitation": "b0549dc5",
+    "temperature": "ebe55872",
+    "timeYears": 10000000,
+  },
+  "initial": {
+    "biome": "b0549dc5",
+    "crustAge": "b0549dc5",
+    "elevation": "9b025581",
+    "iceFraction": "b0549dc5",
+    "precipitation": "b0549dc5",
+    "temperature": "ebe55872",
+  },
+}
+`;
+
+exports[`golden field hashes > seed 1337: initial state and after 10 steps 1`] = `
+{
+  "after10Steps": {
+    "biome": "b0549dc5",
+    "crustAge": "b0549dc5",
+    "elevation": "ccfc8176",
+    "iceFraction": "b0549dc5",
+    "precipitation": "b0549dc5",
+    "temperature": "cce78f95",
+    "timeYears": 10000000,
+  },
+  "initial": {
+    "biome": "b0549dc5",
+    "crustAge": "b0549dc5",
+    "elevation": "ccfc8176",
+    "iceFraction": "b0549dc5",
+    "precipitation": "b0549dc5",
+    "temperature": "cce78f95",
+  },
+}
+`;
