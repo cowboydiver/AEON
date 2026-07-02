@@ -2,6 +2,7 @@ import { copyEvents, type SimEvent } from './events';
 import { FIELD_NAMES, type Fields } from './fields';
 import { createRng, type Rng } from './rng';
 import { createInitialState, type PlanetState, type PlanetParams } from './state';
+import { tectonicsSystem } from './systems/tectonics';
 
 /** Per-run context threaded through systems. Never global. */
 export interface SimContext {
@@ -18,14 +19,14 @@ export interface System {
   apply: (state: PlanetState, dtYears: number, ctx: SimContext) => PlanetState;
 }
 
-/** Phase 0 pipeline: a single no-op. The point is the pipeline shape. */
+/** No-op system, kept for tests and as the pipeline-shape reference. */
 export const identitySystem: System = {
   name: 'identity',
   apply: (state) => state,
 };
 
 /** Ordered system pipeline applied by every step. */
-export const SYSTEMS: readonly System[] = [identitySystem];
+export const SYSTEMS: readonly System[] = [tectonicsSystem];
 
 /** Advance the state by dtYears through the ordered system pipeline. */
 export function step(

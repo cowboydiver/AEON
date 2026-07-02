@@ -91,6 +91,13 @@ export const PLATE_FILL_JITTER = 1.5;
 export const PLATE_OMEGA_MIN_RAD_PER_YR = 1.5e-9;
 export const PLATE_OMEGA_MAX_RAD_PER_YR = 8e-9;
 
+/**
+ * Depth of brand-new oceanic crust at a spreading center, m below datum.
+ * Mid-ocean ridge crests sit at ~2.5 km depth (half-space cooling t=0 term,
+ * Parsons & Sclater 1977). Divergent gap cells are created at this depth.
+ */
+export const OCEAN_RIDGE_DEPTH_M = -2500;
+
 /** Default simulation step, years. Chosen so 10 steps fit one keyframe interval. */
 export const DEFAULT_STEP_YEARS = 1e6;
 

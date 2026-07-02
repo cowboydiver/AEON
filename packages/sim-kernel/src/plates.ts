@@ -38,6 +38,15 @@ export interface PlateRecord {
    * (#13) applies it in whole quanta of one cell width and resets it.
    */
   accumulatedRadians: number;
+  /**
+   * Number of advection events this plate has undergone. Drives the
+   * deterministic dither of the advection quantum: with a FIXED quantum,
+   * cells rotating slower than the quantum (near the Euler pole) see the
+   * same sub-cell rounding every event and systematically stall (found by
+   * the #13 blob-transport test). Varying the quantum per event decorrelates
+   * the rounding phase, so mean motion is preserved at every latitude.
+   */
+  advectionCount: number;
   /** Simulation time this plate came into existence (0 = initial partition). */
   createdAtYears: number;
   /** Fraction of the plate's cells that were continental at creation (diagnostic). */
@@ -156,6 +165,7 @@ export function applyInitialPlates(state: PlanetState): PlanetState {
       eulerPole,
       angularVelRadPerYr: omega,
       accumulatedRadians: 0,
+      advectionCount: 0,
       createdAtYears: 0,
       continentalFraction: continentalCells[p]! / plateCells[p]!,
       alive: true,

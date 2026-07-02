@@ -36,3 +36,5 @@ export {
   type SimContext,
   type Keyframe,
 } from './step';
+export { tectonicsSystem, plateVelocityAt } from './systems/tectonics';
+export { cellCenterTable, neighborTable } from './grid';

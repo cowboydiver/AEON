@@ -104,6 +104,17 @@ every K events, √(events/K) wander).
 is raw speed (no per-moving-plate claim scan), which does not matter at
 kernel scale (9.5 ms/step full-grid at N=128; golden tests take 10 steps).
 
+**Post-integration addendum (#13).** The kernel's blob-transport test exposed
+a systematic failure the spike's RMS metric had lumped into "wobble": with a
+*fixed* advection quantum, cells rotating slower than the quantum (anywhere
+much below the plate's rotation equator, i.e. toward its Euler pole) meet the
+same sub-cell rounding at every event and **stall** — a 5×5 blob 25° from the
+pole lagged 6 cells behind its analytic position over 500 Myr while keeping
+its shape. Fix, adopted in the kernel: dither the quantum per event
+(1–2.5 cell widths, hash of (seed, plate, eventCount)), which sweeps the
+rounding phase and restores unbiased motion at every latitude (lag ≤ 1 cell
+in the same test). The recommendation below stands with that amendment.
+
 ## Recommendation (drives #13)
 
 **Semi-Lagrangian gather** with per-plate quantized rotation accumulation

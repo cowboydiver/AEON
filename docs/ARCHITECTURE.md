@@ -114,6 +114,7 @@ order by plate index — **iterate by index, never object-key order**:
 ```
 PlateRecord = { eulerPole (unit Vec3), angularVelRadPerYr,
                 accumulatedRadians,        // un-applied rotation (#13)
+                advectionCount,            // events so far, drives quantum dither
                 createdAtYears, continentalFraction, alive }
 ```
 
@@ -127,6 +128,33 @@ Earth's ~41% incl. shelves) of initial elevation — the threshold sits below
 sea level, so continental shelves are continental crust that starts
 submerged. Initial elevation itself is still the Phase 0 noise terrain;
 plates are an overlay until #15/#16 make elevation follow them.
+
+### Crust advection (#13, spike-#10 winner)
+
+The `tectonics` system moves crust by **semi-Lagrangian gather**. Every step
+accumulates each live plate's rotation (`accumulatedRadians += ω·dt`). A
+plate advects when its accumulated angle crosses its **dithered quantum** —
+between 1 and 2.5 cell widths ((π/2)/N), chosen deterministically per
+(seed, plate, advectionCount) — and then rotates by the *full* accumulated
+angle and resets, so no sub-cell motion is ever discarded. The dither exists
+because a fixed quantum makes cells that rotate slower than it (near the
+plate's Euler pole) see the same sub-cell rounding at every event and stall
+systematically (a #13 blob-transport test finding, 6-cell lag over 500 Myr;
+dithered: ≤1 cell). Residual error is an unbiased ~0.5-cell/event random
+walk (accepted spike-#10 limitation).
+
+At an advection event, each cell gathers claims: a moved plate p claims cell
+i iff p owned i's backward-rotated source cell (interiors are exact by
+construction); an unmoved plate claims exactly its current cells. Crust
+properties — `elevation`, `crustAge`, `crustType` (`ADVECTED_FIELDS`) —
+travel from the winning claim's source cell; values are copied, never
+interpolated. Overlap resolution is provisional until #16 (moved beats
+static, then lower plate index). Unclaimed cells are divergent gaps,
+repaired by deterministic majority-of-assigned-neighbors passes and filled
+as provisional young ocean (crustAge 0, oceanic, ridge depth −2500 m) — #15
+replaces this with real ridge bathymetry. Hot loops read the memoized
+`cellCenterTable(N)` / `neighborTable(N)` (pure derived data, like the
+seam-fold EDGE_MAPS).
 
 Iteration over fields always uses `FIELD_NAMES` (insertion order of the
 `FIELDS` const) — never `Object.keys` of some other object — so ordering is
