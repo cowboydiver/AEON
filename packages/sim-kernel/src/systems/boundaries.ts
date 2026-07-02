@@ -11,6 +11,18 @@
  * than stored as a second field.
  */
 
+import { oceanicDepthForAge } from '../bathymetry';
+import {
+  ACTIVE_MARGIN_STRESS_M_PER_YR,
+  ARC_GROWTH_RATE_M_PER_YR,
+  ARC_MAX_ELEVATION_M,
+  COLLISION_WIDTH_CELLS,
+  OROGENY_MAX_ELEVATION_M,
+  OROGENY_RATE_M_PER_YR,
+  OROGENY_STRESS_REF_M_PER_YR,
+  OROGENY_WIDTH_CELLS,
+  TRENCH_EXTRA_DEPTH_M,
+} from '../constants';
 import { cellCenterTable, neighborTable } from '../grid';
 import { plateVelocityAt } from '../plates';
 import type { PlanetState } from '../state';
@@ -124,4 +136,98 @@ export function overrides(
   if (typeA !== typeB) return typeA === 1;
   if (typeA === 0 && ageA !== ageB) return ageA < ageB;
   return plateA < plateB;
+}
+
+/**
+ * Convergent-margin topography (#16), applied every step after thermal
+ * subsidence. For each active convergent boundary cell (stress above
+ * ACTIVE_MARGIN_STRESS, exempted from the subsidence hard-set when oceanic):
+ *
+ *  - continent–continent: collision — symmetric orogeny on both sides,
+ *    wider than a subduction margin (each side seeds when visited).
+ *  - overriding continental side: orogeny — uplift spread a few cells
+ *    inland with linear falloff, rate ∝ closing speed, capped at ~9 km.
+ *  - overriding oceanic side: volcanic arc — elevation accumulates from its
+ *    advected value toward a low island ceiling.
+ *  - subducting oceanic side: trench — pinned below the local age-depth
+ *    floor by up to TRENCH_EXTRA_DEPTH_M, scaled by closing speed. When a
+ *    margin deactivates, trench and arc cells rejoin the subsidence hard-set
+ *    and relax to the age-depth curve (a documented Phase 1 simplification:
+ *    dead arcs sink instantly instead of persisting as seamounts).
+ *
+ * Mutates only the caller's working `elevation` copy — never state fields.
+ */
+export function applyConvergentTopography(
+  state: PlanetState,
+  stress: Float32Array,
+  elevation: Float32Array,
+  dtYears: number,
+): void {
+  const N = state.params.gridN;
+  const nbTable = neighborTable(N);
+  const { plateId, crustType, crustAge } = state.fields;
+
+  interface Seed {
+    cell: number;
+    amount: number;
+    width: number;
+  }
+  const seeds: Seed[] = [];
+
+  for (let i = 0; i < plateId.length; i++) {
+    if (stress[i]! <= ACTIVE_MARGIN_STRESS_M_PER_YR) continue;
+    const other = dominantOtherPlate(plateId, i, nbTable);
+    if (other === null) continue;
+
+    const norm = Math.min(1, stress[i]! / OROGENY_STRESS_REF_M_PER_YR);
+    const myType = crustType[i]!;
+    const otherType = crustType[other.cell]!;
+
+    if (myType === 1 && otherType === 1) {
+      // Collision: this side seeds; the other side seeds when visited.
+      seeds.push({ cell: i, amount: OROGENY_RATE_M_PER_YR * dtYears * norm, width: COLLISION_WIDTH_CELLS });
+    } else if (
+      overrides(myType, crustAge[i]!, plateId[i]!, otherType, crustAge[other.cell]!, other.plate)
+    ) {
+      if (myType === 1) {
+        seeds.push({ cell: i, amount: OROGENY_RATE_M_PER_YR * dtYears * norm, width: OROGENY_WIDTH_CELLS });
+      } else {
+        elevation[i] = Math.min(
+          elevation[i]! + ARC_GROWTH_RATE_M_PER_YR * dtYears * norm,
+          ARC_MAX_ELEVATION_M,
+        );
+      }
+    } else {
+      // Subducting side is always oceanic (continental crust never loses to
+      // oceanic under overrides(), and continent-continent is collision).
+      elevation[i] = oceanicDepthForAge(crustAge[i]!) - TRENCH_EXTRA_DEPTH_M * norm;
+    }
+  }
+
+  // Spread orogenic uplift inland: BFS through same-plate continental cells,
+  // linear falloff over the seed's width, capped at the orogeny ceiling.
+  // Deterministic: seeds are in ascending cell order, BFS order is fixed.
+  // dist doubles as the visited marker; only touched cells are reset after
+  // each seed, so cost stays O(seeds x width^2), not O(seeds x grid).
+  const dist = new Int32Array(plateId.length).fill(-1);
+  for (const seed of seeds) {
+    const plate = plateId[seed.cell]!;
+    dist[seed.cell] = 0;
+    const queue = [seed.cell];
+    for (let q = 0; q < queue.length; q++) {
+      const c = queue[q]!;
+      const d = dist[c]!;
+      const falloff = (seed.width + 1 - d) / (seed.width + 1);
+      elevation[c] = Math.min(OROGENY_MAX_ELEVATION_M, elevation[c]! + seed.amount * falloff);
+      if (d >= seed.width) continue;
+      for (let k = 0; k < 4; k++) {
+        const nb = nbTable[c * 4 + k]!;
+        if (dist[nb] === -1 && plateId[nb] === plate && crustType[nb] === 1) {
+          dist[nb] = d + 1;
+          queue.push(nb);
+        }
+      }
+    }
+    for (const c of queue) dist[c] = -1;
+  }
 }

@@ -118,6 +118,59 @@ export const OCEAN_ABYSSAL_DEPTH_M = -6000;
  */
 export const CONTINENTAL_INITIAL_AGE_YEARS = 2e9;
 
+/**
+ * Convergence speed above which a boundary cell counts as an active margin
+ * (trench/arc/orogeny; oceanic cells here are exempt from the thermal
+ * subsidence hard-set), m/yr. 0.005 = 0.5 cm/yr, well below any deliberate
+ * convergence but above transform noise.
+ */
+export const ACTIVE_MARGIN_STRESS_M_PER_YR = 0.005;
+
+/**
+ * Reference convergence speed for scaling orogeny/trench/arc rates, m/yr.
+ * 0.05 = 5 cm/yr, the fast end of modern plate convergence (Nazca-South
+ * America order); stress/reference is clamped to [0, 1].
+ */
+export const OROGENY_STRESS_REF_M_PER_YR = 0.05;
+
+/**
+ * Net surface uplift rate at reference convergence, m/yr, before erosion.
+ * 0.6 mm/yr sustained is the order of net orogenic surface rise (gross rock
+ * uplift is a few mm/yr; syn-orogenic erosion eats most of it, and #19's
+ * erosion removes more on top of this). Reaches the 9 km ceiling after
+ * ~15 Myr of full-speed head-on convergence.
+ */
+export const OROGENY_RATE_M_PER_YR = 6e-4;
+
+/** How many cells inland orogenic uplift spreads (linear falloff). */
+export const OROGENY_WIDTH_CELLS = 3;
+
+/** Wider uplift zone for continent-continent collision (Tibet-style). */
+export const COLLISION_WIDTH_CELLS = 4;
+
+/**
+ * Elevation ceiling for orogenic uplift, m. Crustal strength / isostasy caps
+ * mountains near 9 km before erosion (Everest 8.8 km).
+ */
+export const OROGENY_MAX_ELEVATION_M = 9000;
+
+/**
+ * Extra trench depth below the local age-depth floor at full-speed
+ * subduction, m. Abyssal floor -6000 minus 2500 puts trenches at -8500 or
+ * deeper — ocean trench order (Mariana ~-11 km, typical -8..-10 km).
+ */
+export const TRENCH_EXTRA_DEPTH_M = 2500;
+
+/**
+ * Island-arc crust growth rate at reference convergence, m/yr. Arcs climb
+ * from abyssal depth toward the surface over ~20-30 Myr of subduction
+ * (order of real arc construction timescales).
+ */
+export const ARC_GROWTH_RATE_M_PER_YR = 2e-4;
+
+/** Ceiling for volcanic-arc elevation, m (island arcs, not continents). */
+export const ARC_MAX_ELEVATION_M = 1000;
+
 /** Default simulation step, years. Chosen so 10 steps fit one keyframe interval. */
 export const DEFAULT_STEP_YEARS = 1e6;
 

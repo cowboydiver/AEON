@@ -173,6 +173,27 @@ of new ridge crust follows the gap-repair majority rule — roughly half to
 each flank, matching symmetric spreading. #16 exempts active convergent
 margins from the hard subsidence set to build trenches and arcs.
 
+### Convergent boundaries (#16)
+
+Advection overlaps (a cell claimed by more than one plate) are convergence:
+the overriding side (per `overrides()`) keeps the surface and the losing
+side's crust is consumed — an ownership transfer, never a hole. Convergent
+topography is driven by `boundaryStress` every step, scaled by
+stress/0.05 m·yr⁻¹ (clamped): the **subducting oceanic** side is pinned up
+to 2500 m below its age-depth floor (trench); the **overriding continental**
+side gets orogenic uplift (0.6 mm/yr at reference speed, before erosion)
+spread 3 cells inland with linear falloff, capped at 9 km; an **overriding
+oceanic** side accumulates arc elevation toward a 1 km island ceiling;
+**continent–continent** contact is collision — symmetric uplift on both
+sides, 4 cells wide, no subduction. Oceanic cells on active convergent
+margins (stress > 0.005 m/yr) are exempt from the subsidence hard-set; when
+a margin deactivates they rejoin it, so dead trenches heal and dead arcs
+sink to the age-depth curve immediately (documented simplification — no
+seamount persistence). Plate speeds do not slow in collisions in Phase 1
+(documented simplification); the 9 km cap plus #19's erosion bound the
+consequences. Old mountain belts advect with their plates and persist until
+erosion (#19) ages them.
+
 ### Boundary classification (#14)
 
 A cell is a boundary cell iff any 4-neighbor has a different `plateId`. Each

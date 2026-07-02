@@ -21,13 +21,13 @@
  */
 
 import { oceanicDepthForAge } from '../bathymetry';
-import { OCEAN_RIDGE_DEPTH_M } from '../constants';
+import { ACTIVE_MARGIN_STRESS_M_PER_YR, OCEAN_RIDGE_DEPTH_M } from '../constants';
 import { cellCenterTable, cellCount, directionToIndex, neighborTable, type Vec3 } from '../grid';
 import { hash2, hashString } from '../hash';
 import type { PlanetState } from '../state';
 import type { System } from '../step';
 import { rotateAroundAxis } from '../vec';
-import { computeBoundaryStress } from './boundaries';
+import { applyConvergentTopography, computeBoundaryStress, overrides } from './boundaries';
 
 /**
  * The advection quantum for a plate's next event: between 1 and 2.5 cell
@@ -90,14 +90,21 @@ function applyTectonics(state: PlanetState, dtYears: number): PlanetState {
   const boundaryStress = computeBoundaryStress(next);
 
   // Thermal subsidence (#15): oceanic elevation is a pure function of
-  // crustAge (isostasy) — ridge crest young, abyssal plain old. #16 exempts
-  // active margins and builds trenches/arcs/orogens on top.
+  // crustAge (isostasy) — ridge crest young, abyssal plain old. Active
+  // convergent margins are exempt (#16): trenches pin below the curve,
+  // arcs accumulate above it.
   const elevation = next.fields.elevation.slice();
   const { crustType } = next.fields;
   const age = next.fields.crustAge;
   for (let i = 0; i < elevation.length; i++) {
-    if (crustType[i] === 0) elevation[i] = oceanicDepthForAge(age[i]!);
+    if (crustType[i] === 0 && boundaryStress[i]! <= ACTIVE_MARGIN_STRESS_M_PER_YR) {
+      elevation[i] = oceanicDepthForAge(age[i]!);
+    }
   }
+
+  // Convergent topography (#16): trench + arc + orogenic uplift, driven by
+  // this step's stress. Mutates only the local elevation copy.
+  applyConvergentTopography(next, boundaryStress, elevation, dtYears);
 
   let land = 0;
   for (const e of elevation) if (e >= 0) land++;
@@ -135,11 +142,16 @@ function advect(
     crustType: state.fields.crustType,
   };
 
-  // Claims + resolution. Precedence: moved plates (ascending index) beat the
-  // static owner. #16 replaces this with subduction density rules.
+  // Claims + resolution. Overlaps (multiple claimants) are convergence: the
+  // overriding side keeps the surface, the subducting side's crust is
+  // consumed — an ownership transfer, never a hole (#16). Polarity comes
+  // from overrides(): continental beats oceanic, younger oceanic beats
+  // older, ties to the lower plate id. The fold order is deterministic and
+  // overrides() is a strict weak order, so the winner is order-independent.
   const dir: Vec3 = [0, 0, 0];
   for (let i = 0; i < count; i++) {
-    let chosenSrc = -1;
+    let winSrc = -1;
+    let winPlate = -1;
     dir[0] = centers[i * 3]!;
     dir[1] = centers[i * 3 + 1]!;
     dir[2] = centers[i * 3 + 2]!;
@@ -148,21 +160,42 @@ function advect(
         rotateAroundAxis(dir, state.plates[p]!.eulerPole, -accumulated[p]!),
         N,
       );
-      if (oldPlate[src] === p) {
-        chosenSrc = src;
-        newFields.plateId[i] = p;
-        break;
+      if (oldPlate[src] !== p) continue;
+      if (
+        winPlate === -1 ||
+        overrides(
+          old.crustType[src]!,
+          old.crustAge[src]!,
+          p,
+          old.crustType[winSrc]!,
+          old.crustAge[winSrc]!,
+          winPlate,
+        )
+      ) {
+        winSrc = src;
+        winPlate = p;
       }
     }
-    if (chosenSrc === -1) {
-      const owner = oldPlate[i]!;
-      if (!movingSet[owner]) {
-        chosenSrc = i;
-        newFields.plateId[i] = owner;
+    const owner = oldPlate[i]!;
+    if (!movingSet[owner]) {
+      if (
+        winPlate === -1 ||
+        overrides(
+          old.crustType[i]!,
+          old.crustAge[i]!,
+          owner,
+          old.crustType[winSrc]!,
+          old.crustAge[winSrc]!,
+          winPlate,
+        )
+      ) {
+        winSrc = i;
+        winPlate = owner;
       }
     }
-    if (chosenSrc !== -1) {
-      for (const f of ADVECTED_FIELDS) newFields[f][i] = old[f][chosenSrc]!;
+    if (winSrc !== -1) {
+      newFields.plateId[i] = winPlate;
+      for (const f of ADVECTED_FIELDS) newFields[f][i] = old[f][winSrc]!;
     }
   }
 
