@@ -166,7 +166,7 @@ export const TRENCH_EXTRA_DEPTH_M = 2500;
  * from abyssal depth toward the surface over ~20-30 Myr of subduction
  * (order of real arc construction timescales).
  */
-export const ARC_GROWTH_RATE_M_PER_YR = 2e-4;
+export const ARC_GROWTH_RATE_M_PER_YR = 4e-4;
 
 /** Ceiling for volcanic-arc elevation, m (island arcs, not continents). */
 export const ARC_MAX_ELEVATION_M = 1000;
@@ -183,7 +183,7 @@ export const ARC_MATURATION_ELEVATION_M = -200;
 // --- Wilson cycles (#18) -----------------------------------------------------
 
 /** Live-plate count bounds: sutures pause at the floor, rifts at the ceiling. */
-export const MIN_PLATES = 6;
+export const MIN_PLATES = 4;
 export const MAX_PLATES = 16;
 
 /**
@@ -191,7 +191,7 @@ export const MAX_PLATES = 16;
  * plates suture into one, yr. Real collision-to-suture times are a few tens
  * of Myr (India-Asia order).
  */
-export const SUTURE_AFTER_YEARS = 25e6;
+export const SUTURE_AFTER_YEARS = 15e6;
 
 /** Minimum simultaneous cont-cont convergent boundary cells to count as contact. */
 export const SUTURE_MIN_CONTACT_CELLS = 3;
@@ -217,7 +217,7 @@ export const RIFT_MIN_CONTINENTAL_AREA_FRACTION = 0.05;
  * of ~250 Myr once a plate is large, old and continental — supercontinents
  * linger, then break (real Wilson cycle periods are 300-500 Myr).
  */
-export const RIFT_PROBABILITY_PER_MYR = 0.004;
+export const RIFT_PROBABILITY_PER_MYR = 0.006;
 
 // --- Climate proxy & erosion (#19) ------------------------------------------
 

@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { MAX_PLATES, MIN_PLATES } from '../../src/constants';
 import { faceSTToDirection, cellCount, indexToFaceRC, type Vec3 } from '../../src/grid';
 import { createRng } from '../../src/rng';
 import { createInitialState, createPlanetParams, type PlanetState } from '../../src/state';
@@ -146,8 +147,8 @@ describe('phase 1 invariants (#20)', () => {
       expect(end.timeYears).toBe(2e9);
       // The plate count bound (#18) over deep time.
       const live = end.plates.filter((p) => p.alive).length;
-      expect(live).toBeGreaterThanOrEqual(6);
-      expect(live).toBeLessThanOrEqual(16);
+      expect(live).toBeGreaterThanOrEqual(MIN_PLATES);
+      expect(live).toBeLessThanOrEqual(MAX_PLATES);
     }
     // Soft budget guard: this is the suite's most expensive test; if it
     // alone crosses ~20 s the <30 s whole-suite budget is gone.

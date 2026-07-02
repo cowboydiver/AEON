@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { MIN_PLATES, SUTURE_AFTER_YEARS } from '../src/constants';
 import { EVENT_KINDS } from '../src/events';
 import { cellCount, neighbors } from '../src/grid';
 import { hash2, hashString } from '../src/hash';
@@ -27,8 +28,8 @@ const WILSON_PIPELINE = [tectonicsSystem, wilsonSystem];
 
 describe('suturing (#18)', () => {
   it('merges two continents after sustained collision and stops their motion', () => {
-    // 2 real + 6 fillers = 8 live > MIN_PLATES: suturing allowed.
-    let state = collisionWorld(6);
+    // Enough fillers that the live count sits above MIN_PLATES: suturing allowed.
+    let state = collisionWorld(MIN_PLATES + 2);
     state = runSystems(state, 80, WILSON_PIPELINE);
 
     const sutures = state.events.filter((e) => e.kind === EVENT_KINDS.plateSuture);
@@ -41,7 +42,7 @@ describe('suturing (#18)', () => {
     // the sustained-contact requirement.
     expect(state.plates[absorbed!]!.alive).toBe(false);
     for (const p of state.fields.plateId) expect(p).toBe(into);
-    expect(sutures[0]!.timeYears).toBeGreaterThanOrEqual(25e6);
+    expect(sutures[0]!.timeYears).toBeGreaterThanOrEqual(SUTURE_AFTER_YEARS);
 
     // With one owner there are no boundaries, so no stress anywhere.
     for (const s of state.fields.boundaryStress) expect(s).toBe(0);
@@ -49,13 +50,13 @@ describe('suturing (#18)', () => {
 
   it('is deterministic (identical event lists across runs)', () => {
     const run = () =>
-      runSystems(collisionWorld(6), 80, WILSON_PIPELINE).events.map((e) => ({ ...e }));
+      runSystems(collisionWorld(MIN_PLATES + 2), 80, WILSON_PIPELINE).events.map((e) => ({ ...e }));
     expect(run()).toEqual(run());
   });
 
   it('respects the MIN_PLATES floor', () => {
-    // 2 real + 4 fillers = 6 live = MIN_PLATES: suturing must NOT fire.
-    const state = runSystems(collisionWorld(4), 80, WILSON_PIPELINE);
+    // Fillers chosen so the live count sits exactly at MIN_PLATES: no suture.
+    const state = runSystems(collisionWorld(MIN_PLATES - 2), 80, WILSON_PIPELINE);
     expect(state.events.filter((e) => e.kind === EVENT_KINDS.plateSuture)).toEqual([]);
     // Both plates still alive and still colliding.
     expect(state.plates[0]!.alive).toBe(true);

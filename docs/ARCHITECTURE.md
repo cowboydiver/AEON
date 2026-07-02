@@ -185,11 +185,14 @@ side gets orogenic uplift (0.6 mm/yr at reference speed, before erosion)
 spread 3 cells inland with linear falloff, capped at 9 km; an **overriding
 oceanic** side accumulates arc elevation toward a 1 km island ceiling;
 **continent–continent** contact is collision — symmetric uplift on both
-sides, 4 cells wide, no subduction. Oceanic cells on active convergent
-margins (stress > 0.005 m/yr) are exempt from the subsidence hard-set; when
-a margin deactivates they rejoin it, so dead trenches heal and dead arcs
-sink to the age-depth curve immediately (documented simplification — no
-seamount persistence). Plate speeds do not slow in collisions in Phase 1
+sides, 4 cells wide, no subduction. Arcs that build above −200 m mature
+into continental crust (arc magmatism is how continental crust is
+manufactured) — the creation term balancing the area collisions consume;
+without it long runs sink below the 10% land floor. Oceanic cells on active
+convergent margins (stress > 0.005 m/yr) are exempt from the subsidence
+hard-set; when a margin deactivates they rejoin it, so dead trenches heal
+and dead arcs sink to the age-depth curve immediately (documented
+simplification — no seamount persistence). Plate speeds do not slow in collisions in Phase 1
 (documented simplification); the 9 km cap plus #19's erosion bound the
 consequences. Old mountain belts advect with their plates and persist until
 erosion (#19) ages them.
@@ -199,18 +202,23 @@ erosion (#19) ages them.
 The `wilson` system (after tectonics in the pipeline) reorganizes plates so
 deep time tells a story. **Suturing:** plate pairs in continent–continent
 convergent contact (≥3 boundary cells, both sides continental, stress
-positive) for a continuous 25 Myr merge — smaller absorbed into larger, the
+positive) for a continuous 15 Myr merge — smaller absorbed into larger, the
 combined plate takes the area-weighted mean angular-velocity vector, and
 relative motion across the suture stops. Without this, fixed plate speeds
 grind colliding continents away forever (integration runs lost 2/3 of
-continental area in 500 Myr; with suturing land stabilizes at ~20–25% over
-2 Gyr). **Rifting:** a plate that is old (≥150 Myr since creation/last
-rift), large (≥8% of the sphere) and continental (≥35%) rifts with
-probability 0.004/Myr; the split is a two-seed jittered Dijkstra between the
-plate's most-distant cell pair, and the halves get opposite rotations about
-the pole normal to both centroids, opening a new ocean along the rift. Both
-emit events (`plateSuture`/`plateRift`); the live count stays within
-[MIN_PLATES, MAX_PLATES] = [6, 16]; dead plates keep their table slot.
+continental area in 500 Myr). **Rifting:** a plate that is old (≥150 Myr
+since creation/last rift), large (≥8% of the sphere) and carrying a big
+continent (continental area ≥5% **of the sphere** — plate-relative fraction
+was tried first and silently disabled rifting, since post-suture mega-plates
+carry proportional ocean) rifts with probability 0.006/Myr; the split is a
+two-seed jittered Dijkstra between the plate's most-distant cell pair, and
+the halves get opposite rotations about the pole normal to both centroids,
+opening a new ocean along the rift. Both emit events
+(`plateSuture`/`plateRift`); the live count stays within
+[MIN_PLATES, MAX_PLATES] = [4, 16] — the floor is deliberately low because
+a suture *blocked* at the floor means a collision that grinds continent
+forever; all bounds were tuned in the #21 acceptance pass against the land
+budget (seed 1337 was the stress case). Dead plates keep their table slot.
 Contact bookkeeping lives in `PlanetState.wilson.contactSince` (pair-keyed
 start times, rebuilt each step — never iterated by key order). The rift
 decision draw is `hash3(seed', plate, timeQuantum)` rather than the issue's
