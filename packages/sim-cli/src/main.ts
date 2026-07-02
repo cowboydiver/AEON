@@ -121,8 +121,10 @@ function report(keyframe: Keyframe): void {
   }
   const elevation = keyframe.fields.elevation;
   const { min, max, mean } = fieldStats(elevation);
+  // >= 0: cells exactly at the datum are land (matches globals.landFraction,
+  // which counts noise >= the sea-level quantile — those cells get 0 m).
   let land = 0;
-  for (const e of elevation) if (e > 0) land++;
+  for (const e of elevation) if (e >= 0) land++;
   const landPct = ((land / elevation.length) * 100).toFixed(1);
   const checksums = FIELD_NAMES.map((n) => `${n}:${checksumHex(keyframe.fields[n])}`).join(' ');
   console.log(
