@@ -35,10 +35,17 @@ informed by the previous phase's report. Reality over plans.
 
 ## Phase 1 — Tectonics · [milestone](https://github.com/cowboydiver/AEON/milestone/1) · overview [#3](https://github.com/cowboydiver/AEON/issues/3)
 
-The risk concentrator for the whole project. Spikes come first; nothing
-integrates into the kernel until the crust-advection shootout has a written
-winner. Ready-to-work issues (each has motivation, approach sketch, files
-touched, acceptance criteria, and size on the issue itself):
+**Status: COMPLETE** — spec `docs/PHASE_1_SPEC.md` (signed off), outcome and
+deviations in `PHASE_1_REPORT.md`, spike findings in
+`docs/spikes/PHASE_1_SPIKES.md`, acceptance flipbook evidence in
+`docs/phase1-evidence/`. Phase 2 must be re-planned from the report's
+findings (keyframe memory estimate, 4.5 Gyr land-budget re-verification,
+margin-shredding follow-up).
+
+The risk concentrator for the whole project. Spikes came first; nothing
+integrated into the kernel until the crust-advection shootout had a written
+winner. Issues (each has motivation, approach sketch, files touched,
+acceptance criteria, and size on the issue itself):
 
 | # | Issue | Labels | Size |
 |---|-------|--------|------|

@@ -23,6 +23,11 @@ export {
   type PlanetState,
 } from './state';
 export { valueNoise3, fractalNoise3 } from './noise';
+export { dot3, cross3, normalize3, angleBetween, rotateAroundAxis } from './vec';
+export { partitionPlates, applyInitialPlates, plateVelocityAt, type PlateRecord } from './plates';
+export { computeBoundaryStress, dominantOtherPlate, overrides } from './systems/boundaries';
+export { EVENT_KINDS, copyEvents, type SimEvent, type SimEventKind } from './events';
+export { oceanicDepthForAge, oceanicAgeForDepth } from './bathymetry';
 export {
   step,
   run,
@@ -33,3 +38,13 @@ export {
   type SimContext,
   type Keyframe,
 } from './step';
+export { tectonicsSystem } from './systems/tectonics';
+export { erosionSystem } from './systems/erosion';
+export { wilsonSystem } from './systems/wilson';
+export {
+  climateProxySystem,
+  applyPrecipitationProxy,
+  precipitationForLatitude,
+  temperatureFor,
+} from './systems/climateProxy';
+export { cellCenterTable, neighborTable } from './grid';

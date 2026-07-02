@@ -123,6 +123,50 @@ export function directionToIndex(dir: Vec3, N: number): number {
   return faceRCToIndex(face, row, col, N);
 }
 
+// --- Memoized per-N lookup tables ------------------------------------------
+// Pure derived data (like EDGE_MAPS below): a deterministic function of N,
+// cached at module level so hot per-step loops don't recompute trig or seam
+// folds. This is not simulation state and is never mutated after build.
+
+const CENTER_TABLES = new Map<number, Float64Array>();
+
+/** Cell-center unit directions, packed [x0,y0,z0, x1,y1,z1, ...]. */
+export function cellCenterTable(N: number): Float64Array {
+  let table = CENTER_TABLES.get(N);
+  if (!table) {
+    const count = cellCount(N);
+    table = new Float64Array(count * 3);
+    for (let i = 0; i < count; i++) {
+      const [x, y, z] = cellCenterDirection(i, N);
+      table[i * 3] = x;
+      table[i * 3 + 1] = y;
+      table[i * 3 + 2] = z;
+    }
+    CENTER_TABLES.set(N, table);
+  }
+  return table;
+}
+
+const NEIGHBOR_TABLES = new Map<number, Int32Array>();
+
+/** The 4 neighbors of every cell, packed [i*4 .. i*4+3], same order as neighbors(). */
+export function neighborTable(N: number): Int32Array {
+  let table = NEIGHBOR_TABLES.get(N);
+  if (!table) {
+    const count = cellCount(N);
+    table = new Int32Array(count * 4);
+    for (let i = 0; i < count; i++) {
+      const nb = neighbors(i, N);
+      table[i * 4] = nb[0]!;
+      table[i * 4 + 1] = nb[1]!;
+      table[i * 4 + 2] = nb[2]!;
+      table[i * 4 + 3] = nb[3]!;
+    }
+    NEIGHBOR_TABLES.set(N, table);
+  }
+  return table;
+}
+
 // --- Seam adjacency, derived from the face frames -------------------------
 
 interface EdgeMap {

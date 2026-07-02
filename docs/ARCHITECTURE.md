@@ -1,8 +1,8 @@
 # AEON Architecture
 
-Phase 0 (walking skeleton). This file is the contract between the simulation
-kernel, the CLI harness and the renderer. Read it before touching
-`sim-kernel`.
+Phase 0 (walking skeleton) + Phase 1 (tectonics, in progress). This file is
+the contract between the simulation kernel, the CLI harness and the renderer.
+Read it before touching `sim-kernel`.
 
 ## Monorepo shape and dependency direction
 
@@ -82,19 +82,179 @@ and N = 8.
         +----+
 ```
 
-## Field schema (Phase 0)
+## Field schema
 
 Defined once in `sim-kernel/src/fields.ts` (`FIELDS`); everything else derives
 from it. All fields are `Float32Array` per cell.
 
-| Field           | Unit       | Range (Phase 0)  | Meaning                                        |
+| Field           | Unit       | Range            | Meaning                                        |
 | --------------- | ---------- | ---------------- | ---------------------------------------------- |
 | `elevation`     | m          | ≈ −6000 … +4500  | Height relative to the 0 m datum (sea level)   |
-| `crustAge`      | yr         | 0                | Age of crust at the cell (zeros until tectonics) |
+| `crustAge`      | yr         | 0 … sim age (+2 Gyr shield offset) | Age of crust: 0 at spreading centers, +dt per step everywhere. Initial ocean gets a depth-consistent age; initial continents start at 2 Gyr |
 | `temperature`   | K          | ≈ 215 … 305      | Mean surface air temperature (latitude + lapse placeholder) |
-| `precipitation` | kg/m²/yr   | 0                | Annual precipitation (zeros until climate)     |
+| `precipitation` | kg/m²/yr   | ≈ 100 … 1800     | Annual precipitation: static latitude-band proxy until Phase 3 |
 | `iceFraction`   | 0–1        | 0                | Ice cover fraction (zeros until cryosphere)    |
 | `biome`         | index      | 0                | Biome class (zeros until biomes)               |
+| `plateId`       | index      | 0 … numPlates−1  | Owning plate, index into `PlanetState.plates`. Small integers stored in float32 (exact up to 2^24) |
+| `crustType`     | flag       | {0, 1}           | 0 = oceanic (subductable), 1 = continental (buoyant, never subducts) |
+| `boundaryStress`| m/yr       | ≈ ±0.1, 0 interior | Signed normal closing speed at boundary cells: + convergent, − divergent, ≈0 transform. Derived, recomputed every step |
+
+### Plates (Phase 1)
+
+The grid is partitioned into `params.numPlates` (default 10) contiguous
+plates at t = 0 (`plates.ts`, spike-#9 winner): seed sites drawn from
+`rng.fork('plates')` with rejection sampling for minimum angular separation
+`0.7·√(4π/numPlates)` (relaxed ×0.85 per 64 failed draws), then simultaneous
+Dijkstra growth over `neighbors()` with edge cost `1 + 1.5·hash01(cell)` —
+a deterministic warped-metric Voronoi, contiguous by construction. Priority
+ties break (cost, cell, plate).
+
+Per-plate bookkeeping lives in `PlanetState.plates: PlateRecord[]`, fixed
+order by plate index — **iterate by index, never object-key order**:
+
+```
+PlateRecord = { eulerPole (unit Vec3), angularVelRadPerYr,
+                accumulatedRadians,        // un-applied rotation (#13)
+                advectionCount,            // events so far, drives quantum dither
+                createdAtYears, continentalFraction, alive }
+```
+
+Kinematics are assigned at creation from `rng.fork('plateKinematics')`:
+uniform pole on the sphere, speed uniform in 1.5–8 × 10⁻⁹ rad/yr
+(≈ 1–5 cm/yr on an Earth-radius sphere). Dead plates (sutured away, #18)
+keep their slot so `plateId` values stay stable forever.
+
+`crustType` is initialized as the top `CONTINENTAL_CRUST_FRACTION` (40%,
+Earth's ~41% incl. shelves) of initial elevation — the threshold sits below
+sea level, so continental shelves are continental crust that starts
+submerged. Initial elevation itself is still the Phase 0 noise terrain;
+plates are an overlay until #15/#16 make elevation follow them.
+
+### Crust advection (#13, spike-#10 winner)
+
+The `tectonics` system moves crust by **semi-Lagrangian gather**. Every step
+accumulates each live plate's rotation (`accumulatedRadians += ω·dt`). A
+plate advects when its accumulated angle crosses its **dithered quantum** —
+between 1 and 2.5 cell widths ((π/2)/N), chosen deterministically per
+(seed, plate, advectionCount) — and then rotates by the *full* accumulated
+angle and resets, so no sub-cell motion is ever discarded. The dither exists
+because a fixed quantum makes cells that rotate slower than it (near the
+plate's Euler pole) see the same sub-cell rounding at every event and stall
+systematically (a #13 blob-transport test finding, 6-cell lag over 500 Myr;
+dithered: ≤1 cell). Residual error is an unbiased ~0.5-cell/event random
+walk (accepted spike-#10 limitation).
+
+At an advection event, each cell gathers claims: a moved plate p claims cell
+i iff p owned i's backward-rotated source cell (interiors are exact by
+construction); an unmoved plate claims exactly its current cells. Crust
+properties — `elevation`, `crustAge`, `crustType` (`ADVECTED_FIELDS`) —
+travel from the winning claim's source cell; values are copied, never
+interpolated. Overlap resolution is provisional until #16 (moved beats
+static, then lower plate index). Unclaimed cells are divergent gaps,
+repaired by deterministic majority-of-assigned-neighbors passes and filled
+as provisional young ocean (crustAge 0, oceanic, ridge depth −2500 m) — #15
+replaces this with real ridge bathymetry. Hot loops read the memoized
+`cellCenterTable(N)` / `neighborTable(N)` (pure derived data, like the
+seam-fold EDGE_MAPS).
+
+### Divergent boundaries & bathymetry (#15)
+
+`crustAge` ticks +dt every step for every cell, *before* advection (crust
+carries its aged value; divergent gap fill writes 0 afterwards). Oceanic
+elevation (`crustType = 0`) is then a pure function of age — half-space
+cooling (`bathymetry.ts`): ridge crest at −2500 m deepening as
+0.35 m·√age(yr) to the abyssal floor at −6000 m (Parsons & Sclater 1977
+values). Continental elevation is advected, never subsided. New crust from
+divergent gaps therefore starts on the ridge crest and subsides as it ages
+and drifts — spreading stripes for free. At t = 0 the noise ocean is given a
+depth-consistent age by inverting the curve (deep floor = old crust) and
+snapped onto it; initial continents start at a 2 Gyr shield age. Ownership
+of new ridge crust follows the gap-repair majority rule — roughly half to
+each flank, matching symmetric spreading. #16 exempts active convergent
+margins from the hard subsidence set to build trenches and arcs.
+
+### Convergent boundaries (#16)
+
+Advection overlaps (a cell claimed by more than one plate) are convergence:
+the overriding side (per `overrides()`) keeps the surface and the losing
+side's crust is consumed — an ownership transfer, never a hole. Convergent
+topography is driven by `boundaryStress` every step, scaled by
+stress/0.05 m·yr⁻¹ (clamped): the **subducting oceanic** side is pinned up
+to 2500 m below its age-depth floor (trench); the **overriding continental**
+side gets orogenic uplift (0.6 mm/yr at reference speed, before erosion)
+spread 3 cells inland with linear falloff, capped at 9 km; an **overriding
+oceanic** side accumulates arc elevation toward a 1 km island ceiling;
+**continent–continent** contact is collision — symmetric uplift on both
+sides, 4 cells wide, no subduction. Arcs that build above −200 m mature
+into continental crust (arc magmatism is how continental crust is
+manufactured) — the creation term balancing the area collisions consume;
+without it long runs sink below the 10% land floor. Oceanic cells on active
+convergent margins (stress > 0.005 m/yr) are exempt from the subsidence
+hard-set; when a margin deactivates they rejoin it, so dead trenches heal
+and dead arcs sink to the age-depth curve immediately (documented
+simplification — no seamount persistence). Plate speeds do not slow in collisions in Phase 1
+(documented simplification); the 9 km cap plus #19's erosion bound the
+consequences. Old mountain belts advect with their plates and persist until
+erosion (#19) ages them.
+
+### Wilson cycles (#18)
+
+The `wilson` system (after tectonics in the pipeline) reorganizes plates so
+deep time tells a story. **Suturing:** plate pairs in continent–continent
+convergent contact (≥3 boundary cells, both sides continental, stress
+positive) for a continuous 15 Myr merge — smaller absorbed into larger, the
+combined plate takes the area-weighted mean angular-velocity vector, and
+relative motion across the suture stops. Without this, fixed plate speeds
+grind colliding continents away forever (integration runs lost 2/3 of
+continental area in 500 Myr). **Rifting:** a plate that is old (≥150 Myr
+since creation/last rift), large (≥8% of the sphere) and carrying a big
+continent (continental area ≥5% **of the sphere** — plate-relative fraction
+was tried first and silently disabled rifting, since post-suture mega-plates
+carry proportional ocean) rifts with probability 0.006/Myr; the split is a
+two-seed jittered Dijkstra between the plate's most-distant cell pair, and
+the halves get opposite rotations about the pole normal to both centroids,
+opening a new ocean along the rift. Both emit events
+(`plateSuture`/`plateRift`); the live count stays within
+[MIN_PLATES, MAX_PLATES] = [4, 16] — the floor is deliberately low because
+a suture *blocked* at the floor means a collision that grinds continent
+forever; all bounds were tuned in the #21 acceptance pass against the land
+budget (seed 1337 was the stress case). Dead plates keep their table slot.
+Contact bookkeeping lives in `PlanetState.wilson.contactSince` (pair-keyed
+start times, rebuilt each step — never iterated by key order). The rift
+decision draw is `hash3(seed', plate, timeQuantum)` rather than the issue's
+`rng.fork('wilson')` sketch: a fork taken inside a pure system would restart
+its stream every step, so a position/time hash is the deterministic
+equivalent (documented deviation). Euler-pole wander was considered and not
+implemented.
+
+### Erosion & climate proxy (#19)
+
+`erosion` (after wilson): conservative Jacobi diffusion of elevation over
+the 4-neighbor graph, continental-crust pairs only, flux ∝ height difference
+(slope) × mean-pair precipitation (clamped 0.05–2× at 1000 kg/m²/yr
+reference) × base-level damping (×0.1 when either endpoint is submerged —
+without it coastal diffusion submerges land planet-wide). Pairwise
+antisymmetric fluxes conserve continental volume exactly; oceanic elevation
+is isostatic (#15) and untouched. `climateProxy` (last): refreshes
+`temperature` each step from current elevation (latitude + lapse formula
+shared with the init pass) and owns the static latitude-band `precipitation`
+proxy (ITCZ peak, subtropical dry belts, mid-latitude storm tracks, dry
+poles) — **replaced wholesale by Phase 3 moisture transport**.
+
+### Boundary classification (#14)
+
+A cell is a boundary cell iff any 4-neighbor has a different `plateId`. Each
+step, `boundaries.ts` recomputes `boundaryStress`: the two plates' rigid
+surface velocities (ω × r) are differenced and projected onto the tangent
+unit vector from the cell toward its **dominant other plate** (most frequent
+differing neighbor, ties to the lower id). Positive = closing (convergent),
+negative = opening (divergent); pure shear projects to ≈0 (transform).
+Interior cells are exactly 0. Boundary *type* is derived from the sign plus
+a tangential threshold when needed — there is deliberately no boundaryType
+field. Transforms are classified and visualized in Phase 1; their
+topographic effect is deliberately minimal. Subduction polarity between two
+sides (`overrides()`): continental beats oceanic, younger oceanic beats
+older oceanic (colder = denser), remaining ties to the lower plate id.
 
 Iteration over fields always uses `FIELD_NAMES` (insertion order of the
 `FIELDS` const) — never `Object.keys` of some other object — so ordering is
@@ -103,8 +263,11 @@ deterministic by construction.
 ## State, params, systems, step loop
 
 ```
-PlanetState = { timeYears, params: PlanetParams, globals: Globals, fields }
+PlanetState = { timeYears, params: PlanetParams, globals: Globals, fields,
+                plates: PlateRecord[], events: SimEvent[],
+                wilson: { contactSince } }
 PlanetParams = { seed, radiusMeters, gridN, stepYears, keyframeIntervalYears,
+                 numPlates,
                  starLuminosity, dayLengthHours, obliquityDeg }   // immutable per run
 Globals     = { landFraction }
 ```
@@ -129,14 +292,32 @@ at a time and emits keyframes. Keyframe emission counts integer steps
 (`stepsPerKeyframe = round(interval / step)`) so it never depends on float
 accumulation.
 
+## Event log (Phase 1, #17)
+
+```
+SimEvent = { timeYears, kind: SimEventKind, data?: Record<string, number> }
+```
+
+Discrete events (plate rifts/sutures now; impacts, oxygenation later) are
+recorded in simulation order on `PlanetState.events`. Event kinds are a const
+object in `events.ts` (`EVENT_KINDS`), single source of truth like `FIELDS`.
+Payloads are numbers only, so events are trivially deterministic and
+serializable. **Purity rule:** a system never mutates the list — it returns a
+new state with `events: [...state.events, e]`, and `e.timeYears` must equal
+the state's current time. Event structure alone never perturbs field bytes
+(tested); keyframes carry a deep copy of the log so far, and `sim-cli
+--report` prints events under the keyframe row they precede. Phase 2 renders
+them as timeline markers.
+
 ## Keyframe format
 
 ```
-Keyframe = { timeYears: number, fields: Record<FieldName, Float32Array> }
+Keyframe = { timeYears: number, fields: Record<FieldName, Float32Array>,
+             events: SimEvent[] }
 ```
 
-Deep snapshot — arrays are copies, safe to transfer to other threads (the web
-app transfers them worker → main). One keyframe is emitted for the initial
+Deep snapshot — arrays and events are copies, safe to transfer to other
+threads (the web app transfers the field buffers worker → main). One keyframe is emitted for the initial
 state, then one per `keyframeIntervalYears` (default 10 Myr), plus a final one
 if `untilYears` is off-interval. The renderer's texture set is named `fieldsA`
 so a second set (`fieldsB`) and a blend uniform can be added for timeline

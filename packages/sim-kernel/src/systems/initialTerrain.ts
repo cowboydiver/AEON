@@ -1,11 +1,7 @@
 import {
-  EQUATOR_POLE_TEMPERATURE_DROP_K,
   INITIAL_LAND_FRACTION,
   INITIAL_LAND_HEIGHT_M,
   INITIAL_OCEAN_DEPTH_M,
-  LAPSE_RATE_K_PER_M,
-  MEAN_SIN2_LATITUDE,
-  MEAN_SURFACE_TEMPERATURE_K,
   TERRAIN_BASE_FREQUENCY,
   TERRAIN_LAND_EXPONENT,
   TERRAIN_NOISE_OFFSET,
@@ -15,6 +11,7 @@ import { hash2, hashString } from '../hash';
 import { cellCenterDirection, cellCount } from '../grid';
 import { fractalNoise3 } from '../noise';
 import type { PlanetState } from '../state';
+import { temperatureFor } from './climateProxy';
 
 /**
  * Phase 0 placeholder terrain: seeded fractal value noise sampled at each
@@ -75,11 +72,7 @@ export function applyInitialTerrain(state: PlanetState): PlanetState {
     }
     elevation[i] = elev;
 
-    const s = Math.max(-1, Math.min(1, sinLat[i]!));
-    temperature[i] =
-      MEAN_SURFACE_TEMPERATURE_K +
-      EQUATOR_POLE_TEMPERATURE_DROP_K * (MEAN_SIN2_LATITUDE - s * s) -
-      LAPSE_RATE_K_PER_M * Math.max(0, elev);
+    temperature[i] = temperatureFor(sinLat[i]!, elev);
   }
 
   return {

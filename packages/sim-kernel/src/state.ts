@@ -1,13 +1,17 @@
 import {
   DEFAULT_KEYFRAME_INTERVAL_YEARS,
+  DEFAULT_NUM_PLATES,
   DEFAULT_STEP_YEARS,
   EARTH_DAY_HOURS,
   EARTH_OBLIQUITY_DEG,
   EARTH_RADIUS_M,
   SOLAR_LUMINOSITY_W,
 } from './constants';
+import type { SimEvent } from './events';
 import { FIELD_NAMES, type Fields } from './fields';
 import { DEFAULT_GRID_N, cellCount } from './grid';
+import { applyInitialPlates, type PlateRecord } from './plates';
+import { applyPrecipitationProxy } from './systems/climateProxy';
 import { applyInitialTerrain } from './systems/initialTerrain';
 
 /** Immutable per-run parameters. Same params + same seed => same history. */
@@ -17,6 +21,8 @@ export interface PlanetParams {
   gridN: number;
   stepYears: number;
   keyframeIntervalYears: number;
+  /** Number of plates in the initial partition (live count then evolves, #18). */
+  numPlates: number;
   /** Placeholder for later phases (energy balance). W. */
   starLuminosity: number;
   /** Placeholder for later phases (diurnal cycle). Hours. */
@@ -36,6 +42,23 @@ export interface PlanetState {
   params: PlanetParams;
   globals: Globals;
   fields: Fields;
+  /**
+   * Per-plate table, fixed order by plate index (plateId field values index
+   * into it). Iterate by index only. Dead plates keep their slot (#18).
+   */
+  plates: readonly PlateRecord[];
+  /**
+   * Discrete events in simulation order. Systems append immutably
+   * (see events.ts purity rule); keyframes carry a deep copy.
+   */
+  events: readonly SimEvent[];
+  /**
+   * Wilson-cycle bookkeeping (#18): when each continent-continent plate
+   * pair ("a-b" with a < b) entered sustained convergent contact. Rebuilt
+   * every step from the current contact scan (never iterated by key order);
+   * pairs suture once contact has lasted SUTURE_AFTER_YEARS.
+   */
+  wilson: { readonly contactSince: Readonly<Record<string, number>> };
 }
 
 export function createPlanetParams(partial: Partial<PlanetParams> & { seed: number }): PlanetParams {
@@ -44,6 +67,7 @@ export function createPlanetParams(partial: Partial<PlanetParams> & { seed: numb
     gridN: DEFAULT_GRID_N,
     stepYears: DEFAULT_STEP_YEARS,
     keyframeIntervalYears: DEFAULT_KEYFRAME_INTERVAL_YEARS,
+    numPlates: DEFAULT_NUM_PLATES,
     starLuminosity: SOLAR_LUMINOSITY_W,
     dayLengthHours: EARTH_DAY_HOURS,
     obliquityDeg: EARTH_OBLIQUITY_DEG,
@@ -62,6 +86,9 @@ export function createInitialState(params: PlanetParams): PlanetState {
     params,
     globals: { landFraction: 0 },
     fields,
+    plates: [],
+    events: [],
+    wilson: { contactSince: {} },
   };
-  return applyInitialTerrain(state);
+  return applyPrecipitationProxy(applyInitialPlates(applyInitialTerrain(state)));
 }
