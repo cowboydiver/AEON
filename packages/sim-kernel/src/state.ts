@@ -11,6 +11,7 @@ import type { SimEvent } from './events';
 import { FIELD_NAMES, type Fields } from './fields';
 import { DEFAULT_GRID_N, cellCount } from './grid';
 import { applyInitialPlates, type PlateRecord } from './plates';
+import { applyPrecipitationProxy } from './systems/climateProxy';
 import { applyInitialTerrain } from './systems/initialTerrain';
 
 /** Immutable per-run parameters. Same params + same seed => same history. */
@@ -81,5 +82,5 @@ export function createInitialState(params: PlanetParams): PlanetState {
     plates: [],
     events: [],
   };
-  return applyInitialPlates(applyInitialTerrain(state));
+  return applyPrecipitationProxy(applyInitialPlates(applyInitialTerrain(state)));
 }

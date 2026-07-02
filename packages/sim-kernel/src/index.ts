@@ -39,4 +39,11 @@ export {
   type Keyframe,
 } from './step';
 export { tectonicsSystem } from './systems/tectonics';
+export { erosionSystem } from './systems/erosion';
+export {
+  climateProxySystem,
+  applyPrecipitationProxy,
+  precipitationForLatitude,
+  temperatureFor,
+} from './systems/climateProxy';
 export { cellCenterTable, neighborTable } from './grid';

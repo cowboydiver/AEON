@@ -171,6 +171,46 @@ export const ARC_GROWTH_RATE_M_PER_YR = 2e-4;
 /** Ceiling for volcanic-arc elevation, m (island arcs, not continents). */
 export const ARC_MAX_ELEVATION_M = 1000;
 
+// --- Climate proxy & erosion (#19) ------------------------------------------
+
+/**
+ * Latitude-band precipitation proxy (replaced by real moisture transport in
+ * Phase 3): ITCZ peak at the equator + mid-latitude storm-track bumps over a
+ * dry floor, giving the classic wet-equator / dry-30° / wetter-50° / dry-pole
+ * profile. Amplitudes in kg/m^2/yr (= mm/yr): equator ~1700 (tropical),
+ * subtropics ~200-350 (desert belts), mid-latitudes ~800, poles ~150.
+ */
+export const PRECIP_ITCZ_PEAK = 1600;
+export const PRECIP_ITCZ_WIDTH_DEG = 12;
+export const PRECIP_STORMTRACK_PEAK = 700;
+export const PRECIP_STORMTRACK_LAT_DEG = 45;
+export const PRECIP_STORMTRACK_WIDTH_DEG = 16;
+export const PRECIP_FLOOR = 100;
+
+/**
+ * Erosion diffusion coefficient at reference precipitation, per year.
+ * k·dt at 1 Myr steps is 6e-3 (stability requires << 0.125 for 4-neighbor
+ * diffusion). Yields initial decay of fresh 9 km belts of ~10-25 m/Myr,
+ * i.e. mm/kyr-scale denudation, softening dead orogens over 100s of Myr.
+ */
+export const EROSION_RATE_PER_YR = 6e-9;
+
+/** Precipitation that gives the nominal erosion coefficient, kg/m^2/yr. */
+export const EROSION_PRECIP_REF = 1000;
+
+/** Clamp on the precipitation scaling of erosion (dry floor .. wet ceiling). */
+export const EROSION_PRECIP_FACTOR_MIN = 0.05;
+export const EROSION_PRECIP_FACTOR_MAX = 2;
+
+/**
+ * Erosion damping when either endpoint of a cell pair is below sea level —
+ * base-level control: rivers grade to the coast and deposit there, so
+ * subaerial relief drains to the shelf far slower than it smooths
+ * internally. Without this, diffusion submerges coastlines planet-wide
+ * (land fraction fell to 7% in 800 Myr when first integrated).
+ */
+export const EROSION_SUBSEA_FACTOR = 0.1;
+
 /** Default simulation step, years. Chosen so 10 steps fit one keyframe interval. */
 export const DEFAULT_STEP_YEARS = 1e6;
 
