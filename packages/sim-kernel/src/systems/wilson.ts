@@ -35,7 +35,7 @@ import {
   PLATE_OMEGA_MIN_RAD_PER_YR,
   RIFT_MIN_AGE_YEARS,
   RIFT_MIN_AREA_FRACTION,
-  RIFT_MIN_CONTINENTAL_FRACTION,
+  RIFT_MIN_CONTINENTAL_AREA_FRACTION,
   RIFT_PROBABILITY_PER_MYR,
   SUTURE_AFTER_YEARS,
   SUTURE_MIN_CONTACT_CELLS,
@@ -126,7 +126,7 @@ function applyWilson(state: PlanetState, dtYears: number): PlanetState {
       if (!plate.alive || !s) continue;
       if (state.timeYears - plate.createdAtYears < RIFT_MIN_AGE_YEARS) continue;
       if (s.cells / count < RIFT_MIN_AREA_FRACTION) continue;
-      if (s.continental / s.cells < RIFT_MIN_CONTINENTAL_FRACTION) continue;
+      if (s.continental / count < RIFT_MIN_CONTINENTAL_AREA_FRACTION) continue;
       if (hash3(riftSeed, p, timeQuantum, 0) / 4294967296 >= pRift) continue;
       next = riftPlate(next, p, riftSeed);
       break;

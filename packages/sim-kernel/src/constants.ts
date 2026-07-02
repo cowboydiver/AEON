@@ -202,8 +202,15 @@ export const RIFT_MIN_AGE_YEARS = 150e6;
 /** A plate must own at least this fraction of the sphere to rift. */
 export const RIFT_MIN_AREA_FRACTION = 0.08;
 
-/** A plate must be at least this continental (by area) to rift. */
-export const RIFT_MIN_CONTINENTAL_FRACTION = 0.35;
+/**
+ * A plate must carry at least this much continental crust — measured as a
+ * fraction of the whole sphere, not of the plate — to rift. Measuring the
+ * plate-relative fraction (first attempt, 0.35) silently disabled rifting:
+ * post-suture mega-plates carry proportional ocean and never qualified
+ * (seed 42 produced one rift in 2 Gyr). What rifts is a plate with a big
+ * continent on it, however much ocean it also drags along.
+ */
+export const RIFT_MIN_CONTINENTAL_AREA_FRACTION = 0.05;
 
 /**
  * Rift probability per eligible plate per Myr. 0.004 gives an expected wait
