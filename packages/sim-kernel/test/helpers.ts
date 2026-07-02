@@ -1,11 +1,11 @@
 import { FIELD_NAMES, type Fields } from '../src/fields';
-import { cellCenterDirection, cellCount } from '../src/grid';
+import { cellCenterDirection, cellCount, type Vec3 } from '../src/grid';
 import type { PlateRecord } from '../src/plates';
 import { createRng } from '../src/rng';
 import { createPlanetParams, type PlanetState } from '../src/state';
 import { step, type SimContext, type System } from '../src/step';
 import { tectonicsSystem } from '../src/systems/tectonics';
-import { dot3, normalize3, type Vec3 } from '../src/vec';
+import { dot3, normalize3 } from '../src/vec';
 
 export interface TestPlateSpec {
   pole: Vec3;
