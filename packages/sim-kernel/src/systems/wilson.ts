@@ -31,8 +31,10 @@
 import {
   MAX_PLATES,
   MIN_PLATES,
+  PLATE_FILL_JITTER,
   PLATE_OMEGA_MAX_RAD_PER_YR,
   PLATE_OMEGA_MIN_RAD_PER_YR,
+  RIFT_DRAW_QUANTUM_YEARS,
   RIFT_MIN_AGE_YEARS,
   RIFT_MIN_AREA_FRACTION,
   RIFT_MIN_CONTINENTAL_AREA_FRACTION,
@@ -49,6 +51,7 @@ import type { PlateRecord } from '../plates';
 import type { PlanetState } from '../state';
 import type { System } from '../step';
 import { cross3, normalize3 } from '../vec';
+import { computeBoundaryStress } from './boundaries';
 
 export const wilsonSystem: System = {
   name: 'wilson',
@@ -102,6 +105,7 @@ function applyWilson(state: PlanetState, dtYears: number): PlanetState {
   }
 
   let next: PlanetState = { ...state, wilson: { contactSince } };
+  let reorganized = false;
 
   // --- Suture: first pair (sorted key order) in contact long enough.
   if (liveCount > MIN_PLATES) {
@@ -109,7 +113,14 @@ function applyWilson(state: PlanetState, dtYears: number): PlanetState {
       if (contactSince[key] === undefined) continue;
       if (state.timeYears - contactSince[key] < SUTURE_AFTER_YEARS) continue;
       const [a, b] = key.split('-').map(Number) as [number, number];
-      next = suture(next, stats, a, b);
+      const merged = suture(next, stats, a, b);
+      next = merged.state;
+      reorganized = true;
+      // Keep stats consistent with the post-suture partition, so the rift
+      // eligibility below judges the merged plate at its real size.
+      stats[merged.winner]!.cells += stats[merged.loser]!.cells;
+      stats[merged.winner]!.continental += stats[merged.loser]!.continental;
+      stats[merged.loser] = { cells: 0, continental: 0 };
       break;
     }
   }
@@ -118,26 +129,45 @@ function applyWilson(state: PlanetState, dtYears: number): PlanetState {
   const liveAfter = next.plates.filter((p) => p.alive).length;
   if (liveAfter < MAX_PLATES) {
     const riftSeed = hash2(state.params.seed >>> 0, hashString('wilsonRift'), 0);
-    const timeQuantum = Math.round(state.timeYears / 1e4);
+    // min() keeps the hash input unique per step even below the nominal
+    // quantum; identical to a fixed 10 kyr quantum for all dt >= 10 kyr.
+    const timeQuantum = Math.round(state.timeYears / Math.min(RIFT_DRAW_QUANTUM_YEARS, dtYears));
     const pRift = RIFT_PROBABILITY_PER_MYR * (dtYears / 1e6);
     for (let p = 0; p < next.plates.length; p++) {
       const plate = next.plates[p]!;
       const s = stats[p];
-      if (!plate.alive || !s) continue;
+      if (!plate.alive || !s || s.cells === 0) continue;
       if (state.timeYears - plate.createdAtYears < RIFT_MIN_AGE_YEARS) continue;
       if (s.cells / count < RIFT_MIN_AREA_FRACTION) continue;
       if (s.continental / count < RIFT_MIN_CONTINENTAL_AREA_FRACTION) continue;
       if (hash3(riftSeed, p, timeQuantum, 0) / 4294967296 >= pRift) continue;
-      next = riftPlate(next, p, riftSeed);
+      const rifted = riftPlate(next, p, riftSeed);
+      reorganized = reorganized || rifted !== next;
+      next = rifted;
       break;
     }
+  }
+
+  // A reorganization changed the partition after tectonics computed the
+  // stress field; recompute so keyframes never pair post-merge plateId with
+  // pre-merge boundaryStress (review finding on #55).
+  if (reorganized) {
+    next = {
+      ...next,
+      fields: { ...next.fields, boundaryStress: computeBoundaryStress(next) },
+    };
   }
 
   return next;
 }
 
 /** Merge the smaller of plates a, b into the larger; kill the loser's slot. */
-function suture(state: PlanetState, stats: PlateStats[], a: number, b: number): PlanetState {
+function suture(
+  state: PlanetState,
+  stats: PlateStats[],
+  a: number,
+  b: number,
+): { state: PlanetState; winner: number; loser: number } {
   const [winner, loser] =
     stats[a]!.cells > stats[b]!.cells || (stats[a]!.cells === stats[b]!.cells && a < b)
       ? [a, b]
@@ -192,11 +222,15 @@ function suture(state: PlanetState, stats: PlateStats[], a: number, b: number): 
   }
 
   return {
-    ...state,
-    fields: { ...state.fields, plateId },
-    plates,
-    events: [...state.events, event],
-    wilson: { contactSince },
+    state: {
+      ...state,
+      fields: { ...state.fields, plateId },
+      plates,
+      events: [...state.events, event],
+      wilson: { contactSince },
+    },
+    winner,
+    loser,
   };
 }
 
@@ -252,7 +286,9 @@ export function riftPlate(state: PlanetState, p: number, riftSeed: number): Plan
     for (let k = 0; k < 4; k++) {
       const nb = nbTable[cell * 4 + k]!;
       if (plateId[nb] === p && label[nb] === -1) {
-        heap.push(cost + 1 + 1.5 * (hash2(riftSeed, nb, 2) / 4294967296), nb, side);
+        // Same recipe as the #9 partition (PLATE_FILL_JITTER), distinct
+        // hash stream (salt 2).
+        heap.push(cost + 1 + PLATE_FILL_JITTER * (hash2(riftSeed, nb, 2) / 4294967296), nb, side);
       }
     }
   }
@@ -282,8 +318,14 @@ export function riftPlate(state: PlanetState, p: number, riftSeed: number): Plan
   if (cellsA === 0 || cellsB === 0) return state; // degenerate split: skip
 
   // Diverging kinematics: rotate both halves about the pole normal to the
-  // two centroids, opposite senses, so they separate along the rift.
-  const pole = normalize3(cross3(normalize3(centroidA), normalize3(centroidB)));
+  // two centroids, opposite senses, so they separate along the rift. Guard
+  // the degenerate case (near-antipodal half-centroids => vanishing cross
+  // product => NaN pole): skip this rift; the draw fires again later with
+  // evolved geometry. Mirrors suture()'s zero-magnitude guard.
+  const rawPole = cross3(normalize3(centroidA), normalize3(centroidB));
+  const poleMag = Math.sqrt(rawPole[0] ** 2 + rawPole[1] ** 2 + rawPole[2] ** 2);
+  if (poleMag < 1e-9) return state;
+  const pole: Vec3 = [rawPole[0] / poleMag, rawPole[1] / poleMag, rawPole[2] / poleMag];
   const omegaRift =
     PLATE_OMEGA_MIN_RAD_PER_YR +
     (hash2(riftSeed, newId, 3) / 4294967296) *

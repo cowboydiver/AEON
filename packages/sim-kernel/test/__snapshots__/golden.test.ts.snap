@@ -4,14 +4,14 @@ exports[`golden field hashes > seed 1: initial state and after 10 steps 1`] = `
 {
   "after10Steps": {
     "biome": "b0549dc5",
-    "boundaryStress": "991d547d",
+    "boundaryStress": "c11e0855",
     "crustAge": "e6ea06e8",
     "crustType": "df8ee285",
-    "elevation": "07f8ce87",
+    "elevation": "f7ab58d5",
     "iceFraction": "b0549dc5",
     "plateId": "85516f65",
     "precipitation": "aa963de5",
-    "temperature": "ee186c85",
+    "temperature": "a84bcc0b",
     "timeYears": 10000000,
   },
   "initial": {
@@ -32,14 +32,14 @@ exports[`golden field hashes > seed 42: initial state and after 10 steps 1`] = `
 {
   "after10Steps": {
     "biome": "b0549dc5",
-    "boundaryStress": "0a72d6f8",
+    "boundaryStress": "ebd38126",
     "crustAge": "622da191",
     "crustType": "e7f68485",
-    "elevation": "0498f2a1",
+    "elevation": "51e442ac",
     "iceFraction": "b0549dc5",
     "plateId": "2c9cdcd2",
     "precipitation": "aa963de5",
-    "temperature": "b177914b",
+    "temperature": "7736f7fd",
     "timeYears": 10000000,
   },
   "initial": {
@@ -60,14 +60,14 @@ exports[`golden field hashes > seed 1337: initial state and after 10 steps 1`] =
 {
   "after10Steps": {
     "biome": "b0549dc5",
-    "boundaryStress": "4ae4973e",
+    "boundaryStress": "3ae09027",
     "crustAge": "4e52405a",
-    "crustType": "18b75458",
-    "elevation": "4563857f",
+    "crustType": "f3d5b945",
+    "elevation": "fa8618d4",
     "iceFraction": "b0549dc5",
     "plateId": "b21f8f62",
     "precipitation": "aa963de5",
-    "temperature": "fdde1999",
+    "temperature": "c282b8e3",
     "timeYears": 10000000,
   },
   "initial": {

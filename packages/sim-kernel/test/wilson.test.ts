@@ -92,6 +92,13 @@ describe('rifting (#18)', () => {
     // relative motion opens the boundary between them.
     const p0 = next.plates[0]!;
     const p2 = next.plates[newId]!;
+    // Poles must be finite unit vectors (degenerate antipodal-centroid
+    // splits are skipped by the zero-cross guard rather than emitting NaN).
+    for (const plate of [p0, p2]) {
+      for (const c of plate.eulerPole) expect(Number.isFinite(c)).toBe(true);
+      expect(dot3(plate.eulerPole, plate.eulerPole)).toBeCloseTo(1, 10);
+      expect(Number.isFinite(plate.angularVelRadPerYr)).toBe(true);
+    }
     expect(dot3(p0.eulerPole, p2.eulerPole)).toBeCloseTo(1, 10);
     expect(Math.sign(p0.angularVelRadPerYr)).toBe(-Math.sign(p2.angularVelRadPerYr));
     expect(p0.createdAtYears).toBe(state.timeYears);

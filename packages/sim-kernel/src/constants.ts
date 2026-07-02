@@ -213,9 +213,18 @@ export const RIFT_MIN_AREA_FRACTION = 0.08;
 export const RIFT_MIN_CONTINENTAL_AREA_FRACTION = 0.05;
 
 /**
- * Rift probability per eligible plate per Myr. 0.004 gives an expected wait
- * of ~250 Myr once a plate is large, old and continental — supercontinents
- * linger, then break (real Wilson cycle periods are 300-500 Myr).
+ * Time quantization of the rift decision hash, yr. Steps shorter than this
+ * would share a hash input and make consecutive draws perfectly correlated,
+ * so the effective quantum is min(this, stepYears) — identical behavior for
+ * all step sizes >= 10 kyr, independent draws below it.
+ */
+export const RIFT_DRAW_QUANTUM_YEARS = 1e4;
+
+/**
+ * Rift probability per eligible plate per Myr. Gives an expected wait of
+ * ~150-250 Myr once a plate is large, old and continent-carrying —
+ * supercontinents linger, then break (real Wilson cycle periods are
+ * 300-500 Myr). Raised from 0.004 in the #21 acceptance tuning.
  */
 export const RIFT_PROBABILITY_PER_MYR = 0.006;
 

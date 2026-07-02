@@ -87,14 +87,18 @@ export function computeBoundaryStress(state: PlanetState): Float32Array {
     const cy = centers[i * 3 + 1]!;
     const cz = centers[i * 3 + 2]!;
 
-    // Mean direction toward the differing neighbors, projected onto the
-    // tangent plane at i (subtract the radial component), normalized.
+    // Mean direction toward the DOMINANT plate's neighbors only, projected
+    // onto the tangent plane at i (subtract the radial component) and
+    // normalized. Blending all differing neighbors here while projecting a
+    // single plate's relative velocity below flips the convergent/divergent
+    // sign at triple junctions (review finding on #55): û and vOther must
+    // describe the same plate pair.
     let ux = 0;
     let uy = 0;
     let uz = 0;
     for (let k = 0; k < 4; k++) {
       const nb = nbTable[i * 4 + k]!;
-      if (plateId[nb] !== plateId[i]) {
+      if (plateId[nb] === other.plate) {
         ux += centers[nb * 3]! - cx;
         uy += centers[nb * 3 + 1]! - cy;
         uz += centers[nb * 3 + 2]! - cz;

@@ -46,10 +46,10 @@ One commit per issue, in dependency order (#9–#21):
   coarse-grid stability (finite, −11…+9 km, land 10–60%, plates in bounds),
   plus mutation tests proving each detector catches a planted bug.
 
-Acceptance numbers (2 Gyr): seed 42 (N=128) — 22 events (7 rifts,
-15 sutures), land 30% → stable 21.5%; seed 1 (N=64) — land stable ~19%;
-seed 1337 (N=64) — land stable ~11%. All finite, all in bounds, elevation
-max pinned at the 9 km cap only at active margins.
+Acceptance numbers (2 Gyr, after the post-review fixes below): seed 42
+(N=128) — 18 events (6 rifts, 12 sutures), land 30% → stable 21.8%; seed 1
+(N=64) — land stable ~20%; seed 1337 (N=64) — land stable ~11%. All finite,
+all in bounds, elevation max pinned at the 9 km cap only at active margins.
 
 ## Deviations from the spec, and why
 
@@ -126,6 +126,24 @@ max pinned at the 9 km cap only at active margins.
   settles into slow Wilson cycling. Acceptable (reads as late accretion),
   but Phase 4's narrated history may want the first 100 Myr to be its own
   "chaotic era" beat.
+
+## Post-review amendments (PR #55)
+
+Review on the PR surfaced six actionable findings, all fixed in one
+follow-up commit: boundary stress û now uses only the dominant plate's
+neighbors so triple junctions can't flip the convergent/divergent sign (the
+one physics change — goldens regenerated, acceptance re-run, evidence
+refreshed); wilson recomputes `boundaryStress` after any suture/rift so
+keyframes never pair a post-merge partition with pre-merge stress; rift
+eligibility on suture steps now sees the merged plate's true size; a
+zero-cross guard skips degenerate antipodal rift splits instead of emitting
+a NaN pole; the rift flood-fill references `PLATE_FILL_JITTER` instead of a
+hardcoded 1.5; and the rift draw quantum is `min(10 kyr, stepYears)`
+(named constant), decorrelating draws for sub-10-kyr steps. A seventh
+finding (dead plate-table slots never reclaimed) was declined with
+measurements: ~6 rifts per 2 Gyr means tens of records per 4.5 Gyr, and
+compaction would break the plateId-stability contract that Phase 2's
+keyframe scrubbing relies on.
 
 ## Verification
 
