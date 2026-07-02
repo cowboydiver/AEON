@@ -115,6 +115,21 @@ function formatYears(t: number): string {
 const checksumHex = (f: Float32Array): string => hashFloat32Array(f).toString(16).padStart(8, '0');
 
 let printedHeader = false;
+let reportedEvents = 0;
+
+/** Print events that arrived since the previous keyframe, indented under it. */
+function reportEvents(keyframe: Keyframe): void {
+  for (; reportedEvents < keyframe.events.length; reportedEvents++) {
+    const e = keyframe.events[reportedEvents]!;
+    const data = e.data
+      ? ' ' +
+        Object.entries(e.data)
+          .map(([k, v]) => `${k}=${v}`)
+          .join(' ')
+      : '';
+    console.log(`  event @${formatYears(e.timeYears)}  ${e.kind}${data}`);
+  }
+}
 
 function report(keyframe: Keyframe): void {
   if (!printedHeader) {
@@ -141,6 +156,7 @@ function report(keyframe: Keyframe): void {
       checksums,
     ].join('  '),
   );
+  reportEvents(keyframe);
 }
 
 function dump(keyframe: Keyframe): void {

@@ -1,3 +1,4 @@
+import { copyEvents, type SimEvent } from './events';
 import { FIELD_NAMES, type Fields } from './fields';
 import { createRng, type Rng } from './rng';
 import { createInitialState, type PlanetState, type PlanetParams } from './state';
@@ -40,17 +41,21 @@ export function step(
   return { ...next, timeYears: next.timeYears + dtYears };
 }
 
-/** Deep snapshot of the per-cell fields at a point in time. Arrays are copies. */
+/**
+ * Deep snapshot of the per-cell fields at a point in time, plus the full
+ * event log so far. Arrays and events are copies, safe to transfer/mutate.
+ */
 export interface Keyframe {
   timeYears: number;
   fields: Fields;
+  events: SimEvent[];
 }
 
 export function snapshotKeyframe(state: PlanetState): Keyframe {
   const fields = Object.fromEntries(
     FIELD_NAMES.map((name) => [name, state.fields[name].slice()]),
   ) as Fields;
-  return { timeYears: state.timeYears, fields };
+  return { timeYears: state.timeYears, fields, events: copyEvents(state.events) };
 }
 
 /**

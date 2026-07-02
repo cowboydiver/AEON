@@ -25,6 +25,7 @@ export {
 export { valueNoise3, fractalNoise3 } from './noise';
 export { dot3, cross3, normalize3, angleBetween, rotateAroundAxis } from './vec';
 export { partitionPlates, applyInitialPlates, type PlateRecord } from './plates';
+export { EVENT_KINDS, copyEvents, type SimEvent, type SimEventKind } from './events';
 export {
   step,
   run,

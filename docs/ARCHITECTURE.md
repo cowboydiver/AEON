@@ -136,7 +136,7 @@ deterministic by construction.
 
 ```
 PlanetState = { timeYears, params: PlanetParams, globals: Globals, fields,
-                plates: PlateRecord[] }
+                plates: PlateRecord[], events: SimEvent[] }
 PlanetParams = { seed, radiusMeters, gridN, stepYears, keyframeIntervalYears,
                  numPlates,
                  starLuminosity, dayLengthHours, obliquityDeg }   // immutable per run
@@ -163,14 +163,32 @@ at a time and emits keyframes. Keyframe emission counts integer steps
 (`stepsPerKeyframe = round(interval / step)`) so it never depends on float
 accumulation.
 
+## Event log (Phase 1, #17)
+
+```
+SimEvent = { timeYears, kind: SimEventKind, data?: Record<string, number> }
+```
+
+Discrete events (plate rifts/sutures now; impacts, oxygenation later) are
+recorded in simulation order on `PlanetState.events`. Event kinds are a const
+object in `events.ts` (`EVENT_KINDS`), single source of truth like `FIELDS`.
+Payloads are numbers only, so events are trivially deterministic and
+serializable. **Purity rule:** a system never mutates the list — it returns a
+new state with `events: [...state.events, e]`, and `e.timeYears` must equal
+the state's current time. Event structure alone never perturbs field bytes
+(tested); keyframes carry a deep copy of the log so far, and `sim-cli
+--report` prints events under the keyframe row they precede. Phase 2 renders
+them as timeline markers.
+
 ## Keyframe format
 
 ```
-Keyframe = { timeYears: number, fields: Record<FieldName, Float32Array> }
+Keyframe = { timeYears: number, fields: Record<FieldName, Float32Array>,
+             events: SimEvent[] }
 ```
 
-Deep snapshot — arrays are copies, safe to transfer to other threads (the web
-app transfers them worker → main). One keyframe is emitted for the initial
+Deep snapshot — arrays and events are copies, safe to transfer to other
+threads (the web app transfers the field buffers worker → main). One keyframe is emitted for the initial
 state, then one per `keyframeIntervalYears` (default 10 Myr), plus a final one
 if `untilYears` is off-interval. The renderer's texture set is named `fieldsA`
 so a second set (`fieldsB`) and a blend uniform can be added for timeline

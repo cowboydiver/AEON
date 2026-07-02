@@ -7,6 +7,7 @@ import {
   EARTH_RADIUS_M,
   SOLAR_LUMINOSITY_W,
 } from './constants';
+import type { SimEvent } from './events';
 import { FIELD_NAMES, type Fields } from './fields';
 import { DEFAULT_GRID_N, cellCount } from './grid';
 import { applyInitialPlates, type PlateRecord } from './plates';
@@ -45,6 +46,11 @@ export interface PlanetState {
    * into it). Iterate by index only. Dead plates keep their slot (#18).
    */
   plates: readonly PlateRecord[];
+  /**
+   * Discrete events in simulation order. Systems append immutably
+   * (see events.ts purity rule); keyframes carry a deep copy.
+   */
+  events: readonly SimEvent[];
 }
 
 export function createPlanetParams(partial: Partial<PlanetParams> & { seed: number }): PlanetParams {
@@ -73,6 +79,7 @@ export function createInitialState(params: PlanetParams): PlanetState {
     globals: { landFraction: 0 },
     fields,
     plates: [],
+    events: [],
   };
   return applyInitialPlates(applyInitialTerrain(state));
 }
