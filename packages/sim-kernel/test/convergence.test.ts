@@ -25,7 +25,7 @@ function isBoundary(state: PlanetState, i: number): boolean {
 }
 
 describe('continent-continent collision (#16)', () => {
-  const start = (() => {
+  const start = ((): PlanetState => {
     const s = twoPlateState(N, P0, P1); // helper default: all continental
     const elevation = s.fields.elevation.slice();
     elevation.fill(200);
@@ -79,7 +79,7 @@ describe('continent-continent collision (#16)', () => {
 
 describe('ocean-continent subduction (#16)', () => {
   // Plate 1 (z<0) becomes 30 Myr oceanic floor; plate 0 stays continental.
-  const start = (() => {
+  const start = ((): PlanetState => {
     const s = twoPlateState(N, P0, P1);
     const elevation = s.fields.elevation.slice();
     const crustType = s.fields.crustType.slice();
@@ -170,7 +170,7 @@ describe('ocean-ocean subduction polarity (#16)', () => {
   // Both plates oceanic; plate 1's floor is much older (denser). At the
   // convergent segment the OLDER side must subduct: plate 0 (younger)
   // advances and keeps the surface.
-  const start = (() => {
+  const start = ((): PlanetState => {
     const s = twoPlateState(N, P0, P1);
     const elevation = s.fields.elevation.slice();
     const crustType = s.fields.crustType.slice();
