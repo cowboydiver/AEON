@@ -97,6 +97,7 @@ from it. All fields are `Float32Array` per cell.
 | `biome`         | index      | 0                | Biome class (zeros until biomes)               |
 | `plateId`       | index      | 0 … numPlates−1  | Owning plate, index into `PlanetState.plates`. Small integers stored in float32 (exact up to 2^24) |
 | `crustType`     | flag       | {0, 1}           | 0 = oceanic (subductable), 1 = continental (buoyant, never subducts) |
+| `boundaryStress`| m/yr       | ≈ ±0.1, 0 interior | Signed normal closing speed at boundary cells: + convergent, − divergent, ≈0 transform. Derived, recomputed every step |
 
 ### Plates (Phase 1)
 
@@ -155,6 +156,21 @@ as provisional young ocean (crustAge 0, oceanic, ridge depth −2500 m) — #15
 replaces this with real ridge bathymetry. Hot loops read the memoized
 `cellCenterTable(N)` / `neighborTable(N)` (pure derived data, like the
 seam-fold EDGE_MAPS).
+
+### Boundary classification (#14)
+
+A cell is a boundary cell iff any 4-neighbor has a different `plateId`. Each
+step, `boundaries.ts` recomputes `boundaryStress`: the two plates' rigid
+surface velocities (ω × r) are differenced and projected onto the tangent
+unit vector from the cell toward its **dominant other plate** (most frequent
+differing neighbor, ties to the lower id). Positive = closing (convergent),
+negative = opening (divergent); pure shear projects to ≈0 (transform).
+Interior cells are exactly 0. Boundary *type* is derived from the sign plus
+a tangential threshold when needed — there is deliberately no boundaryType
+field. Transforms are classified and visualized in Phase 1; their
+topographic effect is deliberately minimal. Subduction polarity between two
+sides (`overrides()`): continental beats oceanic, younger oceanic beats
+older oceanic (colder = denser), remaining ties to the lower plate id.
 
 Iteration over fields always uses `FIELD_NAMES` (insertion order of the
 `FIELDS` const) — never `Object.keys` of some other object — so ordering is

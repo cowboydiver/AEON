@@ -21,6 +21,11 @@ export const FIELDS = {
     unit: 'flag',
     description: 'Crust type: 0 = oceanic (subductable, follows age-depth), 1 = continental (buoyant, never subducts)',
   },
+  boundaryStress: {
+    unit: 'm/yr',
+    description:
+      'Signed normal closing speed at plate-boundary cells: + convergent, - divergent, ~0 transform. Exactly 0 in plate interiors; recomputed every step',
+  },
 } as const;
 
 export type FieldName = keyof typeof FIELDS;

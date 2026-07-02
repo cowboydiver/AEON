@@ -4,6 +4,7 @@ exports[`golden field hashes > seed 1: initial state and after 10 steps 1`] = `
 {
   "after10Steps": {
     "biome": "b0549dc5",
+    "boundaryStress": "2d317ca8",
     "crustAge": "b0549dc5",
     "crustType": "e6e61d18",
     "elevation": "43c724aa",
@@ -15,6 +16,7 @@ exports[`golden field hashes > seed 1: initial state and after 10 steps 1`] = `
   },
   "initial": {
     "biome": "b0549dc5",
+    "boundaryStress": "b0549dc5",
     "crustAge": "b0549dc5",
     "crustType": "10946445",
     "elevation": "82c5e946",
@@ -30,6 +32,7 @@ exports[`golden field hashes > seed 42: initial state and after 10 steps 1`] = `
 {
   "after10Steps": {
     "biome": "b0549dc5",
+    "boundaryStress": "49130b67",
     "crustAge": "b0549dc5",
     "crustType": "1a2538a5",
     "elevation": "787d5102",
@@ -41,6 +44,7 @@ exports[`golden field hashes > seed 42: initial state and after 10 steps 1`] = `
   },
   "initial": {
     "biome": "b0549dc5",
+    "boundaryStress": "b0549dc5",
     "crustAge": "b0549dc5",
     "crustType": "041eea65",
     "elevation": "9b025581",
@@ -56,6 +60,7 @@ exports[`golden field hashes > seed 1337: initial state and after 10 steps 1`] =
 {
   "after10Steps": {
     "biome": "b0549dc5",
+    "boundaryStress": "91c07988",
     "crustAge": "b0549dc5",
     "crustType": "8bc419b5",
     "elevation": "467c69fa",
@@ -67,6 +72,7 @@ exports[`golden field hashes > seed 1337: initial state and after 10 steps 1`] =
   },
   "initial": {
     "biome": "b0549dc5",
+    "boundaryStress": "b0549dc5",
     "crustAge": "b0549dc5",
     "crustType": "da81d005",
     "elevation": "ccfc8176",

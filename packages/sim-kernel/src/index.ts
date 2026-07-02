@@ -24,7 +24,8 @@ export {
 } from './state';
 export { valueNoise3, fractalNoise3 } from './noise';
 export { dot3, cross3, normalize3, angleBetween, rotateAroundAxis } from './vec';
-export { partitionPlates, applyInitialPlates, type PlateRecord } from './plates';
+export { partitionPlates, applyInitialPlates, plateVelocityAt, type PlateRecord } from './plates';
+export { computeBoundaryStress, dominantOtherPlate, overrides } from './systems/boundaries';
 export { EVENT_KINDS, copyEvents, type SimEvent, type SimEventKind } from './events';
 export {
   step,
@@ -36,5 +37,5 @@ export {
   type SimContext,
   type Keyframe,
 } from './step';
-export { tectonicsSystem, plateVelocityAt } from './systems/tectonics';
+export { tectonicsSystem } from './systems/tectonics';
 export { cellCenterTable, neighborTable } from './grid';

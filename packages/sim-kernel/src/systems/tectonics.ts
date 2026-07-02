@@ -23,10 +23,10 @@
 import { OCEAN_RIDGE_DEPTH_M } from '../constants';
 import { cellCenterTable, cellCount, directionToIndex, neighborTable, type Vec3 } from '../grid';
 import { hash2, hashString } from '../hash';
-import type { PlateRecord } from '../plates';
 import type { PlanetState } from '../state';
 import type { System } from '../step';
 import { rotateAroundAxis } from '../vec';
+import { computeBoundaryStress } from './boundaries';
 
 /**
  * The advection quantum for a plate's next event: between 1 and 2.5 cell
@@ -68,21 +68,21 @@ function applyTectonics(state: PlanetState, dtYears: number): PlanetState {
     if (Math.abs(accumulated[p]!) >= quantum) moving.push(p);
   }
 
-  if (moving.length === 0) {
-    return {
-      ...state,
-      plates: state.plates.map((p, i) => ({ ...p, accumulatedRadians: accumulated[i]! })),
-    };
-  }
-
-  const next = advect(state, accumulated, moving);
-  return {
-    ...next,
+  const advected = moving.length > 0 ? advect(state, accumulated, moving) : state;
+  const next: PlanetState = {
+    ...advected,
     plates: state.plates.map((p, i) =>
       moving.includes(i)
         ? { ...p, accumulatedRadians: 0, advectionCount: p.advectionCount + 1 }
         : { ...p, accumulatedRadians: accumulated[i]! },
     ),
+  };
+
+  // Boundary stress is a per-step derived field (#14): partition and
+  // kinematics both feed it, so recompute after any motion.
+  return {
+    ...next,
+    fields: { ...next.fields, boundaryStress: computeBoundaryStress(next) },
   };
 }
 
@@ -196,14 +196,3 @@ function advect(
   };
 }
 
-/** Surface velocity of plate `plate` at unit position `pos`, m/yr. */
-export function plateVelocityAt(plate: PlateRecord, pos: Vec3, radiusMeters: number): Vec3 {
-  const w = plate.angularVelRadPerYr;
-  const k = plate.eulerPole;
-  // v = ω k × (R·pos)
-  return [
-    w * (k[1] * pos[2] - k[2] * pos[1]) * radiusMeters,
-    w * (k[2] * pos[0] - k[0] * pos[2]) * radiusMeters,
-    w * (k[0] * pos[1] - k[1] * pos[0]) * radiusMeters,
-  ];
-}

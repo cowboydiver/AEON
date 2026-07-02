@@ -55,6 +55,18 @@ export interface PlateRecord {
   alive: boolean;
 }
 
+/** Rigid-rotation surface velocity of a plate at unit position `pos`, m/yr. */
+export function plateVelocityAt(plate: PlateRecord, pos: Vec3, radiusMeters: number): Vec3 {
+  const w = plate.angularVelRadPerYr;
+  const k = plate.eulerPole;
+  // v = ω k × (R·pos)
+  return [
+    w * (k[1] * pos[2] - k[2] * pos[1]) * radiusMeters,
+    w * (k[2] * pos[0] - k[0] * pos[2]) * radiusMeters,
+    w * (k[0] * pos[1] - k[1] * pos[0]) * radiusMeters,
+  ];
+}
+
 /**
  * Voronoi-style flood-fill partition (spike #9 winner). Pure function of
  * (rng stream, jitterSeed, numPlates, N); returns a plateId per cell.
