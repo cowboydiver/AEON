@@ -60,6 +60,37 @@ export const TERRAIN_NOISE_OFFSET: readonly [number, number, number] = [17.13, 4
  */
 export const MEAN_SIN2_LATITUDE = 1 / 3;
 
+// --- Tectonics (Phase 1) ----------------------------------------------------
+
+/**
+ * Fraction of the surface that is continental crust (including submerged
+ * shelves). Earth: ~41% of surface area is continental crust (Cogley 1984);
+ * rounded. Initial crustType is the elevation quantile at this fraction.
+ */
+export const CONTINENTAL_CRUST_FRACTION = 0.4;
+
+/** Default number of initial plates (spike #9 recommendation). */
+export const DEFAULT_NUM_PLATES = 10;
+
+/**
+ * Plate seeding: minimum angular separation between seed sites is this factor
+ * times sqrt(4*pi/numPlates), the mean plate angular radius (spike #9).
+ */
+export const PLATE_SITE_SEPARATION_FACTOR = 0.7;
+
+/**
+ * Plate seeding: flood-fill edge-cost jitter amplitude. 0 = sterile Voronoi
+ * edges, 3 = noisy; 1.5 chosen by eye in spike #9.
+ */
+export const PLATE_FILL_JITTER = 1.5;
+
+/**
+ * Plate angular speed range, rad/yr. 1.5e-9..8e-9 rad/yr is ~1..5 cm/yr on an
+ * Earth-radius sphere — the modern plate-speed range (NUVEL-1A order).
+ */
+export const PLATE_OMEGA_MIN_RAD_PER_YR = 1.5e-9;
+export const PLATE_OMEGA_MAX_RAD_PER_YR = 8e-9;
+
 /** Default simulation step, years. Chosen so 10 steps fit one keyframe interval. */
 export const DEFAULT_STEP_YEARS = 1e6;
 

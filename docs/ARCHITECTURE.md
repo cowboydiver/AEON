@@ -1,8 +1,8 @@
 # AEON Architecture
 
-Phase 0 (walking skeleton). This file is the contract between the simulation
-kernel, the CLI harness and the renderer. Read it before touching
-`sim-kernel`.
+Phase 0 (walking skeleton) + Phase 1 (tectonics, in progress). This file is
+the contract between the simulation kernel, the CLI harness and the renderer.
+Read it before touching `sim-kernel`.
 
 ## Monorepo shape and dependency direction
 
@@ -82,19 +82,51 @@ and N = 8.
         +----+
 ```
 
-## Field schema (Phase 0)
+## Field schema
 
 Defined once in `sim-kernel/src/fields.ts` (`FIELDS`); everything else derives
 from it. All fields are `Float32Array` per cell.
 
-| Field           | Unit       | Range (Phase 0)  | Meaning                                        |
+| Field           | Unit       | Range            | Meaning                                        |
 | --------------- | ---------- | ---------------- | ---------------------------------------------- |
 | `elevation`     | m          | ≈ −6000 … +4500  | Height relative to the 0 m datum (sea level)   |
-| `crustAge`      | yr         | 0                | Age of crust at the cell (zeros until tectonics) |
+| `crustAge`      | yr         | 0                | Age of crust at the cell (zeros until #15)     |
 | `temperature`   | K          | ≈ 215 … 305      | Mean surface air temperature (latitude + lapse placeholder) |
-| `precipitation` | kg/m²/yr   | 0                | Annual precipitation (zeros until climate)     |
+| `precipitation` | kg/m²/yr   | 0                | Annual precipitation (zeros until #19)         |
 | `iceFraction`   | 0–1        | 0                | Ice cover fraction (zeros until cryosphere)    |
 | `biome`         | index      | 0                | Biome class (zeros until biomes)               |
+| `plateId`       | index      | 0 … numPlates−1  | Owning plate, index into `PlanetState.plates`. Small integers stored in float32 (exact up to 2^24) |
+| `crustType`     | flag       | {0, 1}           | 0 = oceanic (subductable), 1 = continental (buoyant, never subducts) |
+
+### Plates (Phase 1)
+
+The grid is partitioned into `params.numPlates` (default 10) contiguous
+plates at t = 0 (`plates.ts`, spike-#9 winner): seed sites drawn from
+`rng.fork('plates')` with rejection sampling for minimum angular separation
+`0.7·√(4π/numPlates)` (relaxed ×0.85 per 64 failed draws), then simultaneous
+Dijkstra growth over `neighbors()` with edge cost `1 + 1.5·hash01(cell)` —
+a deterministic warped-metric Voronoi, contiguous by construction. Priority
+ties break (cost, cell, plate).
+
+Per-plate bookkeeping lives in `PlanetState.plates: PlateRecord[]`, fixed
+order by plate index — **iterate by index, never object-key order**:
+
+```
+PlateRecord = { eulerPole (unit Vec3), angularVelRadPerYr,
+                accumulatedRadians,        // un-applied rotation (#13)
+                createdAtYears, continentalFraction, alive }
+```
+
+Kinematics are assigned at creation from `rng.fork('plateKinematics')`:
+uniform pole on the sphere, speed uniform in 1.5–8 × 10⁻⁹ rad/yr
+(≈ 1–5 cm/yr on an Earth-radius sphere). Dead plates (sutured away, #18)
+keep their slot so `plateId` values stay stable forever.
+
+`crustType` is initialized as the top `CONTINENTAL_CRUST_FRACTION` (40%,
+Earth's ~41% incl. shelves) of initial elevation — the threshold sits below
+sea level, so continental shelves are continental crust that starts
+submerged. Initial elevation itself is still the Phase 0 noise terrain;
+plates are an overlay until #15/#16 make elevation follow them.
 
 Iteration over fields always uses `FIELD_NAMES` (insertion order of the
 `FIELDS` const) — never `Object.keys` of some other object — so ordering is
@@ -103,8 +135,10 @@ deterministic by construction.
 ## State, params, systems, step loop
 
 ```
-PlanetState = { timeYears, params: PlanetParams, globals: Globals, fields }
+PlanetState = { timeYears, params: PlanetParams, globals: Globals, fields,
+                plates: PlateRecord[] }
 PlanetParams = { seed, radiusMeters, gridN, stepYears, keyframeIntervalYears,
+                 numPlates,
                  starLuminosity, dayLengthHours, obliquityDeg }   // immutable per run
 Globals     = { landFraction }
 ```

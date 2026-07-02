@@ -23,6 +23,8 @@ export {
   type PlanetState,
 } from './state';
 export { valueNoise3, fractalNoise3 } from './noise';
+export { dot3, cross3, normalize3, angleBetween, rotateAroundAxis } from './vec';
+export { partitionPlates, applyInitialPlates, type PlateRecord } from './plates';
 export {
   step,
   run,
