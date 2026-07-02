@@ -7,6 +7,11 @@ name: tracker-sync
 
 on:
   workflow_dispatch:
+  # workflow_dispatch is only registered once this file reaches the default
+  # branch; the push trigger lets the sync run from the planning branch too.
+  push:
+    branches: ['claude/claude-handover-section-4-9mgh0h']
+    paths: ['.github/workflows/tracker-sync.yml']
 
 permissions:
   issues: write
