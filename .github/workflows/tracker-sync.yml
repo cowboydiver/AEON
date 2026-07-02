@@ -1,0 +1,128 @@
+# One-shot (re-runnable) sync of tracker metadata that the planning tooling
+# cannot set through its API surface: native milestones and native
+# "blocked by" issue dependencies. Idempotent: existing milestones are
+# reused by title, existing assignments/dependencies are left alone.
+# Dispatch manually (Actions tab or API) whenever the plan structure changes.
+name: tracker-sync
+
+on:
+  workflow_dispatch:
+
+permissions:
+  issues: write
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/github-script@v7
+        with:
+          script: |
+            const { owner, repo } = context.repo;
+
+            // ---- Plan structure (mirrors docs/PLAN.md) ----
+            const phases = [
+              { title: 'Phase 1 — Tectonics',
+                description: 'Believable continents drifting, colliding, rifting over Gyr. Umbrella/acceptance gate: #3',
+                issues: [3, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21] },
+              { title: 'Phase 2 — Timeline scrubbing',
+                description: 'Full-history streaming, IndexedDB cache, GPU keyframe blending, tactile timeline. Umbrella: #4',
+                issues: [4, 22, 23, 24, 25, 26, 27, 28, 29] },
+              { title: 'Phase 3 — Climate, hydrology, biomes',
+                description: 'Energy balance, winds, orographic rain, ice, CO2 thermostat, Whittaker biomes. Umbrella: #5',
+                issues: [5, 30, 31, 32, 33, 34, 35, 36] },
+              { title: 'Phase 4 — Biosphere & planetary story',
+                description: 'Life with climate feedback; narrated planetary history. Umbrella: #6',
+                issues: [6, 37, 38, 39, 40, 41] },
+              { title: 'Phase 5 — Presentation polish',
+                description: 'Scattering, clouds, ocean, moon/rings/star, HUD to design deliverables. Umbrella: #7',
+                issues: [7, 42, 43, 44, 45, 46, 47] },
+              { title: 'Phase 6 — Surface exploration',
+                description: 'Quadtree LOD to the surface, procedural amplification. Own multi-milestone arc. Umbrella: #8',
+                issues: [8, 48, 49, 50, 51, 52] },
+            ];
+
+            // blocked issue <- its blockers ("blocked by")
+            const deps = {
+              // Phase order encoded on the umbrella issues
+              4: [3], 5: [4], 6: [5], 7: [6], 8: [7],
+              // Phase 1 (full dependency graph)
+              12: [9],
+              13: [10, 12],
+              14: [13],
+              15: [14],
+              16: [15],
+              18: [16, 17],
+              19: [16],
+              20: [18, 19],
+              21: [20, 11],
+              // Phase 2 (coarse)
+              24: [22], 25: [22], 26: [25], 27: [22],
+              28: [27], 29: [23, 24, 25, 26, 27],
+              // Phase 3 (coarse)
+              32: [31], 33: [30, 32], 34: [30, 32], 35: [30, 32],
+              36: [33, 34, 35],
+              // Phase 4 (coarse)
+              38: [37], 39: [38], 40: [37, 39], 41: [38, 39, 40],
+              // Phase 5 (coarse)
+              47: [42, 43, 44, 45, 46],
+              // Phase 6 (coarse; #48 re-plans the arc first)
+              49: [48], 50: [48], 51: [49, 50], 52: [51],
+            };
+
+            // ---- 1. Milestones: reuse by title, create the missing ----
+            const existing = await github.paginate(github.rest.issues.listMilestones,
+              { owner, repo, state: 'all', per_page: 100 });
+            const byTitle = new Map(existing.map(m => [m.title, m]));
+            for (const phase of phases) {
+              let m = byTitle.get(phase.title);
+              if (!m) {
+                m = (await github.rest.issues.createMilestone(
+                  { owner, repo, title: phase.title, description: phase.description })).data;
+                core.info(`created milestone ${m.number}: ${phase.title}`);
+              } else {
+                core.info(`milestone exists ${m.number}: ${phase.title}`);
+              }
+              phase.milestone = m.number;
+            }
+
+            // ---- 2. Assign issues to milestones ----
+            for (const phase of phases) {
+              for (const n of phase.issues) {
+                const issue = (await github.rest.issues.get({ owner, repo, issue_number: n })).data;
+                if (issue.milestone?.number === phase.milestone) continue;
+                await github.rest.issues.update(
+                  { owner, repo, issue_number: n, milestone: phase.milestone });
+                core.info(`#${n} -> milestone ${phase.milestone}`);
+              }
+            }
+
+            // ---- 3. Native "blocked by" dependencies ----
+            const idOf = new Map();
+            const involved = new Set(Object.keys(deps).map(Number));
+            for (const blockers of Object.values(deps)) blockers.forEach(b => involved.add(b));
+            for (const n of involved) {
+              idOf.set(n, (await github.rest.issues.get({ owner, repo, issue_number: n })).data.id);
+            }
+            let added = 0, skipped = 0, failed = 0;
+            for (const [blockedStr, blockers] of Object.entries(deps)) {
+              const blocked = Number(blockedStr);
+              const have = new Set((await github.paginate(
+                'GET /repos/{owner}/{repo}/issues/{issue_number}/dependencies/blocked_by',
+                { owner, repo, issue_number: blocked, per_page: 100 })).map(i => i.number));
+              for (const blocker of blockers) {
+                if (have.has(blocker)) { skipped++; continue; }
+                try {
+                  await github.request(
+                    'POST /repos/{owner}/{repo}/issues/{issue_number}/dependencies/blocked_by',
+                    { owner, repo, issue_number: blocked, issue_id: idOf.get(blocker) });
+                  core.info(`#${blocked} blocked by #${blocker}`);
+                  added++;
+                } catch (e) {
+                  core.error(`#${blocked} blocked by #${blocker}: ${e.status} ${e.message}`);
+                  failed++;
+                }
+              }
+            }
+            core.info(`dependencies: ${added} added, ${skipped} already present, ${failed} failed`);
+            if (failed > 0) core.setFailed(`${failed} dependency edges failed`);
