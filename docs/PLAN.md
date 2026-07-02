@@ -5,12 +5,17 @@ GitHub issues on `cowboydiver/AEON`; this file mirrors that structure and is the
 single source of truth for the roadmap shape. Keep it updated when phases are
 re-planned.
 
-**Tracker conventions.** The GitHub tooling available to the planning session
-could not create real GitHub milestones, so each phase has an **umbrella issue**
-(with the phase's goal, risk, done-criteria, and a task list of its children)
-plus a `phase-N` label on every issue in the phase. Treat "close the umbrella"
-as "milestone complete". If real milestones are created later by hand, fold the
-umbrellas into them and note it here.
+**Tracker conventions.** Each phase is a native GitHub milestone
+([milestones 1–6](https://github.com/cowboydiver/AEON/milestones)) containing
+all of its issues. Each phase also has an **overview issue** (#3–#8) carrying
+the phase's goal, risk, done-criteria, sign-off gate, and a task list; closing
+it closes out the milestone. Ordering is encoded as **native blocked-by
+dependencies**: the full dependency graph within Phase 1, coarse ordering
+within Phases 2–6, and the fixed phase order chained across the overview
+issues (#4 blocked by #3, … #8 blocked by #7). Every issue additionally
+carries a `phase-N` label. Milestones and dependencies are applied by
+`.github/workflows/tracker-sync.yml` (idempotent, manually dispatched) —
+edit its tables and re-run it whenever the plan is restructured.
 
 **Standing labels:** `spike`, `kernel`, `renderer`, `ui`, `infra`, `goldens`
 (any issue expected to change golden hashes), plus `phase-1` … `phase-6`.
@@ -28,7 +33,7 @@ informed by the previous phase's report. Reality over plans.
 
 ---
 
-## Phase 1 — Tectonics · umbrella [#3](https://github.com/cowboydiver/AEON/issues/3)
+## Phase 1 — Tectonics · [milestone](https://github.com/cowboydiver/AEON/milestone/1) · overview [#3](https://github.com/cowboydiver/AEON/issues/3)
 
 The risk concentrator for the whole project. Spikes come first; nothing
 integrates into the kernel until the crust-advection shootout has a written
@@ -54,7 +59,7 @@ touched, acceptance criteria, and size on the issue itself):
 Dependency sketch: #9 → #12; #10 → #13; #11 and #17 anytime; #13 → #14 → #15 →
 #16 → {#18, #19} → #20 → #21. #18 also needs #17.
 
-## Phase 2 — Timeline scrubbing · umbrella [#4](https://github.com/cowboydiver/AEON/issues/4)
+## Phase 2 — Timeline scrubbing · [milestone](https://github.com/cowboydiver/AEON/milestone/2) · overview [#4](https://github.com/cowboydiver/AEON/issues/4)
 
 Placeholders, to be re-planned after PHASE_1_REPORT.md:
 [#22](https://github.com/cowboydiver/AEON/issues/22) field quantization codec ·
@@ -66,7 +71,7 @@ Placeholders, to be re-planned after PHASE_1_REPORT.md:
 [#28](https://github.com/cowboydiver/AEON/issues/28) adaptive keyframe density (stretch) ·
 [#29](https://github.com/cowboydiver/AEON/issues/29) acceptance + PHASE_2_REPORT.md
 
-## Phase 3 — Climate, hydrology, biomes · umbrella [#5](https://github.com/cowboydiver/AEON/issues/5)
+## Phase 3 — Climate, hydrology, biomes · [milestone](https://github.com/cowboydiver/AEON/milestone/3) · overview [#5](https://github.com/cowboydiver/AEON/issues/5)
 
 Placeholders:
 [#30](https://github.com/cowboydiver/AEON/issues/30) zonal energy-balance model ·
@@ -77,7 +82,7 @@ Placeholders:
 [#35](https://github.com/cowboydiver/AEON/issues/35) Whittaker biomes + color ramp ·
 [#36](https://github.com/cowboydiver/AEON/issues/36) acceptance + PHASE_3_REPORT.md
 
-## Phase 4 — Biosphere & planetary story · umbrella [#6](https://github.com/cowboydiver/AEON/issues/6)
+## Phase 4 — Biosphere & planetary story · [milestone](https://github.com/cowboydiver/AEON/milestone/4) · overview [#6](https://github.com/cowboydiver/AEON/issues/6)
 
 Placeholders:
 [#37](https://github.com/cowboydiver/AEON/issues/37) ocean life → oxygenation ·
@@ -86,7 +91,7 @@ Placeholders:
 [#40](https://github.com/cowboydiver/AEON/issues/40) narrated history / timeline annotations ·
 [#41](https://github.com/cowboydiver/AEON/issues/41) acceptance + PHASE_4_REPORT.md
 
-## Phase 5 — Presentation polish · umbrella [#7](https://github.com/cowboydiver/AEON/issues/7)
+## Phase 5 — Presentation polish · [milestone](https://github.com/cowboydiver/AEON/milestone/5) · overview [#7](https://github.com/cowboydiver/AEON/issues/7)
 
 Placeholders (visual direction comes from Claude Design deliverables; taste-bound
 decisions go to the human):
@@ -97,7 +102,7 @@ decisions go to the human):
 [#46](https://github.com/cowboydiver/AEON/issues/46) HUD + camera to design deliverables ·
 [#47](https://github.com/cowboydiver/AEON/issues/47) acceptance + PHASE_5_REPORT.md
 
-## Phase 6 — Surface exploration · umbrella [#8](https://github.com/cowboydiver/AEON/issues/8)
+## Phase 6 — Surface exploration · [milestone](https://github.com/cowboydiver/AEON/milestone/6) · overview [#8](https://github.com/cowboydiver/AEON/issues/8)
 
 Coarsest placeholders by design; the phase is its own multi-milestone arc and
 does not start until Phases 1–5 are stable. Its first task is planning itself
