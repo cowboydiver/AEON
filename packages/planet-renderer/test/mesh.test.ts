@@ -1,5 +1,13 @@
+import { DataUtils } from 'three';
 import { describe, expect, it } from 'vitest';
-import { cellCount, createInitialState, createPlanetParams, faceSTToDirection } from 'sim-kernel';
+import {
+  cellCount,
+  createInitialState,
+  createPlanetParams,
+  faceRCToIndex,
+  faceSTToDirection,
+  neighbors,
+} from 'sim-kernel';
 import { createFaceGeometry } from '../src/mesh';
 import { createPlanetTextures, uploadKeyframe } from '../src/textures';
 
@@ -29,21 +37,72 @@ describe('createFaceGeometry', () => {
 });
 
 describe('uploadKeyframe', () => {
-  it('packs each contiguous face slice of the kernel field into its texture', () => {
-    const params = createPlanetParams({ seed: 42, gridN: 16 });
-    const state = createInitialState(params);
-    const textures = createPlanetTextures(params.gridN);
-    uploadKeyframe(textures, state.fields);
+  const params = createPlanetParams({ seed: 42, gridN: 16 });
+  const state = createInitialState(params);
+  const N = params.gridN;
+  const W = N + 2;
+  const half = DataUtils.toHalfFloat;
 
-    const perFace = params.gridN * params.gridN;
-    expect(state.fields.elevation.length).toBe(cellCount(params.gridN));
+  function uploaded() {
+    const textures = createPlanetTextures(N);
+    uploadKeyframe(textures, state.fields);
+    return textures;
+  }
+
+  it('packs each face slice into the interior of its bordered texture', () => {
+    const textures = uploaded();
+    expect(state.fields.elevation.length).toBe(cellCount(N));
     for (let face = 0; face < 6; face++) {
-      const data = textures.elevation[face]!.image.data as Float32Array;
-      expect(data.length).toBe(perFace);
-      expect(data[0]).toBe(state.fields.elevation[face * perFace]);
-      expect(data[perFace - 1]).toBe(state.fields.elevation[(face + 1) * perFace - 1]);
+      const data = textures.elevation[face]!.image.data as Uint16Array;
+      expect(data.length).toBe(W * W);
+      for (const [row, col] of [
+        [0, 0],
+        [0, N - 1],
+        [N - 1, 0],
+        [7, 11],
+      ] as const) {
+        expect(data[(row + 1) * W + col + 1]).toBe(
+          half(state.fields.elevation[faceRCToIndex(face, row, col, N)]!),
+        );
+      }
       // needsUpdate is a write-only setter that bumps version.
       expect(textures.elevation[face]!.version).toBeGreaterThan(0);
+    }
+  });
+
+  it('fills borders with cross-seam neighbor cells so adjacent faces agree', () => {
+    const textures = uploaded();
+    const src = state.fields.elevation;
+    for (let face = 0; face < 6; face++) {
+      const data = textures.elevation[face]!.image.data as Uint16Array;
+      for (let row = 0; row < N; row++) {
+        const left = neighbors(faceRCToIndex(face, row, 0, N), N)[0]!;
+        const right = neighbors(faceRCToIndex(face, row, N - 1, N), N)[1]!;
+        expect(data[(row + 1) * W]).toBe(half(src[left]!));
+        expect(data[(row + 1) * W + W - 1]).toBe(half(src[right]!));
+      }
+      for (let col = 0; col < N; col++) {
+        const upCell = neighbors(faceRCToIndex(face, 0, col, N), N)[2]!;
+        const downCell = neighbors(faceRCToIndex(face, N - 1, col, N), N)[3]!;
+        expect(data[col + 1]).toBe(half(src[upCell]!));
+        expect(data[(W - 1) * W + col + 1]).toBe(half(src[downCell]!));
+      }
+    }
+  });
+
+  it('corner texels hold the same 3-cell mean on every face sharing the cube corner', () => {
+    const textures = uploaded();
+    // Face 0's (row 0, col 0) corner is a cube corner shared with the faces
+    // its two cross-seam neighbors live on; all three corner texels for that
+    // cube corner must be the identical mean.
+    const own = faceRCToIndex(0, 0, 0, N);
+    const ns = neighbors(own, N);
+    const expected = (textures.elevation[0]!.image.data as Uint16Array)[0]!;
+    for (const cell of [ns[0]!, ns[2]!]) {
+      const face = Math.floor(cell / (N * N));
+      const data = textures.elevation[face]!.image.data as Uint16Array;
+      const corners = [0, W - 1, (W - 1) * W, (W - 1) * W + W - 1].map((i) => data[i]!);
+      expect(corners, `face ${face} should share face 0's corner mean`).toContain(expected);
     }
   });
 });

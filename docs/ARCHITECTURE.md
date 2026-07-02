@@ -172,9 +172,20 @@ scrubbing without rework.
 ## Rendering (Phase 0)
 
 Six face meshes (one per cube face) share uniforms (`exaggeration`,
-`sunDirection`); each samples its own N×N R32F elevation `DataTexture` in a
-TSL node material: radial vertex displacement
+`sunDirection`); each samples its own elevation `DataTexture` in a TSL node
+material: radial vertex displacement
 `position · (1 + elevation / radiusMeters · exaggeration)`, hypsometric color
 ramp (blues below datum, green→brown→white above), Lambert-ish lighting from
-the sun uniform. The web app generates state in a Web Worker and uploads
-keyframes with `uploadKeyframe`. WebGPU only; no WebGL fallback in Phase 0.
+the sun uniform.
+
+Face textures are (N+2)×(N+2) **R16F** (half float filters on every WebGPU
+adapter; R32F linear filtering needs the optional `float32-filterable`
+feature). The 1-texel border is filled from adjacent faces via the kernel's
+seam-aware `neighbors()`, and diagonal border texels hold the mean of the
+three cells meeting at each cube corner — so linear filtering yields
+identical values on both sides of every seam (no cracks). Mesh vertices sit
+at cell corners and sample at padded UV `(col+1)/(N+2)`, i.e. exactly between
+the four surrounding cell centers.
+
+The web app generates state in a Web Worker and uploads keyframes with
+`uploadKeyframe`. WebGPU only; no WebGL fallback in Phase 0.

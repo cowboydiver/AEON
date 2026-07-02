@@ -76,10 +76,14 @@ All five SCAFFOLD_SPEC milestones, one commit each:
   the face-frame table with exact ±1 dot products made the classic cube-seam
   bug class structurally impossible; the all-cells symmetry test passed on the
   first run.
-- **Visible-but-acceptable seams in the render:** face textures clamp at
-  edges, so hairline color discontinuities appear along face boundaries.
-  Fixable later with a 1-texel border exchange (or per-face geometry sampling
-  neighbor cells); irrelevant to Phase 0 acceptance.
+- **Face-seam continuity took a border exchange.** Independent per-face
+  textures with edge clamping produced hairline seams; review feedback
+  promoted the planned fix into Phase 0. Face textures are now (N+2)² with a
+  1-texel border filled from adjacent faces via the kernel's seam-aware
+  `neighbors()` (cube-corner texels store the 3-cell mean), so both sides of
+  every seam blend identical values. Textures are R16F rather than R32F so
+  linear filtering works without the optional `float32-filterable` WebGPU
+  feature.
 - **JS transcendentals are the only determinism soft spot** (documented in
   ARCHITECTURE.md): all current targets are V8, so golden hashes are stable
   everywhere we run, but a non-V8 target would need software `tan/atan/pow`.

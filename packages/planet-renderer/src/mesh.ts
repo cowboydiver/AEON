@@ -36,8 +36,12 @@ export function createFaceGeometry(face: number, gridN: number): BufferGeometry 
       positions[vi * 3] = dir[0];
       positions[vi * 3 + 1] = dir[1];
       positions[vi * 3 + 2] = dir[2];
-      uvs[vi * 2] = col / gridN;
-      uvs[vi * 2 + 1] = row / gridN;
+      // Face textures are (N+2) wide with a 1-texel seam border (see
+      // textures.ts): corner (row, col) sits at padded texel coordinate
+      // (col+1, row+1) minus half a texel, i.e. exactly between the four
+      // surrounding cell centers, so linear filtering interpolates them.
+      uvs[vi * 2] = (col + 1) / (gridN + 2);
+      uvs[vi * 2 + 1] = (row + 1) / (gridN + 2);
     }
   }
 
