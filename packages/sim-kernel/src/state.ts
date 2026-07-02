@@ -52,6 +52,13 @@ export interface PlanetState {
    * (see events.ts purity rule); keyframes carry a deep copy.
    */
   events: readonly SimEvent[];
+  /**
+   * Wilson-cycle bookkeeping (#18): when each continent-continent plate
+   * pair ("a-b" with a < b) entered sustained convergent contact. Rebuilt
+   * every step from the current contact scan (never iterated by key order);
+   * pairs suture once contact has lasted SUTURE_AFTER_YEARS.
+   */
+  wilson: { readonly contactSince: Readonly<Record<string, number>> };
 }
 
 export function createPlanetParams(partial: Partial<PlanetParams> & { seed: number }): PlanetParams {
@@ -81,6 +88,7 @@ export function createInitialState(params: PlanetParams): PlanetState {
     fields,
     plates: [],
     events: [],
+    wilson: { contactSince: {} },
   };
   return applyPrecipitationProxy(applyInitialPlates(applyInitialTerrain(state)));
 }

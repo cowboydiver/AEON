@@ -5,6 +5,7 @@ import { createInitialState, type PlanetState, type PlanetParams } from './state
 import { climateProxySystem } from './systems/climateProxy';
 import { erosionSystem } from './systems/erosion';
 import { tectonicsSystem } from './systems/tectonics';
+import { wilsonSystem } from './systems/wilson';
 
 /** Per-run context threaded through systems. Never global. */
 export interface SimContext {
@@ -32,7 +33,12 @@ export const identitySystem: System = {
  * builds topography, erosion redistributes it, climateProxy refreshes the
  * diagnostic temperature against the final elevation.
  */
-export const SYSTEMS: readonly System[] = [tectonicsSystem, erosionSystem, climateProxySystem];
+export const SYSTEMS: readonly System[] = [
+  tectonicsSystem,
+  wilsonSystem,
+  erosionSystem,
+  climateProxySystem,
+];
 
 /** Advance the state by dtYears through the ordered system pipeline. */
 export function step(

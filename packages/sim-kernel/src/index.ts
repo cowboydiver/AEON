@@ -40,6 +40,7 @@ export {
 } from './step';
 export { tectonicsSystem } from './systems/tectonics';
 export { erosionSystem } from './systems/erosion';
+export { wilsonSystem } from './systems/wilson';
 export {
   climateProxySystem,
   applyPrecipitationProxy,

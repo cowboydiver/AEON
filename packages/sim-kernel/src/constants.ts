@@ -171,6 +171,38 @@ export const ARC_GROWTH_RATE_M_PER_YR = 2e-4;
 /** Ceiling for volcanic-arc elevation, m (island arcs, not continents). */
 export const ARC_MAX_ELEVATION_M = 1000;
 
+// --- Wilson cycles (#18) -----------------------------------------------------
+
+/** Live-plate count bounds: sutures pause at the floor, rifts at the ceiling. */
+export const MIN_PLATES = 6;
+export const MAX_PLATES = 16;
+
+/**
+ * Continuous continent-continent convergent contact required before the two
+ * plates suture into one, yr. Real collision-to-suture times are a few tens
+ * of Myr (India-Asia order).
+ */
+export const SUTURE_AFTER_YEARS = 25e6;
+
+/** Minimum simultaneous cont-cont convergent boundary cells to count as contact. */
+export const SUTURE_MIN_CONTACT_CELLS = 3;
+
+/** A plate must be at least this old since creation/last rift to rift, yr. */
+export const RIFT_MIN_AGE_YEARS = 150e6;
+
+/** A plate must own at least this fraction of the sphere to rift. */
+export const RIFT_MIN_AREA_FRACTION = 0.08;
+
+/** A plate must be at least this continental (by area) to rift. */
+export const RIFT_MIN_CONTINENTAL_FRACTION = 0.35;
+
+/**
+ * Rift probability per eligible plate per Myr. 0.004 gives an expected wait
+ * of ~250 Myr once a plate is large, old and continental — supercontinents
+ * linger, then break (real Wilson cycle periods are 300-500 Myr).
+ */
+export const RIFT_PROBABILITY_PER_MYR = 0.004;
+
 // --- Climate proxy & erosion (#19) ------------------------------------------
 
 /**
