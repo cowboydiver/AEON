@@ -53,7 +53,11 @@ pnpm sim -- --seed 42 --until 500e6 --dump elevation,temperature --out tmp/
 pnpm -F web dev           # Vite dev server
 pnpm -F web e2e           # Playwright: renders app, screenshots timeline positions
 pnpm lint                 # ESLint incl. kernel determinism rules
+pnpm typecheck            # tsc --noEmit across all packages
 ```
+
+Note: `pnpm -F web e2e` runs a headed browser under Xvfb on displayless Linux
+(WebGPU cannot present from plain headless Chromium; see PHASE0_REPORT.md).
 
 ## Verification workflow (follow this, in order)
 

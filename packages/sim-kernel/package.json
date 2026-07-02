@@ -1,0 +1,20 @@
+{
+  "name": "sim-kernel",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Pure deterministic planet simulation kernel. Zero runtime dependencies.",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit -p tsconfig.json && tsc --noEmit -p tsconfig.test.json"
+  },
+  "devDependencies": {
+    "@types/node": "^26.1.0",
+    "eslint": "^10.6.0",
+    "typescript": "^6.0.3",
+    "vitest": "^4.1.9"
+  }
+}

@@ -1,0 +1,21 @@
+{
+  "name": "sim-cli",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Headless simulation harness: reports and field PNG dumps.",
+  "scripts": {
+    "start": "tsx src/main.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "pngjs": "^7.0.0",
+    "sim-kernel": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "^26.1.0",
+    "@types/pngjs": "^6.0.5",
+    "tsx": "^4.22.4",
+    "typescript": "^6.0.3"
+  }
+}

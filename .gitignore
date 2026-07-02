@@ -1,0 +1,7 @@
+node_modules/
+dist/
+tmp/
+*.tsbuildinfo
+apps/web/e2e/artifacts/
+apps/web/test-results/
+apps/web/playwright-report/

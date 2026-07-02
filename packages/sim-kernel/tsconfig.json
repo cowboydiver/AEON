@@ -1,0 +1,8 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    // The kernel must not touch Node or DOM APIs; no ambient types allowed.
+    "types": []
+  },
+  "include": ["src"]
+}
