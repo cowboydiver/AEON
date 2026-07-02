@@ -56,8 +56,10 @@ export function snapshotKeyframe(state: PlanetState): Keyframe {
 /**
  * Run a full simulation from t=0 to untilYears, emitting a keyframe for the
  * initial state and then one every params.keyframeIntervalYears (and a final
- * one at untilYears if it does not land on the interval). Step count is
- * integer-derived so keyframe emission never depends on float accumulation.
+ * one at untilYears if it does not land on the interval). Both the loop bound
+ * and keyframe emission are integer-derived: comparing accumulated float time
+ * against untilYears could spin forever when the final remainder is below one
+ * ULP of the elapsed time.
  */
 export function run(
   params: PlanetParams,
@@ -66,16 +68,16 @@ export function run(
 ): PlanetState {
   const ctx: SimContext = { rng: createRng(params.seed).fork('sim') };
   const stepsPerKeyframe = Math.max(1, Math.round(params.keyframeIntervalYears / params.stepYears));
+  const totalSteps = Math.max(0, Math.ceil(untilYears / params.stepYears));
 
   let state = createInitialState(params);
   onKeyframe(snapshotKeyframe(state));
 
-  let stepsTaken = 0;
-  while (state.timeYears < untilYears) {
+  for (let i = 1; i <= totalSteps; i++) {
     const dt = Math.min(params.stepYears, untilYears - state.timeYears);
+    if (dt <= 0) break; // float ties: nothing left to simulate
     state = step(state, dt, ctx);
-    stepsTaken++;
-    if (stepsTaken % stepsPerKeyframe === 0 || state.timeYears >= untilYears) {
+    if (i % stepsPerKeyframe === 0 || i === totalSteps || state.timeYears >= untilYears) {
       onKeyframe(snapshotKeyframe(state));
     }
   }

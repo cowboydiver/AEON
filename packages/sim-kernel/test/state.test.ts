@@ -21,8 +21,9 @@ describe('createInitialState', () => {
   it('lands ~30% of cells above the datum', () => {
     const state = createInitialState(params);
     const elevation = state.fields.elevation;
+    // >= 0: the sea-level quantile cell itself maps to exactly 0 m and is land.
     let land = 0;
-    for (const e of elevation) if (e > 0) land++;
+    for (const e of elevation) if (e >= 0) land++;
     const fraction = land / elevation.length;
     expect(fraction).toBeGreaterThan(INITIAL_LAND_FRACTION - 0.02);
     expect(fraction).toBeLessThan(INITIAL_LAND_FRACTION + 0.02);
