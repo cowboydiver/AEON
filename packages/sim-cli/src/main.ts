@@ -23,6 +23,8 @@ Options:
   --grid-n <int>              cells per cube-face edge (default 128)
   --report                    print a stats table per keyframe
   --dump <fields>             comma-separated fields to dump as PNGs (e.g. elevation,temperature)
+  --dump-every <k>            only dump every k-th keyframe (plus the final one);
+                              default 1 = every keyframe. Use for long-run flipbooks.
   --out <dir>                 output directory for dumps (default tmp/)
   --help                      show this help
 
@@ -39,6 +41,7 @@ const { values } = parseArgs({
     'grid-n': { type: 'string' },
     report: { type: 'boolean', default: false },
     dump: { type: 'string' },
+    'dump-every': { type: 'string' },
     out: { type: 'string', default: 'tmp' },
     help: { type: 'boolean', default: false },
   },
@@ -63,6 +66,7 @@ const seed = numArg(values.seed, 'seed')!;
 const untilYears = numArg(values.until, 'until')!;
 const keyframeIntervalYears = numArg(values['keyframe-interval'], 'keyframe-interval');
 const gridN = numArg(values['grid-n'], 'grid-n');
+const dumpEvery = Math.max(1, Math.round(numArg(values['dump-every'], 'dump-every') ?? 1));
 
 const dumpFields: FieldName[] = (values.dump ?? '')
   .split(',')
@@ -148,8 +152,14 @@ function dump(keyframe: Keyframe): void {
   }
 }
 
+let keyframeIndex = 0;
 run(params, untilYears, (keyframe) => {
   checkFinite(keyframe);
   if (values.report) report(keyframe);
-  if (dumpFields.length > 0) dump(keyframe);
+  // Every keyframe passes the tripwire above; --dump-every only thins the
+  // PNG series. The final keyframe is always dumped so flipbooks end at the
+  // end state.
+  const isFinal = keyframe.timeYears >= untilYears;
+  if (dumpFields.length > 0 && (keyframeIndex % dumpEvery === 0 || isFinal)) dump(keyframe);
+  keyframeIndex++;
 });
