@@ -41,6 +41,10 @@ export function twoPlateState(
   ) as Fields;
   for (let i = 0; i < count; i++) {
     fields.plateId[i] = dot3(cellCenterDirection(i, N), [0, 0, 1]) >= 0 ? 0 : 1;
+    // Continental everywhere by default so painted elevation is not
+    // overwritten by oceanic thermal subsidence; tests that need oceanic
+    // crust set crustType/crustAge explicitly.
+    fields.crustType[i] = 1;
   }
   return {
     timeYears: 0,

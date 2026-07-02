@@ -98,6 +98,26 @@ export const PLATE_OMEGA_MAX_RAD_PER_YR = 8e-9;
  */
 export const OCEAN_RIDGE_DEPTH_M = -2500;
 
+/**
+ * Half-space cooling subsidence coefficient, m per sqrt(yr). Ocean floor
+ * deepens as ridgeDepth − K·√age; Parsons & Sclater (1977) give
+ * ~350 m/√Myr = 0.35 m/√yr for crust younger than ~70 Myr.
+ */
+export const OCEAN_SUBSIDENCE_K_M_PER_SQRT_YR = 0.35;
+
+/**
+ * Old-ocean floor depth where thermal subsidence flattens out, m (Earth's
+ * abyssal plains, ~age 100 Myr under the coefficient above).
+ */
+export const OCEAN_ABYSSAL_DEPTH_M = -6000;
+
+/**
+ * Initial crustAge of continental crust, yr. Order of Archean cratons /
+ * continental shields; only relevance in-kernel is being far older than any
+ * oceanic crust so age comparisons never confuse the two.
+ */
+export const CONTINENTAL_INITIAL_AGE_YEARS = 2e9;
+
 /** Default simulation step, years. Chosen so 10 steps fit one keyframe interval. */
 export const DEFAULT_STEP_YEARS = 1e6;
 

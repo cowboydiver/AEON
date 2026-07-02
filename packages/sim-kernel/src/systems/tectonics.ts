@@ -20,6 +20,7 @@
  * (#15 turns this into real ridge bathymetry).
  */
 
+import { oceanicDepthForAge } from '../bathymetry';
 import { OCEAN_RIDGE_DEPTH_M } from '../constants';
 import { cellCenterTable, cellCount, directionToIndex, neighborTable, type Vec3 } from '../grid';
 import { hash2, hashString } from '../hash';
@@ -56,6 +57,12 @@ function applyTectonics(state: PlanetState, dtYears: number): PlanetState {
   const N = state.params.gridN;
   const thetaMin = Math.PI / 2 / N;
 
+  // Crust ages everywhere, every step (#15). Ticked before advection so
+  // transported crust carries its aged value; gap fill afterwards writes 0.
+  const crustAge = state.fields.crustAge.slice();
+  for (let i = 0; i < crustAge.length; i++) crustAge[i]! += dtYears;
+  state = { ...state, fields: { ...state.fields, crustAge } };
+
   // Accumulate rotation; collect plates crossing their dithered quantum.
   const accumulated = state.plates.map((p) =>
     p.alive ? p.accumulatedRadians + p.angularVelRadPerYr * dtYears : 0,
@@ -80,9 +87,25 @@ function applyTectonics(state: PlanetState, dtYears: number): PlanetState {
 
   // Boundary stress is a per-step derived field (#14): partition and
   // kinematics both feed it, so recompute after any motion.
+  const boundaryStress = computeBoundaryStress(next);
+
+  // Thermal subsidence (#15): oceanic elevation is a pure function of
+  // crustAge (isostasy) — ridge crest young, abyssal plain old. #16 exempts
+  // active margins and builds trenches/arcs/orogens on top.
+  const elevation = next.fields.elevation.slice();
+  const { crustType } = next.fields;
+  const age = next.fields.crustAge;
+  for (let i = 0; i < elevation.length; i++) {
+    if (crustType[i] === 0) elevation[i] = oceanicDepthForAge(age[i]!);
+  }
+
+  let land = 0;
+  for (const e of elevation) if (e >= 0) land++;
+
   return {
     ...next,
-    fields: { ...next.fields, boundaryStress: computeBoundaryStress(next) },
+    globals: { ...next.globals, landFraction: land / elevation.length },
+    fields: { ...next.fields, boundaryStress, elevation },
   };
 }
 

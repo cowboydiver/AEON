@@ -90,7 +90,7 @@ from it. All fields are `Float32Array` per cell.
 | Field           | Unit       | Range            | Meaning                                        |
 | --------------- | ---------- | ---------------- | ---------------------------------------------- |
 | `elevation`     | m          | ≈ −6000 … +4500  | Height relative to the 0 m datum (sea level)   |
-| `crustAge`      | yr         | 0                | Age of crust at the cell (zeros until #15)     |
+| `crustAge`      | yr         | 0 … sim age (+2 Gyr shield offset) | Age of crust: 0 at spreading centers, +dt per step everywhere. Initial ocean gets a depth-consistent age; initial continents start at 2 Gyr |
 | `temperature`   | K          | ≈ 215 … 305      | Mean surface air temperature (latitude + lapse placeholder) |
 | `precipitation` | kg/m²/yr   | 0                | Annual precipitation (zeros until #19)         |
 | `iceFraction`   | 0–1        | 0                | Ice cover fraction (zeros until cryosphere)    |
@@ -156,6 +156,22 @@ as provisional young ocean (crustAge 0, oceanic, ridge depth −2500 m) — #15
 replaces this with real ridge bathymetry. Hot loops read the memoized
 `cellCenterTable(N)` / `neighborTable(N)` (pure derived data, like the
 seam-fold EDGE_MAPS).
+
+### Divergent boundaries & bathymetry (#15)
+
+`crustAge` ticks +dt every step for every cell, *before* advection (crust
+carries its aged value; divergent gap fill writes 0 afterwards). Oceanic
+elevation (`crustType = 0`) is then a pure function of age — half-space
+cooling (`bathymetry.ts`): ridge crest at −2500 m deepening as
+0.35 m·√age(yr) to the abyssal floor at −6000 m (Parsons & Sclater 1977
+values). Continental elevation is advected, never subsided. New crust from
+divergent gaps therefore starts on the ridge crest and subsides as it ages
+and drifts — spreading stripes for free. At t = 0 the noise ocean is given a
+depth-consistent age by inverting the curve (deep floor = old crust) and
+snapped onto it; initial continents start at a 2 Gyr shield age. Ownership
+of new ridge crust follows the gap-repair majority rule — roughly half to
+each flank, matching symmetric spreading. #16 exempts active convergent
+margins from the hard subsidence set to build trenches and arcs.
 
 ### Boundary classification (#14)
 

@@ -13,8 +13,10 @@
  * motion itself starts with the tectonics system in #13).
  */
 
+import { oceanicAgeForDepth, oceanicDepthForAge } from './bathymetry';
 import {
   CONTINENTAL_CRUST_FRACTION,
+  CONTINENTAL_INITIAL_AGE_YEARS,
   PLATE_FILL_JITTER,
   PLATE_OMEGA_MAX_RAD_PER_YR,
   PLATE_OMEGA_MIN_RAD_PER_YR,
@@ -158,9 +160,23 @@ export function applyInitialPlates(state: PlanetState): PlanetState {
   const crustType = new Float32Array(count);
   const continentalCells = new Array<number>(numPlates).fill(0);
   const plateCells = new Array<number>(numPlates).fill(0);
+  // Oceanic crust gets an age consistent with its depth (inverted half-space
+  // cooling curve) and its elevation snapped onto that curve, so t=0 already
+  // obeys the #15 bathymetry law (no visual jump at the first step). Only
+  // the shallow-oceanic band moves (down to ridge depth); coastlines are
+  // continental crust and are untouched, so landFraction is unaffected.
+  const crustAge = new Float32Array(count);
+  const newElevation = elevation.slice();
   for (let i = 0; i < count; i++) {
     const continental = elevation[i]! >= threshold ? 1 : 0;
     crustType[i] = continental;
+    if (continental === 1) {
+      crustAge[i] = CONTINENTAL_INITIAL_AGE_YEARS;
+    } else {
+      const age = oceanicAgeForDepth(elevation[i]!);
+      crustAge[i] = age;
+      newElevation[i] = oceanicDepthForAge(age);
+    }
     const p = plateId[i]!;
     plateCells[p]!++;
     continentalCells[p]! += continental;
@@ -187,6 +203,6 @@ export function applyInitialPlates(state: PlanetState): PlanetState {
   return {
     ...state,
     plates,
-    fields: { ...state.fields, plateId, crustType },
+    fields: { ...state.fields, plateId, crustType, crustAge, elevation: newElevation },
   };
 }
