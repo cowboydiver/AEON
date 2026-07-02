@@ -1,2 +1,4 @@
-// Public surface of the planet renderer. Populated in Milestone 4.
-export const RENDERER_VERSION = '0.1.0';
+export { createPlanetMesh, createFaceGeometry, type PlanetHandle } from './mesh';
+export { createPlanetMaterial, createPlanetUniforms, type PlanetUniforms } from './material';
+export { createPlanetTextures, uploadKeyframe, type PlanetFieldTextures } from './textures';
+export { createStarfield } from './starfield';

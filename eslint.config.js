@@ -15,6 +15,16 @@ export default tseslint.config(
   eslint.configs.recommended,
   tseslint.configs.recommended,
   {
+    // Plain-JS Node tooling scripts (not covered by TS configs).
+    files: ['**/scripts/**/*.mjs'],
+    languageOptions: {
+      globals: {
+        process: 'readonly',
+        console: 'readonly',
+      },
+    },
+  },
+  {
     // Determinism guard: the simulation kernel must never read wall-clock time
     // or ambient randomness. All randomness flows through rng.ts / hash.ts.
     // (Non-deterministic key-order iteration is enforced by review, not lint.)
