@@ -94,7 +94,7 @@ function applyTectonics(state: PlanetState, dtYears: number): PlanetState {
   // convergent margins are exempt (#16): trenches pin below the curve,
   // arcs accumulate above it.
   const elevation = next.fields.elevation.slice();
-  const { crustType } = next.fields;
+  const crustType = next.fields.crustType.slice();
   const age = next.fields.crustAge;
   for (let i = 0; i < elevation.length; i++) {
     if (crustType[i] === 0 && boundaryStress[i]! <= ACTIVE_MARGIN_STRESS_M_PER_YR) {
@@ -103,8 +103,9 @@ function applyTectonics(state: PlanetState, dtYears: number): PlanetState {
   }
 
   // Convergent topography (#16): trench + arc + orogenic uplift, driven by
-  // this step's stress. Mutates only the local elevation copy.
-  applyConvergentTopography(next, boundaryStress, elevation, dtYears);
+  // this step's stress; mature arcs become continental crust. Mutates only
+  // the local elevation/crustType copies.
+  applyConvergentTopography(next, boundaryStress, elevation, crustType, dtYears);
 
   let land = 0;
   for (const e of elevation) if (e >= 0) land++;
@@ -112,7 +113,7 @@ function applyTectonics(state: PlanetState, dtYears: number): PlanetState {
   return {
     ...next,
     globals: { ...next.globals, landFraction: land / elevation.length },
-    fields: { ...next.fields, boundaryStress, elevation },
+    fields: { ...next.fields, boundaryStress, elevation, crustType },
   };
 }
 

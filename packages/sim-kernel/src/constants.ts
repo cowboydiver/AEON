@@ -171,6 +171,15 @@ export const ARC_GROWTH_RATE_M_PER_YR = 2e-4;
 /** Ceiling for volcanic-arc elevation, m (island arcs, not continents). */
 export const ARC_MAX_ELEVATION_M = 1000;
 
+/**
+ * An arc that has built above this elevation matures into continental
+ * crust. Arc magmatism is how Earth manufactures continental crust; this is
+ * also the counterweight to collision consuming continental area — without
+ * it, long runs slowly lose land (seed-1337 N=16 dipped below the 10% land
+ * invariant at ~1.3 Gyr).
+ */
+export const ARC_MATURATION_ELEVATION_M = -200;
+
 // --- Wilson cycles (#18) -----------------------------------------------------
 
 /** Live-plate count bounds: sutures pause at the floor, rifts at the ceiling. */

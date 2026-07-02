@@ -15,6 +15,7 @@ import { oceanicDepthForAge } from '../bathymetry';
 import {
   ACTIVE_MARGIN_STRESS_M_PER_YR,
   ARC_GROWTH_RATE_M_PER_YR,
+  ARC_MATURATION_ELEVATION_M,
   ARC_MAX_ELEVATION_M,
   COLLISION_WIDTH_CELLS,
   OROGENY_MAX_ELEVATION_M,
@@ -155,17 +156,23 @@ export function overrides(
  *    and relax to the age-depth curve (a documented Phase 1 simplification:
  *    dead arcs sink instantly instead of persisting as seamounts).
  *
- * Mutates only the caller's working `elevation` copy — never state fields.
+ * Arcs that build above ARC_MATURATION_ELEVATION_M become continental crust
+ * (arc magmatism is how continental crust is manufactured) — the source of
+ * new continental area balancing what collisions consume.
+ *
+ * Mutates only the caller's working `elevation`/`crustType` copies — never
+ * state fields.
  */
 export function applyConvergentTopography(
   state: PlanetState,
   stress: Float32Array,
   elevation: Float32Array,
+  crustType: Float32Array,
   dtYears: number,
 ): void {
   const N = state.params.gridN;
   const nbTable = neighborTable(N);
-  const { plateId, crustType, crustAge } = state.fields;
+  const { plateId, crustAge } = state.fields;
 
   interface Seed {
     cell: number;
@@ -196,6 +203,7 @@ export function applyConvergentTopography(
           elevation[i]! + ARC_GROWTH_RATE_M_PER_YR * dtYears * norm,
           ARC_MAX_ELEVATION_M,
         );
+        if (elevation[i]! >= ARC_MATURATION_ELEVATION_M) crustType[i] = 1;
       }
     } else {
       // Subducting side is always oceanic (continental crust never loses to
