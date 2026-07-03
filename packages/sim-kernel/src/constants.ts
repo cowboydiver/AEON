@@ -1,5 +1,17 @@
 /** Physical and simulation constants. Each carries its source. */
 
+/**
+ * Kernel-behavior version (#22 / Phase 2). A manually-bumped integer that
+ * changes whenever the deterministic simulation output changes — i.e. **every
+ * deliberate golden regeneration bumps this in the same commit** (this rule
+ * joins CLAUDE.md's golden-regeneration workflow). It is the cache-invalidation
+ * key for persisted keyframes (#24): a kernel behavior change can never serve
+ * stale history. Distinct from HISTORY_FORMAT_VERSION (codec byte layout).
+ * Started at 1 for Phase 2; the #57 rift fix and the post-rift suture cooldown
+ * did not regenerate goldens, so no bump was owed there.
+ */
+export const KERNEL_BEHAVIOR_VERSION = 1;
+
 /** IUGG mean Earth radius, m. */
 export const EARTH_RADIUS_M = 6.371e6;
 

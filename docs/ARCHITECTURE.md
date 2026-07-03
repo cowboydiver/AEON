@@ -345,6 +345,46 @@ if `untilYears` is off-interval. The renderer's texture set is named `fieldsA`
 so a second set (`fieldsB`) and a blend uniform can be added for timeline
 scrubbing without rework.
 
+## Field quantization codec (Phase 2, #22)
+
+`sim-kernel/src/codec.ts` compresses the display subset of a keyframe's float
+fields into a compact, versioned, **self-describing** binary container for
+storage (IndexedDB, #24) and GPU upload (#25). It is pure and lives in the
+kernel by the dependency rule, and **never touches simulation bytes** — encode/
+decode are pure functions of a field array, so quantization can never perturb
+the deterministic sim (goldens are unaffected).
+
+```
+container = header ┃ per-field entries ┃ quantized data
+header  = magic 'AEON' u32 | HISTORY_FORMAT_VERSION u16 | fieldCount u8 | pad | cellCount u32
+entry   = fieldId u8 | format u8 (0=u8,1=u16) | flags u8 (bit0 categorical) | pad | min f32 | max f32 | dataOffset u32
+```
+
+The header carries each field's format and range, so decoding needs only the
+buffer and pruning/adding fields (Phase 3) doesn't break readers of the same
+`HISTORY_FORMAT_VERSION`. Stored set and quantization (`QUANT_TABLE`, ranges
+verified against Phase 1 runs):
+
+| field | format | range | precision |
+|-------|--------|-------|-----------|
+| elevation | Uint16 | −11,000 … +9,500 m | ~0.31 m |
+| crustAge | Uint16 | 0 … 7.0 Gyr | ~107 kyr |
+| temperature | Uint8 | 180 … 320 K | ~0.55 K |
+| plateId | Uint8 | 0 … 255 exact | exact (asserts < 256) |
+| crustType | Uint8 | {0,1} exact | exact |
+
+Continuous fields use a linear float↔uint map (out-of-range clamps to the ends);
+**categorical fields (`plateId`, `crustType`) use an identity map and round-trip
+bit-exact — they must never be interpolated** (the GPU path holds/nearest-picks
+them). `precipitation` is analytic (recomputed from latitude), `boundaryStress`
+is derivable and visually unused, and `iceFraction`/`biome` are still zero — none
+are stored. Two versions gate reuse: `HISTORY_FORMAT_VERSION` (codec byte
+layout) and `KERNEL_BEHAVIOR_VERSION` (sim behavior; see below); together with
+the run params they key the keyframe cache. Codec correctness is locked by
+byte-level goldens over encoded keyframes plus round-trip fidelity tests (Spike A
+confirmed the elevation map is visually lossless: max error 0.156 m = half a
+step, **0** coastline cells migrated across the 0 m datum at N=128).
+
 ## Determinism contract
 
 - Same `seed` + same `PlanetParams` ⇒ bit-identical field arrays at every
@@ -365,7 +405,10 @@ scrubbing without rework.
   `pnpm -F sim-kernel test -- -u`, with the physical/algorithmic reason in the
   commit message. Any change to grid math is a breaking change: update this
   file in the same commit and say so loudly. Never regenerate to silence a
-  test you don't understand.
+  test you don't understand. **Any deliberate golden regeneration must also bump
+  `KERNEL_BEHAVIOR_VERSION` (`constants.ts`) in the same commit** — it is the
+  Phase 2 cache-invalidation key, so a behavior change can never serve stale
+  persisted keyframes.
 - Residual risk, accepted for Phase 0: the mapping and noise use JS
   transcendentals (`tan`, `atan`, `pow`, `sqrt`), whose last-ulp behavior is
   technically implementation-defined. All current targets (Node ≥ 22, Chromium)

@@ -1,0 +1,22 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`codec byte goldens (#22) > seed 1: encoded keyframe byte hash 1`] = `
+{
+  "byteLength": 43100,
+  "hash": "9e84d8e8",
+}
+`;
+
+exports[`codec byte goldens (#22) > seed 42: encoded keyframe byte hash 1`] = `
+{
+  "byteLength": 43100,
+  "hash": "8bc9abc0",
+}
+`;
+
+exports[`codec byte goldens (#22) > seed 1337: encoded keyframe byte hash 1`] = `
+{
+  "byteLength": 43100,
+  "hash": "c0e0f13f",
+}
+`;

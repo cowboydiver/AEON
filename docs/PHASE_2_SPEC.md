@@ -176,13 +176,15 @@ balance (M, kernel, goldens)** optional follow-up for 1337 < 10%.
 Findings go in `docs/spikes/PHASE_2_SPIKES.md` (create it, format per
 `PHASE_1_SPIKES.md`).
 
-- **Spike A — Quantization fidelity (S, spike, infra).** Round-trip seed-42
-  checkpoints through the proposed codec, dump original vs round-tripped PNGs +
-  max/mean abs error per field. Question: are the formats visually lossless on
-  the globe's ramp and displacement scale? Watch elevation banding at the 0 m
-  crossing (the land/ocean `select` in `material.ts` makes it the most
-  error-sensitive value); if Uint16-over-full-range bands there, adopt a
-  piecewise (finer near 0) mapping, documented in the codec.
+- **Spike A — Quantization fidelity (S, spike, infra). ✅ RESOLVED (folded into
+  #22).** Round-tripped a real seed-42 keyframe (N=128, 2.5 Gyr) through the
+  shipped codec: **max elevation error 0.156 m = exactly half a Uint16 step, and
+  0 of 98,304 cells migrated across the 0 m land/ocean datum.** Original vs
+  round-tripped PNGs were visually identical (no banding at the coastline). The
+  plain linear Uint16-over-full-range mapping is visually lossless; **the
+  piecewise-near-0 fallback is not needed.** Locked by fidelity + coastline-
+  integrity tests and byte-level goldens in `codec.test.ts` (no separate
+  `PHASE_2_SPIKES.md` entry needed for A; Spike B still pending).
 - **Spike B — Blend-path frame rate (M, spike, renderer).** Minimal harness
   (dev-only route/flag in `apps/web`): two texture sets uploaded, `blend`
   animated, set-swap every second; measure fps + upload stalls **on the actual

@@ -16,6 +16,16 @@ export {
 } from './grid';
 export { FIELDS, FIELD_NAMES, type FieldName, type Fields } from './fields';
 export {
+  HISTORY_FORMAT_VERSION,
+  QUANT_TABLE,
+  STORED_FIELD_NAMES,
+  encodeKeyframe,
+  decodeKeyframe,
+  quantStep,
+  type StoredFieldName,
+  type DecodedKeyframe,
+} from './codec';
+export {
   createPlanetParams,
   createInitialState,
   type PlanetParams,
