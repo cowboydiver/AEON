@@ -417,6 +417,23 @@ the ask) until the whole span fits — the tail of history is never dropped, onl
 sampled more sparsely, and the app flags the coarser step. At N=128, 4.5 Gyr @
 10 Myr is 451 keyframes ≈ 0.35 GB, so it streams as asked.
 
+A streamed history is persisted to **IndexedDB** (`history/historyCache.ts`, #24)
+so a same-context reload hydrates the whole timeline instantly with no worker run.
+The cache key folds in `(seed, gridN, untilYears, keyframeIntervalYears,
+HISTORY_FORMAT_VERSION, KERNEL_BEHAVIOR_VERSION)`, so a codec-layout or deliberate
+kernel-behavior change automatically invalidates (a bumped version = a new key =
+a miss). On `generate`: a **complete** manifest whose keyframe set is present and
+contiguous is a hit → hydrate; any miss/partial/corrupt/version-mismatch is a
+miss → run the worker (#23) and write each keyframe through as it arrives (so the
+records exist for the next complete run to seal). A partial run is always a miss —
+it never surfaces a broken timeline. Storage is LRU by manifest `updatedAt`;
+`QuotaExceededError` evicts the oldest history (never the one being written) and
+retries the write once. `usePlanetWorker` exposes `source: 'cache' | 'worker' |
+null` (shown as a `cached` badge / `data-history-source` attribute), and `App`
+reads optional `?seed=` / `?until=` URL knobs for deep-linking and a fast cache
+e2e. Determinism makes this sound: the same key always maps to the same bytes, so
+a cached history is bit-identical to re-simulating it.
+
 ## Determinism contract
 
 - Same `seed` + same `PlanetParams` ⇒ bit-identical field arrays at every

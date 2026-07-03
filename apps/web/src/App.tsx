@@ -13,25 +13,41 @@ const DEFAULT_SEED = 42;
 const DEFAULT_UNTIL_YEARS = 4.5e9;
 const DEFAULT_KEYFRAME_INTERVAL_YEARS = 10e6;
 
+/** Optional URL knobs: `?seed=N` deep-links a planet, `?until=Y` shortens the
+ *  history span (years) — handy for a quick look and for a fast cache e2e. */
+function readUrlParams(): { seed: number; untilYears: number } {
+  const fallback = { seed: DEFAULT_SEED, untilYears: DEFAULT_UNTIL_YEARS };
+  if (typeof window === 'undefined') return fallback;
+  const params = new URLSearchParams(window.location.search);
+  const seed = Number(params.get('seed'));
+  const until = Number(params.get('until'));
+  return {
+    seed: Number.isFinite(seed) && params.has('seed') ? Math.trunc(seed) : DEFAULT_SEED,
+    untilYears: Number.isFinite(until) && until > 0 ? until : DEFAULT_UNTIL_YEARS,
+  };
+}
+
 export function App() {
   const webgpuAvailable = typeof navigator !== 'undefined' && 'gpu' in navigator;
-  const [seedInput, setSeedInput] = useState(String(DEFAULT_SEED));
+  const url = useMemo(readUrlParams, []);
+  const [seedInput, setSeedInput] = useState(String(url.seed));
   const [ready, setReady] = useState(false);
   // Clamp the request to the memory budget before streaming: a tight budget
   // coarsens the keyframe interval rather than dropping the tail of history.
   const plan = useMemo(
-    () => planHistory(DEFAULT_GRID_N, DEFAULT_UNTIL_YEARS, DEFAULT_KEYFRAME_INTERVAL_YEARS),
-    [],
+    () => planHistory(DEFAULT_GRID_N, url.untilYears, DEFAULT_KEYFRAME_INTERVAL_YEARS),
+    [url.untilYears],
   );
-  const { current, progress, done, keyframeCount, pinnedIndex, generate, select } = usePlanetWorker({
-    gridN: DEFAULT_GRID_N,
-    untilYears: plan.untilYears,
-    keyframeIntervalYears: plan.keyframeIntervalYears,
-  });
+  const { current, progress, done, keyframeCount, pinnedIndex, source, generate, select } =
+    usePlanetWorker({
+      gridN: DEFAULT_GRID_N,
+      untilYears: plan.untilYears,
+      keyframeIntervalYears: plan.keyframeIntervalYears,
+    });
 
   useEffect(() => {
-    if (webgpuAvailable) generate(DEFAULT_SEED);
-  }, [webgpuAvailable, generate]);
+    if (webgpuAvailable) generate(url.seed);
+  }, [webgpuAvailable, generate, url.seed]);
 
   const regenerate = useCallback(() => {
     const seed = Number(seedInput);
@@ -55,7 +71,11 @@ export function App() {
   }
 
   return (
-    <div style={{ position: 'relative', width: '100%', height: '100%' }} data-planet-ready={ready ? '1' : '0'}>
+    <div
+      style={{ position: 'relative', width: '100%', height: '100%' }}
+      data-planet-ready={ready ? '1' : '0'}
+      data-history-source={source ?? ''}
+    >
       <Canvas
         camera={{ position: [0, 0.8, 2.6], fov: 50, near: 0.01, far: 200 }}
         gl={async (props) => {
@@ -107,6 +127,14 @@ export function App() {
             {done
               ? `${progress.keyframesEmitted} keyframes`
               : `${((progress.currentYears / progress.untilYears) * 100).toFixed(0)}%`}
+          </span>
+        ) : null}
+        {source === 'cache' ? (
+          <span
+            title="Hydrated from the IndexedDB history cache — no re-simulation"
+            style={{ opacity: 0.6, color: '#6fae6f' }}
+          >
+            cached
           </span>
         ) : null}
         {plan.clamped ? (

@@ -1,6 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { decodeKeyframe, type FieldName } from 'sim-kernel';
+import { historyCache, historyCacheKey } from './history/historyCache';
 import type { RunHistoryRequest, WorkerRequest, WorkerResponse } from './worker/messages';
+
+/** Where the currently-loaded history came from, for the HUD and e2e proof. */
+export type HistorySource = 'cache' | 'worker' | null;
 
 /** A decoded keyframe ready for the renderer (stored fields only). */
 export interface RenderKeyframe {
@@ -41,6 +45,9 @@ export function usePlanetWorker({ gridN, untilYears, keyframeIntervalYears }: Pl
   const workerRef = useRef<Worker | null>(null);
   const requestIdRef = useRef(0);
   const historyRef = useRef<HistoryEntry[]>([]);
+  // The cache key for the in-flight run, set synchronously in generate() so
+  // write-through and finalize file keyframes under the right history.
+  const writeKeyRef = useRef<string | null>(null);
   // null = follow the live edge; a number pins the view to that keyframe while
   // streaming continues behind it. A ref so the worker callback reads it fresh.
   const pinnedIndexRef = useRef<number | null>(null);
@@ -50,6 +57,7 @@ export function usePlanetWorker({ gridN, untilYears, keyframeIntervalYears }: Pl
   const [keyframeCount, setKeyframeCount] = useState(0);
   const [progress, setProgress] = useState<StreamProgress | null>(null);
   const [done, setDone] = useState(false);
+  const [source, setSource] = useState<HistorySource>(null);
 
   const renderEntry = useCallback(
     (entry: HistoryEntry) => {
@@ -80,6 +88,11 @@ export function usePlanetWorker({ gridN, untilYears, keyframeIntervalYears }: Pl
           };
           historyRef.current.push(entry);
           setKeyframeCount(historyRef.current.length);
+          // Write through to the cache so a reload salvages the run (#24). The
+          // payload is structured-cloned by IndexedDB, so the in-memory copy
+          // stays usable for rendering and scrubbing.
+          const writeKey = writeKeyRef.current;
+          if (writeKey) void historyCache.putKeyframe(writeKey, entry);
           // Only advance the view if the user hasn't pinned a scrub position.
           if (pinnedIndexRef.current === null) renderEntry(entry);
           break;
@@ -91,9 +104,12 @@ export function usePlanetWorker({ gridN, untilYears, keyframeIntervalYears }: Pl
             keyframesEmitted: msg.keyframesEmitted,
           });
           break;
-        case 'historyDone':
+        case 'historyDone': {
           setDone(true);
+          const writeKey = writeKeyRef.current;
+          if (writeKey) void historyCache.finalize(writeKey, historyRef.current.length);
           break;
+        }
       }
     };
     return () => {
@@ -106,7 +122,7 @@ export function usePlanetWorker({ gridN, untilYears, keyframeIntervalYears }: Pl
     (seed: number) => {
       const worker = workerRef.current;
       if (!worker) return;
-      requestIdRef.current++;
+      const runId = ++requestIdRef.current;
       historyRef.current = [];
       pinnedIndexRef.current = null;
       setPinnedIndex(null);
@@ -114,18 +130,55 @@ export function usePlanetWorker({ gridN, untilYears, keyframeIntervalYears }: Pl
       setCurrent(null);
       setProgress(null);
       setDone(false);
-      const request: RunHistoryRequest = {
-        type: 'runHistory',
-        requestId: requestIdRef.current,
-        seed,
-        gridN,
-        untilYears,
-        keyframeIntervalYears,
-      };
-      const message: WorkerRequest = request;
-      worker.postMessage(message);
+      setSource(null);
+      const key = historyCacheKey({ seed, gridN, untilYears, keyframeIntervalYears });
+      writeKeyRef.current = key;
+
+      // Try the cache first; a completed history hydrates instantly with no
+      // worker run. Any miss/partial/corrupt/version-bump falls through to a
+      // fresh streaming run that writes through to the cache as it goes.
+      void (async () => {
+        const cached = await historyCache.loadComplete(key);
+        if (requestIdRef.current !== runId) return; // superseded during the async read
+
+        if (cached && cached.length > 0) {
+          for (const kf of cached) {
+            historyRef.current.push({
+              index: kf.index,
+              timeYears: kf.timeYears,
+              landFraction: kf.landFraction,
+              payload: kf.payload,
+            });
+          }
+          setKeyframeCount(historyRef.current.length);
+          const last = historyRef.current[historyRef.current.length - 1]!;
+          renderEntry(last);
+          setProgress({
+            currentYears: last.timeYears,
+            untilYears,
+            keyframesEmitted: historyRef.current.length,
+          });
+          setDone(true);
+          setSource('cache');
+          return;
+        }
+
+        setSource('worker');
+        await historyCache.startRun(key);
+        if (requestIdRef.current !== runId) return; // superseded while opening the run
+        const request: RunHistoryRequest = {
+          type: 'runHistory',
+          requestId: runId,
+          seed,
+          gridN,
+          untilYears,
+          keyframeIntervalYears,
+        };
+        const message: WorkerRequest = request;
+        worker.postMessage(message);
+      })();
     },
-    [gridN, untilYears, keyframeIntervalYears],
+    [gridN, untilYears, keyframeIntervalYears, renderEntry],
   );
 
   /** Pin the view to a keyframe index, or pass null to resume following live. */
@@ -149,5 +202,5 @@ export function usePlanetWorker({ gridN, untilYears, keyframeIntervalYears }: Pl
     [renderEntry],
   );
 
-  return { current, progress, done, keyframeCount, pinnedIndex, generate, select, history: historyRef };
+  return { current, progress, done, keyframeCount, pinnedIndex, source, generate, select, history: historyRef };
 }
