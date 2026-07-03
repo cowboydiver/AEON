@@ -213,7 +213,15 @@ was tried first and silently disabled rifting, since post-suture mega-plates
 carry proportional ocean) rifts with probability 0.006/Myr; the split is a
 two-seed jittered Dijkstra between the plate's most-distant cell pair, and
 the halves get opposite rotations about the pole normal to both centroids,
-opening a new ocean along the rift. Both emit events
+opening a new ocean along the rift. When that plate covers the whole sphere
+the two halves are antipodal hemispheres whose centroids are anti-parallel, so
+the normal-to-both-centroids pole degenerates (cross product ≈ 0); the rift
+then falls back to a deterministic pole perpendicular to one centroid (in the
+rift's dividing-circle plane), which still shears the halves apart along their
+shared boundary. Without this fallback a plate that sutured to whole-sphere
+size could never rift again — the supercontinent froze forever and deep-time
+tectonics died (~1.5 Gyr for seeds 42/1); with it, supercontinents break up.
+Both emit events
 (`plateSuture`/`plateRift`); the live count stays within
 [MIN_PLATES, MAX_PLATES] = [4, 16] — the floor is deliberately low because
 a suture *blocked* at the floor means a collision that grinds continent

@@ -151,6 +151,42 @@ golden-changing with tuning risk and Phase 2's value doesn't hinge on it. But
 note the speckle is entangled with the tectonic-death / land-budget issues
 above, which may warrant a combined deep-time kernel pass regardless.
 
+## #57 fix — verification (re-run after the antipodal-pole fix)
+
+The `riftPlate` fix (deterministic fallback pole when the half-centroids are
+antipodal) was implemented and the 4.5 Gyr runs repeated. It **eliminates the
+hard freeze** and needs **no golden regeneration** — the standard goldens hash
+the first 10 steps, and the bug only manifests when a whole-sphere plate forms
+(~1.5 Gyr in), so the 10-step goldens are byte-identical (kernel suite green,
+102 tests). Deep-time behavior:
+
+| Seed | Events (was) | Last event (was) | Final land (was) |
+|------|--------------|------------------|------------------|
+| 42   | **38** (18)  | **3766 Myr** (1510) | 19.1% (24.4%) |
+| 1    | **38** (18)  | **4461 Myr** (1476) | 18.0% (20.4%) |
+| 1337 | 32 (32)      | 4018 Myr (4018)     | 7.5% (7.5%)   |
+
+So the world is **no longer tectonically dead** — seeds 42/1 now rift and
+suture across deep time instead of freezing at ~1.5 Gyr. The rift trace for
+seed 42 shows a supercontinent cycle every ~150–250 Myr (rifts at 1627, 1787,
+1963, 2114, 2277, 2742, 3031, 3206, 3556, 3750 Myr).
+
+**But a second deep-time issue is now visible that the freeze had hidden:**
+each rift **re-sutures ~16 Myr later** (the `SUTURE_AFTER_YEARS = 15 Myr`
+threshold), because opposite rotations about the fallback pole leave part of
+the two hemispheres' shared boundary convergent, so they re-collide before
+dispersing. The every-250-Myr `plateId` snapshots therefore still land on a
+single plate almost every time (`fix-s42-elevation-{2500,4500}Myr.png` show a
+persistent, slowly-eroding supercontinent, not bold drift). **Net: the freeze
+is fixed and the world cycles, but it is supercontinent-dominated — "continents
+visibly drifting across the *whole* 4.5 Gyr" is still not met.** Closing that
+gap is dispersal tuning (longer suture wait and/or a post-rift suture cooldown
+so halves can drift apart before re-merging; possibly cleaner rift kinematics)
+— a distinct follow-up from both the #57 bug and the #58 land-bleed, newly
+revealed because you cannot see dispersal behavior in a frozen world. Flagged
+for the human: do the dispersal tuning now, or proceed to Phase 2 on the
+un-frozen-but-supercontinent-dominated sim.
+
 ## Runtime (streaming UX calibration)
 
 The full 3-seed batch finished in **~1 minute wall-clock** on this box — roughly

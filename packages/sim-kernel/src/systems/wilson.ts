@@ -50,7 +50,7 @@ import { TriHeap } from '../heap';
 import type { PlateRecord } from '../plates';
 import type { PlanetState } from '../state';
 import type { System } from '../step';
-import { cross3, normalize3 } from '../vec';
+import { cross3, normalize3, perpendicular3 } from '../vec';
 import { computeBoundaryStress } from './boundaries';
 
 export const wilsonSystem: System = {
@@ -317,15 +317,27 @@ export function riftPlate(state: PlanetState, p: number, riftSeed: number): Plan
   }
   if (cellsA === 0 || cellsB === 0) return state; // degenerate split: skip
 
-  // Diverging kinematics: rotate both halves about the pole normal to the
-  // two centroids, opposite senses, so they separate along the rift. Guard
-  // the degenerate case (near-antipodal half-centroids => vanishing cross
-  // product => NaN pole): skip this rift; the draw fires again later with
-  // evolved geometry. Mirrors suture()'s zero-magnitude guard.
+  // Diverging kinematics: rotate both halves about a pole so they separate
+  // along the rift. The natural choice is the pole normal to the two
+  // half-centroids (opposite rotations then open the boundary between them).
+  // But when the halves are (near-)antipodal that cross product vanishes and
+  // can't pick a pole — and that is *always* the case when the rifting plate
+  // covers the whole sphere, because seedB is chosen as seedA's most-distant
+  // (antipodal) cell, so the two hemispheres' centroids are anti-parallel to
+  // machine precision (measured poleMag ~1e-15). This branch previously
+  // skipped the rift, which froze any supercontinent forever — a whole-sphere
+  // plate could never break up, so seeds 42/1 went tectonically dead by
+  // ~1.5 Gyr. Fall back to a deterministic pole in the rift's dividing-circle
+  // plane (perpendicular to centroidA): opposite rotations about it still
+  // shear the halves apart along their shared boundary (relative velocity
+  // 2ω·(pole×r) is non-zero there), so the boundary reactivates and Wilson
+  // cycling resumes. Real supercontinents break up; this lets ours.
   const rawPole = cross3(normalize3(centroidA), normalize3(centroidB));
   const poleMag = Math.sqrt(rawPole[0] ** 2 + rawPole[1] ** 2 + rawPole[2] ** 2);
-  if (poleMag < 1e-9) return state;
-  const pole: Vec3 = [rawPole[0] / poleMag, rawPole[1] / poleMag, rawPole[2] / poleMag];
+  const pole: Vec3 =
+    poleMag < 1e-9
+      ? perpendicular3(centroidA)
+      : [rawPole[0] / poleMag, rawPole[1] / poleMag, rawPole[2] / poleMag];
   const omegaRift =
     PLATE_OMEGA_MIN_RAD_PER_YR +
     (hash2(riftSeed, newId, 3) / 4294967296) *
