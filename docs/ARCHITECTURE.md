@@ -385,6 +385,28 @@ byte-level goldens over encoded keyframes plus round-trip fidelity tests (Spike 
 confirmed the elevation map is visually lossless: max error 0.156 m = half a
 step, **0** coastline cells migrated across the 0 m datum at N=128).
 
+## History streaming & timeline (Phase 2, #23/#26)
+
+Keyframe cadence has one source of truth: `keyframes(params, untilYears)` in
+`step.ts`, a generator yielding a keyframe for t=0 then one per interval (and a
+final one), returning the final state. `run()` is a thin eager wrapper over it.
+Pulling one keyframe at a time lets a consumer yield between pulls while
+producing byte-identical history. `encodeHistory` (codec.ts) composes that
+cadence with the codec, yielding `EncodedKeyframe { index, timeYears,
+landFraction, transferable payload }`.
+
+The web app (`apps/web`) streams a full history in a Web Worker:
+`simWorker.ts` pulls `encodeHistory`, posts each keyframe with its buffer
+**transferred**, and yields via a `MessageChannel` macrotask so a superseding
+`runHistory` or a `cancel` is honored between keyframes (only the newest
+`requestId` stays active). `usePlanetWorker` accumulates keyframes in a ref
+(retained for the scrubber), decodes the latest to render the planet evolving
+live, and exposes `select(index | null)` to pin the view to a keyframe (deep-time
+scrub) or follow the streaming edge. The renderer only needs `elevation`, which
+every keyframe carries, so scrubbing is decode-nearest-keyframe today; GPU
+`fieldsB + blend` interpolation (#25) is the follow-up polish. Default extent is
+1 Gyr @ 10 Myr until the memory budget + clamp (#27) enables the full 4.5 Gyr.
+
 ## Determinism contract
 
 - Same `seed` + same `PlanetParams` ⇒ bit-identical field arrays at every

@@ -16,7 +16,7 @@ export function App() {
   const webgpuAvailable = typeof navigator !== 'undefined' && 'gpu' in navigator;
   const [seedInput, setSeedInput] = useState(String(DEFAULT_SEED));
   const [ready, setReady] = useState(false);
-  const { current, progress, done, generate } = usePlanetWorker({
+  const { current, progress, done, keyframeCount, pinnedIndex, generate, select } = usePlanetWorker({
     gridN: DEFAULT_GRID_N,
     untilYears: DEFAULT_UNTIL_YEARS,
     keyframeIntervalYears: DEFAULT_KEYFRAME_INTERVAL_YEARS,
@@ -103,6 +103,67 @@ export function App() {
           </span>
         ) : null}
       </div>
+
+      <Timeline
+        keyframeCount={keyframeCount}
+        pinnedIndex={pinnedIndex}
+        currentYears={current?.timeYears ?? 0}
+        onScrub={select}
+      />
+    </div>
+  );
+}
+
+interface TimelineProps {
+  keyframeCount: number;
+  pinnedIndex: number | null;
+  currentYears: number;
+  onScrub: (index: number | null) => void;
+}
+
+/** Deep-time scrubber over the streamed history. Dragging pins a keyframe;
+ *  the Live button resumes following the streaming edge. */
+function Timeline({ keyframeCount, pinnedIndex, currentYears, onScrub }: TimelineProps) {
+  if (keyframeCount === 0) return null;
+  const maxIndex = keyframeCount - 1;
+  const value = pinnedIndex ?? maxIndex;
+  const live = pinnedIndex === null;
+  return (
+    <div
+      data-timeline
+      style={{
+        position: 'absolute',
+        bottom: 16,
+        left: 16,
+        right: 16,
+        display: 'flex',
+        gap: 12,
+        alignItems: 'center',
+        background: 'rgba(10, 14, 24, 0.75)',
+        padding: '10px 14px',
+        borderRadius: 8,
+        fontSize: 13,
+      }}
+    >
+      <button
+        onClick={() => onScrub(live ? Math.max(0, maxIndex) : null)}
+        title={live ? 'Following the newest keyframe' : 'Resume following live'}
+        style={{ padding: '4px 10px', minWidth: 56 }}
+      >
+        {live ? 'Live' : 'Go Live'}
+      </button>
+      <input
+        type="range"
+        min={0}
+        max={maxIndex}
+        value={value}
+        onChange={(e) => onScrub(Number(e.target.value))}
+        aria-label="Timeline"
+        style={{ flex: 1 }}
+      />
+      <span style={{ fontVariantNumeric: 'tabular-nums', opacity: 0.85, minWidth: 96, textAlign: 'right' }}>
+        {(currentYears / 1e9).toFixed(2)} Gyr
+      </span>
     </div>
   );
 }

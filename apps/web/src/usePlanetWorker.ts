@@ -41,9 +41,28 @@ export function usePlanetWorker({ gridN, untilYears, keyframeIntervalYears }: Pl
   const workerRef = useRef<Worker | null>(null);
   const requestIdRef = useRef(0);
   const historyRef = useRef<HistoryEntry[]>([]);
+  // null = follow the live edge; a number pins the view to that keyframe while
+  // streaming continues behind it. A ref so the worker callback reads it fresh.
+  const pinnedIndexRef = useRef<number | null>(null);
+
   const [current, setCurrent] = useState<RenderKeyframe | null>(null);
+  const [pinnedIndex, setPinnedIndex] = useState<number | null>(null);
+  const [keyframeCount, setKeyframeCount] = useState(0);
   const [progress, setProgress] = useState<StreamProgress | null>(null);
   const [done, setDone] = useState(false);
+
+  const renderEntry = useCallback(
+    (entry: HistoryEntry) => {
+      const decoded = decodeKeyframe(entry.payload);
+      setCurrent({
+        timeYears: entry.timeYears,
+        landFraction: entry.landFraction,
+        gridN,
+        fields: decoded.fields,
+      });
+    },
+    [gridN],
+  );
 
   useEffect(() => {
     const worker = new Worker(new URL('./worker/simWorker.ts', import.meta.url), { type: 'module' });
@@ -53,19 +72,16 @@ export function usePlanetWorker({ gridN, untilYears, keyframeIntervalYears }: Pl
       if (msg.requestId !== requestIdRef.current) return; // superseded response
       switch (msg.type) {
         case 'historyKeyframe': {
-          historyRef.current.push({
+          const entry: HistoryEntry = {
             index: msg.index,
             timeYears: msg.timeYears,
             landFraction: msg.landFraction,
             payload: msg.payload,
-          });
-          const decoded = decodeKeyframe(msg.payload);
-          setCurrent({
-            timeYears: msg.timeYears,
-            landFraction: msg.landFraction,
-            gridN,
-            fields: decoded.fields,
-          });
+          };
+          historyRef.current.push(entry);
+          setKeyframeCount(historyRef.current.length);
+          // Only advance the view if the user hasn't pinned a scrub position.
+          if (pinnedIndexRef.current === null) renderEntry(entry);
           break;
         }
         case 'historyProgress':
@@ -84,7 +100,7 @@ export function usePlanetWorker({ gridN, untilYears, keyframeIntervalYears }: Pl
       workerRef.current = null;
       worker.terminate();
     };
-  }, [gridN]);
+  }, [renderEntry]);
 
   const generate = useCallback(
     (seed: number) => {
@@ -92,6 +108,9 @@ export function usePlanetWorker({ gridN, untilYears, keyframeIntervalYears }: Pl
       if (!worker) return;
       requestIdRef.current++;
       historyRef.current = [];
+      pinnedIndexRef.current = null;
+      setPinnedIndex(null);
+      setKeyframeCount(0);
       setCurrent(null);
       setProgress(null);
       setDone(false);
@@ -109,5 +128,26 @@ export function usePlanetWorker({ gridN, untilYears, keyframeIntervalYears }: Pl
     [gridN, untilYears, keyframeIntervalYears],
   );
 
-  return { current, progress, done, generate, history: historyRef };
+  /** Pin the view to a keyframe index, or pass null to resume following live. */
+  const select = useCallback(
+    (index: number | null) => {
+      const history = historyRef.current;
+      if (index === null) {
+        pinnedIndexRef.current = null;
+        setPinnedIndex(null);
+        const last = history.at(-1);
+        if (last) renderEntry(last);
+        return;
+      }
+      const clamped = Math.max(0, Math.min(index, history.length - 1));
+      const entry = history[clamped];
+      if (!entry) return;
+      pinnedIndexRef.current = clamped;
+      setPinnedIndex(clamped);
+      renderEntry(entry);
+    },
+    [renderEntry],
+  );
+
+  return { current, progress, done, keyframeCount, pinnedIndex, generate, select, history: historyRef };
 }
