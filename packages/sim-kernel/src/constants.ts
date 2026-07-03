@@ -228,6 +228,29 @@ export const RIFT_DRAW_QUANTUM_YEARS = 1e4;
  */
 export const RIFT_PROBABILITY_PER_MYR = 0.006;
 
+/**
+ * After a rift, neither new half can suture (to anyone) for this long, yr.
+ * A rift opens a passive margin that should stay passive for a while before it
+ * can become convergent again. Without any lock the two halves re-sutured one
+ * SUTURE_AFTER_YEARS (~15 Myr) after every breakup — the world cycled in the
+ * event log yet stayed a single supercontinent at every keyframe (no visible
+ * drift). Applies only to rift children; primordial plates (created at t=0 by
+ * the initial partition) are never locked, so first-assembly is unchanged.
+ *
+ * The value is a measured tradeoff, not a physical target. A rift's halves
+ * share an in-plane rotation pole, so ~half their new boundary is convergent;
+ * while it can't suture, that arc grinds continent-on-continent (the #16
+ * advection consumes the subducting continental cell), which suturing exists to
+ * halt. Longer locks therefore bleed land: at 100 Myr seed 1337 fell to ~8%
+ * land by 2 Gyr (below the #20 10% floor) and seed 42 to ~17%; at 30 Myr all
+ * golden seeds hold their baseline ~28-33% land with no bleed, while still
+ * ~tripling the dispersed-window length (~16 -> ~45 Myr, several 10-Myr
+ * keyframes). Fuller "continents sail apart" drift is blocked by that grinding
+ * and by whole-sphere rift kinematics, not by this constant — see
+ * PHASE_2_STAGE0_FINDINGS.md.
+ */
+export const RIFT_SUTURE_COOLDOWN_YEARS = 30e6;
+
 // --- Climate proxy & erosion (#19) ------------------------------------------
 
 /**

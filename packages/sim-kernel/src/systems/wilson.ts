@@ -10,7 +10,12 @@
  * continent and the orogen becomes an interior mountain belt that erosion
  * ages. This is also what halts the continental-area bleed measured in #19
  * integration runs (fixed plate speeds would otherwise grind colliding
- * continents away forever).
+ * continents away forever). A plate that was just born by rifting is barred
+ * from suturing for RIFT_SUTURE_COOLDOWN_YEARS (its sutureLockUntilYears): the
+ * two halves of a breakup share an in-plane pole, so part of their new
+ * boundary is convergent, and without the lock they re-sutured within one
+ * SUTURE_AFTER_YEARS and no supercontinent ever visibly dispersed (#57
+ * follow-up).
  *
  * RIFTING — a live plate that is old (age since creation/last rift), large,
  * and sufficiently continental rifts with a fixed probability per Myr. The
@@ -39,6 +44,7 @@ import {
   RIFT_MIN_AREA_FRACTION,
   RIFT_MIN_CONTINENTAL_AREA_FRACTION,
   RIFT_PROBABILITY_PER_MYR,
+  RIFT_SUTURE_COOLDOWN_YEARS,
   SUTURE_AFTER_YEARS,
   SUTURE_MIN_CONTACT_CELLS,
   ACTIVE_MARGIN_STRESS_M_PER_YR,
@@ -94,14 +100,23 @@ function applyWilson(state: PlanetState, dtYears: number): PlanetState {
     }
   }
 
+  // A plate whose post-rift suture lock is still in force can't accumulate
+  // contact toward a suture. Dropping its pairs here (rather than only vetoing
+  // the merge below) resets contactSince to now when the lock lifts, so the
+  // halves need a fresh SUTURE_AFTER_YEARS of contact afterward instead of
+  // suturing the instant the clock expires — a passive margin that has drifted
+  // apart by then simply never re-collides.
+  const locked = (id: number) => state.timeYears < state.plates[id]!.sutureLockUntilYears;
+
   // Rebuild contactSince from live contacts only (insertion via sorted keys —
   // the record is never iterated for physics, but keep it canonical anyway).
   const contactSince: Record<string, number> = {};
   const sortedKeys = [...pairContact.keys()].sort();
   for (const key of sortedKeys) {
-    if (pairContact.get(key)! >= SUTURE_MIN_CONTACT_CELLS) {
-      contactSince[key] = state.wilson.contactSince[key] ?? state.timeYears;
-    }
+    if (pairContact.get(key)! < SUTURE_MIN_CONTACT_CELLS) continue;
+    const [a, b] = key.split('-').map(Number) as [number, number];
+    if (locked(a) || locked(b)) continue;
+    contactSince[key] = state.wilson.contactSince[key] ?? state.timeYears;
   }
 
   let next: PlanetState = { ...state, wilson: { contactSince } };
@@ -350,7 +365,8 @@ export function riftPlate(state: PlanetState, p: number, riftSeed: number): Plan
           eulerPole: pole,
           angularVelRadPerYr: -omegaRift,
           accumulatedRadians: 0,
-          createdAtYears: state.timeYears, // rift cooldown restarts
+          createdAtYears: state.timeYears, // rift-age cooldown restarts
+          sutureLockUntilYears: state.timeYears + RIFT_SUTURE_COOLDOWN_YEARS,
           continentalFraction: contA / cellsA,
         }
       : rec,
@@ -361,6 +377,7 @@ export function riftPlate(state: PlanetState, p: number, riftSeed: number): Plan
     accumulatedRadians: 0,
     advectionCount: 0,
     createdAtYears: state.timeYears,
+    sutureLockUntilYears: state.timeYears + RIFT_SUTURE_COOLDOWN_YEARS,
     continentalFraction: contB / cellsB,
     alive: true,
   });

@@ -116,7 +116,9 @@ order by plate index — **iterate by index, never object-key order**:
 PlateRecord = { eulerPole (unit Vec3), angularVelRadPerYr,
                 accumulatedRadians,        // un-applied rotation (#13)
                 advectionCount,            // events so far, drives quantum dither
-                createdAtYears, continentalFraction, alive }
+                createdAtYears,
+                sutureLockUntilYears,      // rift children can't suture before this (#57 follow-up)
+                continentalFraction, alive }
 ```
 
 Kinematics are assigned at creation from `rng.fork('plateKinematics')`:
@@ -221,7 +223,19 @@ rift's dividing-circle plane), which still shears the halves apart along their
 shared boundary. Without this fallback a plate that sutured to whole-sphere
 size could never rift again — the supercontinent froze forever and deep-time
 tectonics died (~1.5 Gyr for seeds 42/1); with it, supercontinents break up.
-Both emit events
+**Post-rift suture lock:** because those two halves share an in-plane pole,
+~half their new boundary is still convergent, so without a brake they re-sutured
+one 15 Myr suture-window after every breakup (world cycled, but stayed a single
+supercontinent at every keyframe). A rift now stamps both halves with
+`sutureLockUntilYears = now + RIFT_SUTURE_COOLDOWN_YEARS` (30 Myr) and a locked
+plate's contact is not recorded, so it can't re-suture until the lock lifts
+(then needs a fresh 15 Myr). The value is a measured land-budget tradeoff, not a
+physical target — the locked convergent arc grinds continent, so longer locks
+bleed land below the 10% floor (100 Myr → seed 1337 at ~8%); 30 Myr is the knee
+with zero regression. It lengthens each breakup ~3× but does *not* fully
+disperse a whole-sphere supercontinent (whose antipodal halves can only shear,
+not translate apart) — see PHASE_2_STAGE0_FINDINGS.md for the deeper-fix
+follow-up. Both emit events
 (`plateSuture`/`plateRift`); the live count stays within
 [MIN_PLATES, MAX_PLATES] = [4, 16] — the floor is deliberately low because
 a suture *blocked* at the floor means a collision that grinds continent

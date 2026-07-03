@@ -19,6 +19,7 @@ export function makePlate(spec: TestPlateSpec): PlateRecord {
     accumulatedRadians: 0,
     advectionCount: 0,
     createdAtYears: 0,
+    sutureLockUntilYears: 0,
     continentalFraction: 0,
     alive: true,
   };

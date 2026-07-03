@@ -187,6 +187,71 @@ revealed because you cannot see dispersal behavior in a frozen world. Flagged
 for the human: do the dispersal tuning now, or proceed to Phase 2 on the
 un-frozen-but-supercontinent-dominated sim.
 
+## Dispersal-tuning pass — post-rift suture cooldown (bounded, timeboxed)
+
+Acting on the flagged decision above (human chose: tune dispersal now), I added
+a **post-rift suture lock**: a rift stamps both halves with
+`sutureLockUntilYears = now + RIFT_SUTURE_COOLDOWN_YEARS` and a locked plate's
+convergent contact is not recorded, so the freshly-rifted margin cannot
+re-suture until the lock lifts (and then needs a *fresh* `SUTURE_AFTER_YEARS`).
+Only rift children are locked; primordial plates (created at t=0) are exempt, so
+first-assembly and the golden hashes are unchanged. This mechanism is sound and
+lengthens each breakup — but the cooldown *value* runs straight into the
+land-budget wall, so it is a **measured tradeoff, not a free win**.
+
+**Why longer is not better.** A rift's two halves share an in-plane rotation
+pole, so ~half their new boundary is convergent. While that arc can't suture it
+grinds continent-on-continent (the `#16` advection consumes the subducting
+continental cell — the very bleed that suturing exists to halt). Longer locks
+therefore bleed land. Measured min land fraction over the `#20` 2 Gyr N=16
+invariant run (floor = 10%):
+
+| cooldown | seed 42 min | seed 1 min | seed 1337 min | verdict |
+|----------|-------------|------------|---------------|---------|
+| 0 (base) | 31.9%       | 27.1%      | 28.5%         | baseline; re-sutures ~16 Myr |
+| **30 Myr** | **31.9%** | **32.7%**  | **28.6%**     | **no bleed; shipped** |
+| 50 Myr   | 31.9%       | 22.5%      | 16.3%         | 1337 bleeding |
+| 100 Myr  | 14.9%       | 32.0%      | **8.3%**      | **breaks 10% floor** |
+
+**30 Myr is the knee** — the largest lock with zero land regression. Shipped at
+`RIFT_SUTURE_COOLDOWN_YEARS = 30e6`; all 104 kernel tests green (two new
+invariant tests: the lock is stamped on both halves, and a rifted half cannot
+re-suture within the window), goldens untouched.
+
+**What 30 Myr buys — and what it does not.** It triples the dispersed-window
+length (~16 → ~45 Myr, i.e. ~4–5 render keyframes) and keeps the world
+tectonically alive to ~4.4 Gyr on all seeds. But a 4.5 Gyr N=64 flipbook (seed
+42) shows the deep-time world is **still supercontinent-dominated**: max
+single-plate area sits at ~100% from ~1.2 Gyr on, dipping to ~50% only in brief
+single-sample rift flickers before re-suturing. Only ~22–29% of keyframes are
+"dispersed" (max plate area < 60%), and those cluster in the first ~1 Gyr.
+Visually the rift *does* fire (`plateId-003900Myr` splits the sphere into two
+hemisphere-plates), but the continents shift only modestly across the window
+(`elevation-003850` vs `elevation-004000`) — a crack-and-reshuffle, not bold
+"fragments sailing across an ocean."
+
+**Root blocker (deeper than a tuning constant).** By deep time the
+supercontinent's *plate* has grown to cover the **whole sphere** (land is ~20%,
+but one plate owns ~100% of cells — plate ≠ land). Splitting a whole-sphere
+plate necessarily yields two **antipodal** hemisphere-plates: they are already
+maximally separated, so they cannot "drift apart" — they shear about the shared
+pole and re-suture. Real supercontinents (Pangaea) sit inside a superocean and
+fragment into pieces that translate across it; ours has no ocean to disperse
+into. Delivering bold sustained drift needs one of: (a) rift kinematics that
+carve a *smaller* fragment with a genuinely separating pole (not a 50/50
+antipodal hemisphere split); (b) stopping continent–continent grinding so
+buoyant crust thickens instead of being consumed, which would let a much longer
+cooldown run without bleeding land; and/or (c) a mechanism that caps how much of
+the sphere one plate may own. All are `#57`/`#16`-adjacent kernel work, not a
+Phase-2 tuning pass — flagged to the human as a distinct follow-up (candidate
+`#59`: deep-time dispersal / whole-sphere-plate breakup).
+
+**Net:** the bounded pass extracted the safe win (world alive + reshuffling in
+deep time, no land regression) and stopped at the land-budget wall exactly as
+scoped. The headline "continents visibly drifting across the *whole* 4.5 Gyr"
+is **partially** met — periodic breakups, modest drift — but not the bold
+Pangaea-style dispersal, which is now a tracked deeper-fix decision.
+
 ## Runtime (streaming UX calibration)
 
 The full 3-seed batch finished in **~1 minute wall-clock** on this box — roughly

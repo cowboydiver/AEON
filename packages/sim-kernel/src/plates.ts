@@ -51,6 +51,13 @@ export interface PlateRecord {
   advectionCount: number;
   /** Simulation time this plate came into existence (0 = initial partition). */
   createdAtYears: number;
+  /**
+   * Simulation time before which this plate may not suture, yr (#57 follow-up).
+   * A rift stamps both halves with now + RIFT_SUTURE_COOLDOWN_YEARS so a fresh
+   * passive margin can't immediately re-collide; 0 for primordial plates, which
+   * are free to suture from the start. See the suture scan in wilson.ts.
+   */
+  sutureLockUntilYears: number;
   /** Fraction of the plate's cells that were continental at creation (diagnostic). */
   continentalFraction: number;
   /** Dead plates (consumed by suturing, #18) keep their slot so ids stay stable. */
@@ -195,6 +202,7 @@ export function applyInitialPlates(state: PlanetState): PlanetState {
       accumulatedRadians: 0,
       advectionCount: 0,
       createdAtYears: 0,
+      sutureLockUntilYears: 0,
       continentalFraction: continentalCells[p]! / plateCells[p]!,
       alive: true,
     });
