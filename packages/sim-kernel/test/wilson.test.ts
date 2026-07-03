@@ -1,13 +1,34 @@
 import { describe, expect, it } from 'vitest';
-import { MIN_PLATES, SUTURE_AFTER_YEARS } from '../src/constants';
+import { MIN_PLATES, RIFT_SUTURE_COOLDOWN_YEARS, SUTURE_AFTER_YEARS } from '../src/constants';
 import { EVENT_KINDS } from '../src/events';
+import { FIELD_NAMES, type Fields } from '../src/fields';
 import { cellCount, neighbors } from '../src/grid';
 import { hash2, hashString } from '../src/hash';
-import type { PlanetState } from '../src/state';
+import { createPlanetParams, type PlanetState } from '../src/state';
 import { tectonicsSystem } from '../src/systems/tectonics';
 import { riftPlate, wilsonSystem } from '../src/systems/wilson';
 import { dot3 } from '../src/vec';
 import { makePlate, runSystems, twoPlateState } from './helpers';
+
+/** A single continental plate covering the whole sphere — the seed-42/1
+ *  endgame, where every prior plate has sutured into plate 0. */
+function wholeSpherePlate(): PlanetState {
+  const count = cellCount(N);
+  const fields = Object.fromEntries(
+    FIELD_NAMES.map((n) => [n, new Float32Array(count)]),
+  ) as Fields;
+  fields.crustType.fill(1);
+  fields.elevation.fill(300);
+  return {
+    timeYears: 2e9,
+    params: createPlanetParams({ seed: 7, gridN: N, numPlates: 1 }),
+    globals: { landFraction: 0 },
+    fields,
+    plates: [makePlate({ pole: [1, 0, 0], omega: 4e-9 })],
+    events: [],
+    wilson: { contactSince: {} },
+  };
+}
 
 const N = 32;
 
@@ -92,8 +113,9 @@ describe('rifting (#18)', () => {
     // relative motion opens the boundary between them.
     const p0 = next.plates[0]!;
     const p2 = next.plates[newId]!;
-    // Poles must be finite unit vectors (degenerate antipodal-centroid
-    // splits are skipped by the zero-cross guard rather than emitting NaN).
+    // Poles must be finite unit vectors. (Antipodal-centroid splits, where the
+    // half-centroids' cross product vanishes, fall back to a deterministic
+    // perpendicular pole rather than being skipped — see the whole-sphere test.)
     for (const plate of [p0, p2]) {
       for (const c of plate.eulerPole) expect(Number.isFinite(c)).toBe(true);
       expect(dot3(plate.eulerPole, plate.eulerPole)).toBeCloseTo(1, 10);
@@ -122,6 +144,74 @@ describe('rifting (#18)', () => {
     const b = riftPlate(collisionWorld(0), 0, riftSeed);
     expect(Array.from(a.fields.plateId)).toEqual(Array.from(b.fields.plateId));
     expect(a.plates).toEqual(b.plates);
+  });
+
+  it('rifts a whole-sphere plate so a supercontinent can break up', () => {
+    // Regression for the tectonic-death bug: when one plate covers the whole
+    // sphere, seedA/seedB are antipodal and the half-centroids' cross product
+    // vanishes (poleMag ~1e-15). The old zero-cross guard skipped the rift, so
+    // a merged supercontinent froze forever (seeds 42/1 died by ~1.5 Gyr). The
+    // fallback pole must let it split.
+    const state = wholeSpherePlate();
+    const next = riftPlate(state, 0, riftSeed);
+
+    // The rift actually happened: a new plate, a rift event, two owners.
+    expect(next).not.toBe(state);
+    expect(next.plates.length).toBe(2);
+    const newId = 1;
+    expect(next.events.filter((e) => e.kind === EVENT_KINDS.plateRift).length).toBe(1);
+
+    // Both halves non-empty, contiguous, and conserve the sphere's cells.
+    const a = countCells(next, 0);
+    const b = countCells(next, newId);
+    expect(a).toBeGreaterThan(0);
+    expect(b).toBeGreaterThan(0);
+    expect(a + b).toBe(cellCount(N));
+    for (const plate of [0, newId]) expect(isContiguous(next, plate)).toBe(true);
+
+    // Valid diverging kinematics: finite unit poles, opposite senses — no NaN
+    // from the degenerate cross product.
+    const p0 = next.plates[0]!;
+    const p1 = next.plates[newId]!;
+    for (const plate of [p0, p1]) {
+      for (const c of plate.eulerPole) expect(Number.isFinite(c)).toBe(true);
+      expect(dot3(plate.eulerPole, plate.eulerPole)).toBeCloseTo(1, 10);
+      expect(Number.isFinite(plate.angularVelRadPerYr)).toBe(true);
+      expect(plate.angularVelRadPerYr).not.toBe(0);
+    }
+    expect(Math.sign(p0.angularVelRadPerYr)).toBe(-Math.sign(p1.angularVelRadPerYr));
+  });
+});
+
+describe('post-rift suture cooldown (#57 follow-up)', () => {
+  const riftSeed = hash2(7, hashString('wilsonRift'), 0);
+
+  it('stamps both rift halves with a suture lock, leaving other plates free', () => {
+    const state = collisionWorld(MIN_PLATES + 2); // timeYears 0
+    const rifted = riftPlate(state, 0, riftSeed);
+    const lockUntil = state.timeYears + RIFT_SUTURE_COOLDOWN_YEARS;
+    // Parent remnant (0) and the new half (last slot) are locked; the untouched
+    // colliding plate (1) and the zero-cell fillers keep their free (0) lock.
+    expect(rifted.plates[0]!.sutureLockUntilYears).toBe(lockUntil);
+    expect(rifted.plates.at(-1)!.sutureLockUntilYears).toBe(lockUntil);
+    expect(rifted.plates[1]!.sutureLockUntilYears).toBe(0);
+  });
+
+  it('bars a rifted half from re-suturing until the cooldown lifts', () => {
+    // collisionWorld(MIN_PLATES + 2) sutures within one SUTURE_AFTER_YEARS
+    // (~15 Myr) WITHOUT a rift — see the suturing suite. Rift plate 0 first and
+    // that same convergent contact must produce no suture for the whole lock
+    // window: a rifted margin is passive, not ready to re-collide. Run length
+    // is derived from the constant (well inside the lock, past SUTURE_AFTER)
+    // so the test tracks any retuning of RIFT_SUTURE_COOLDOWN_YEARS.
+    const rifted = riftPlate(collisionWorld(MIN_PLATES + 2), 0, riftSeed);
+    const withinLock = Math.floor((0.6 * RIFT_SUTURE_COOLDOWN_YEARS) / rifted.params.stepYears);
+    expect(withinLock * rifted.params.stepYears).toBeGreaterThan(SUTURE_AFTER_YEARS);
+    const aliveBefore = rifted.plates.filter((p) => p.alive).length;
+    const within = runSystems(rifted, withinLock, WILSON_PIPELINE);
+    expect(within.events.filter((e) => e.kind === EVENT_KINDS.plateSuture)).toEqual([]);
+    // No continent absorbed: the live-plate count is unchanged.
+    expect(within.plates.filter((p) => p.alive).length).toBe(aliveBefore);
   });
 });
 

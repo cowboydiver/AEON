@@ -41,3 +41,54 @@ test('renders a lit, non-black planet', async ({ page }) => {
   expect(litFraction, `lit fraction ${litFraction}`).toBeGreaterThan(0.05);
   expect(coloredFraction, `colored fraction ${coloredFraction}`).toBeGreaterThan(0.02);
 });
+
+test('scrubs the timeline back to t=0', async ({ page }) => {
+  await page.goto('/');
+  await page.waitForSelector('[data-planet-ready="1"]', { timeout: 90_000 });
+
+  // Let the history stream a few keyframes so there is a range to scrub, then
+  // pin the view to the very start.
+  const timeLabel = page.locator('[data-timeline] span');
+  await expect(timeLabel).toBeVisible({ timeout: 30_000 });
+  await expect
+    .poll(async () => Number((await timeLabel.textContent())?.replace(/[^0-9.]/g, '') ?? 0), {
+      timeout: 30_000,
+    })
+    .toBeGreaterThan(0.05); // streamed past 50 Myr
+
+  const slider = page.locator('[data-timeline] input[type="range"]');
+  await slider.fill('0'); // drag to the first keyframe
+  await expect(timeLabel).toHaveText(/0\.00 Gyr/);
+  // The scrub button now offers to resume live (view is pinned).
+  await expect(page.locator('[data-timeline] button')).toHaveText(/Go Live/);
+
+  mkdirSync(ARTIFACTS_DIR, { recursive: true });
+  await page.locator('canvas').screenshot({ path: join(ARTIFACTS_DIR, 'planet-scrubbed-t0.png') });
+});
+
+test('reload hydrates the history from the IndexedDB cache', async ({ page }) => {
+  // A short history (via ?until) so the first run finishes — and seals a complete
+  // cache manifest — quickly; the cache path is identical to the full 4.5 Gyr span.
+  await page.goto('/?until=100e6');
+  await page.waitForSelector('[data-planet-ready="1"]', { timeout: 90_000 });
+
+  const root = page.locator('[data-planet-ready]');
+  const progress = page.locator('[data-history-progress]');
+
+  // First visit streams from the worker and writes through to the cache.
+  await expect(root).toHaveAttribute('data-history-source', 'worker', { timeout: 30_000 });
+  // Let the whole history finish so a complete manifest is sealed.
+  await expect(progress).toHaveAttribute('data-history-progress', 'done', { timeout: 60_000 });
+
+  // Reload within the SAME browser context. IndexedDB survives a reload (it would
+  // NOT survive a fresh context, so the test reloads rather than relaunching).
+  await page.reload();
+  await page.waitForSelector('[data-planet-ready="1"]', { timeout: 90_000 });
+
+  // This time the timeline hydrates from cache — no worker run.
+  await expect(root).toHaveAttribute('data-history-source', 'cache', { timeout: 30_000 });
+  await expect(progress).toHaveAttribute('data-history-progress', 'done');
+
+  mkdirSync(ARTIFACTS_DIR, { recursive: true });
+  await page.locator('canvas').screenshot({ path: join(ARTIFACTS_DIR, 'planet-cache-hydrated.png') });
+});

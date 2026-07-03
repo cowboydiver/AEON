@@ -16,6 +16,22 @@ export {
 } from './grid';
 export { FIELDS, FIELD_NAMES, type FieldName, type Fields } from './fields';
 export {
+  HISTORY_FORMAT_VERSION,
+  QUANT_TABLE,
+  STORED_FIELD_NAMES,
+  MAX_RETAINED_HISTORY_BYTES,
+  encodeKeyframe,
+  decodeKeyframe,
+  encodeHistory,
+  encodedKeyframeBytes,
+  planHistory,
+  quantStep,
+  type StoredFieldName,
+  type DecodedKeyframe,
+  type EncodedKeyframe,
+  type HistoryPlan,
+} from './codec';
+export {
   createPlanetParams,
   createInitialState,
   type PlanetParams,
@@ -23,7 +39,7 @@ export {
   type PlanetState,
 } from './state';
 export { valueNoise3, fractalNoise3 } from './noise';
-export { dot3, cross3, normalize3, angleBetween, rotateAroundAxis } from './vec';
+export { dot3, cross3, normalize3, perpendicular3, angleBetween, rotateAroundAxis } from './vec';
 export { partitionPlates, applyInitialPlates, plateVelocityAt, type PlateRecord } from './plates';
 export { computeBoundaryStress, dominantOtherPlate, overrides } from './systems/boundaries';
 export { EVENT_KINDS, copyEvents, type SimEvent, type SimEventKind } from './events';

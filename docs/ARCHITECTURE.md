@@ -116,7 +116,9 @@ order by plate index — **iterate by index, never object-key order**:
 PlateRecord = { eulerPole (unit Vec3), angularVelRadPerYr,
                 accumulatedRadians,        // un-applied rotation (#13)
                 advectionCount,            // events so far, drives quantum dither
-                createdAtYears, continentalFraction, alive }
+                createdAtYears,
+                sutureLockUntilYears,      // rift children can't suture before this (#57 follow-up)
+                continentalFraction, alive }
 ```
 
 Kinematics are assigned at creation from `rng.fork('plateKinematics')`:
@@ -213,7 +215,27 @@ was tried first and silently disabled rifting, since post-suture mega-plates
 carry proportional ocean) rifts with probability 0.006/Myr; the split is a
 two-seed jittered Dijkstra between the plate's most-distant cell pair, and
 the halves get opposite rotations about the pole normal to both centroids,
-opening a new ocean along the rift. Both emit events
+opening a new ocean along the rift. When that plate covers the whole sphere
+the two halves are antipodal hemispheres whose centroids are anti-parallel, so
+the normal-to-both-centroids pole degenerates (cross product ≈ 0); the rift
+then falls back to a deterministic pole perpendicular to one centroid (in the
+rift's dividing-circle plane), which still shears the halves apart along their
+shared boundary. Without this fallback a plate that sutured to whole-sphere
+size could never rift again — the supercontinent froze forever and deep-time
+tectonics died (~1.5 Gyr for seeds 42/1); with it, supercontinents break up.
+**Post-rift suture lock:** because those two halves share an in-plane pole,
+~half their new boundary is still convergent, so without a brake they re-sutured
+one 15 Myr suture-window after every breakup (world cycled, but stayed a single
+supercontinent at every keyframe). A rift now stamps both halves with
+`sutureLockUntilYears = now + RIFT_SUTURE_COOLDOWN_YEARS` (30 Myr) and a locked
+plate's contact is not recorded, so it can't re-suture until the lock lifts
+(then needs a fresh 15 Myr). The value is a measured land-budget tradeoff, not a
+physical target — the locked convergent arc grinds continent, so longer locks
+bleed land below the 10% floor (100 Myr → seed 1337 at ~8%); 30 Myr is the knee
+with zero regression. It lengthens each breakup ~3× but does *not* fully
+disperse a whole-sphere supercontinent (whose antipodal halves can only shear,
+not translate apart) — see PHASE_2_STAGE0_FINDINGS.md for the deeper-fix
+follow-up. Both emit events
 (`plateSuture`/`plateRift`); the live count stays within
 [MIN_PLATES, MAX_PLATES] = [4, 16] — the floor is deliberately low because
 a suture *blocked* at the floor means a collision that grinds continent
@@ -323,6 +345,95 @@ if `untilYears` is off-interval. The renderer's texture set is named `fieldsA`
 so a second set (`fieldsB`) and a blend uniform can be added for timeline
 scrubbing without rework.
 
+## Field quantization codec (Phase 2, #22)
+
+`sim-kernel/src/codec.ts` compresses the display subset of a keyframe's float
+fields into a compact, versioned, **self-describing** binary container for
+storage (IndexedDB, #24) and GPU upload (#25). It is pure and lives in the
+kernel by the dependency rule, and **never touches simulation bytes** — encode/
+decode are pure functions of a field array, so quantization can never perturb
+the deterministic sim (goldens are unaffected).
+
+```
+container = header ┃ per-field entries ┃ quantized data
+header  = magic 'AEON' u32 | HISTORY_FORMAT_VERSION u16 | fieldCount u8 | pad | cellCount u32
+entry   = fieldId u8 | format u8 (0=u8,1=u16) | flags u8 (bit0 categorical) | pad | min f32 | max f32 | dataOffset u32
+```
+
+The header carries each field's format and range, so decoding needs only the
+buffer and pruning/adding fields (Phase 3) doesn't break readers of the same
+`HISTORY_FORMAT_VERSION`. Stored set and quantization (`QUANT_TABLE`, ranges
+verified against Phase 1 runs):
+
+| field | format | range | precision |
+|-------|--------|-------|-----------|
+| elevation | Uint16 | −11,000 … +9,500 m | ~0.31 m |
+| crustAge | Uint16 | 0 … 7.0 Gyr | ~107 kyr |
+| temperature | Uint8 | 180 … 320 K | ~0.55 K |
+| plateId | Uint8 | 0 … 255 exact | exact (asserts < 256) |
+| crustType | Uint8 | {0,1} exact | exact |
+
+Continuous fields use a linear float↔uint map (out-of-range clamps to the ends);
+**categorical fields (`plateId`, `crustType`) use an identity map and round-trip
+bit-exact — they must never be interpolated** (the GPU path holds/nearest-picks
+them). `precipitation` is analytic (recomputed from latitude), `boundaryStress`
+is derivable and visually unused, and `iceFraction`/`biome` are still zero — none
+are stored. Two versions gate reuse: `HISTORY_FORMAT_VERSION` (codec byte
+layout) and `KERNEL_BEHAVIOR_VERSION` (sim behavior; see below); together with
+the run params they key the keyframe cache. Codec correctness is locked by
+byte-level goldens over encoded keyframes plus round-trip fidelity tests (Spike A
+confirmed the elevation map is visually lossless: max error 0.156 m = half a
+step, **0** coastline cells migrated across the 0 m datum at N=128).
+
+## History streaming & timeline (Phase 2, #23/#26)
+
+Keyframe cadence has one source of truth: `keyframes(params, untilYears)` in
+`step.ts`, a generator yielding a keyframe for t=0 then one per interval (and a
+final one), returning the final state. `run()` is a thin eager wrapper over it.
+Pulling one keyframe at a time lets a consumer yield between pulls while
+producing byte-identical history. `encodeHistory` (codec.ts) composes that
+cadence with the codec, yielding `EncodedKeyframe { index, timeYears,
+landFraction, transferable payload }`.
+
+The web app (`apps/web`) streams a full history in a Web Worker:
+`simWorker.ts` pulls `encodeHistory`, posts each keyframe with its buffer
+**transferred**, and yields via a `MessageChannel` macrotask so a superseding
+`runHistory` or a `cancel` is honored between keyframes (only the newest
+`requestId` stays active). `usePlanetWorker` accumulates keyframes in a ref
+(retained for the scrubber), decodes the latest to render the planet evolving
+live, and exposes `select(index | null)` to pin the view to a keyframe (deep-time
+scrub) or follow the streaming edge. The renderer only needs `elevation`, which
+every keyframe carries, so scrubbing is decode-nearest-keyframe today; GPU
+`fieldsB + blend` interpolation (#25) is the follow-up polish.
+
+The default extent is the full 4.5 Gyr @ 10 Myr. A **memory budget** (#27)
+guards it: `planHistory(gridN, untilYears, interval, budget = MAX_RETAINED_HISTORY_BYTES)`
+sizes the retained history against `MAX_RETAINED_HISTORY_BYTES` (0.5 GB) using
+`encodedKeyframeBytes(gridN)` — the exact byte size of one encoded keyframe,
+derived from the same layout `encodeKeyframe` writes. If the request fits it is
+passed through unchanged (`clamped: false`); if not, the interval is coarsened by
+an integer factor (never below the requested one, so cadence stays a multiple of
+the ask) until the whole span fits — the tail of history is never dropped, only
+sampled more sparsely, and the app flags the coarser step. At N=128, 4.5 Gyr @
+10 Myr is 451 keyframes ≈ 0.35 GB, so it streams as asked.
+
+A streamed history is persisted to **IndexedDB** (`history/historyCache.ts`, #24)
+so a same-context reload hydrates the whole timeline instantly with no worker run.
+The cache key folds in `(seed, gridN, untilYears, keyframeIntervalYears,
+HISTORY_FORMAT_VERSION, KERNEL_BEHAVIOR_VERSION)`, so a codec-layout or deliberate
+kernel-behavior change automatically invalidates (a bumped version = a new key =
+a miss). On `generate`: a **complete** manifest whose keyframe set is present and
+contiguous is a hit → hydrate; any miss/partial/corrupt/version-mismatch is a
+miss → run the worker (#23) and write each keyframe through as it arrives (so the
+records exist for the next complete run to seal). A partial run is always a miss —
+it never surfaces a broken timeline. Storage is LRU by manifest `updatedAt`;
+`QuotaExceededError` evicts the oldest history (never the one being written) and
+retries the write once. `usePlanetWorker` exposes `source: 'cache' | 'worker' |
+null` (shown as a `cached` badge / `data-history-source` attribute), and `App`
+reads optional `?seed=` / `?until=` URL knobs for deep-linking and a fast cache
+e2e. Determinism makes this sound: the same key always maps to the same bytes, so
+a cached history is bit-identical to re-simulating it.
+
 ## Determinism contract
 
 - Same `seed` + same `PlanetParams` ⇒ bit-identical field arrays at every
@@ -343,7 +454,10 @@ scrubbing without rework.
   `pnpm -F sim-kernel test -- -u`, with the physical/algorithmic reason in the
   commit message. Any change to grid math is a breaking change: update this
   file in the same commit and say so loudly. Never regenerate to silence a
-  test you don't understand.
+  test you don't understand. **Any deliberate golden regeneration must also bump
+  `KERNEL_BEHAVIOR_VERSION` (`constants.ts`) in the same commit** — it is the
+  Phase 2 cache-invalidation key, so a behavior change can never serve stale
+  persisted keyframes.
 - Residual risk, accepted for Phase 0: the mapping and noise use JS
   transcendentals (`tan`, `atan`, `pow`, `sqrt`), whose last-ulp behavior is
   technically implementation-defined. All current targets (Node ≥ 22, Chromium)
