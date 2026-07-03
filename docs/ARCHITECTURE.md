@@ -401,10 +401,12 @@ The web app (`apps/web`) streams a full history in a Web Worker:
 `runHistory` or a `cancel` is honored between keyframes (only the newest
 `requestId` stays active). `usePlanetWorker` accumulates keyframes in a ref
 (retained for the scrubber), decodes the latest to render the planet evolving
-live, and exposes `select(index | null)` to pin the view to a keyframe (deep-time
-scrub) or follow the streaming edge. The renderer only needs `elevation`, which
-every keyframe carries, so scrubbing is decode-nearest-keyframe today; GPU
-`fieldsB + blend` interpolation (#25) is the follow-up polish.
+live, and exposes `select(position | null)` to pin the view to a **fractional**
+keyframe position (deep-time scrub) or follow the streaming edge. Scrubbing maps
+a continuous position to a bracketing keyframe pair `(i, i+1)` and a fraction,
+which the GPU blends (see "Keyframe blending" below); only the two bracketing
+keyframes are decoded (cached, so a fraction change inside one bracket decodes
+nothing) and the interpolated `timeYears`/`landFraction` drive the HUD.
 
 The default extent is the full 4.5 Gyr @ 10 Myr. A **memory budget** (#27)
 guards it: `planHistory(gridN, untilYears, interval, budget = MAX_RETAINED_HISTORY_BYTES)`
@@ -484,3 +486,33 @@ the four surrounding cell centers.
 
 The web app generates state in a Web Worker and uploads keyframes with
 `uploadKeyframe`. WebGPU only; no WebGL fallback in Phase 0.
+
+## Keyframe blending (Phase 2, #25)
+
+Each face material samples **two** keyframe texture sets — `fieldsA` and
+`fieldsB` — and blends them with a shared `blend` uniform, so scrubbing morphs
+the whole planet between bracketing keyframes entirely on the GPU. Two field
+kinds, two rules (`textures.ts` carries the per-field filter and corner
+strategy; the material in `material.ts` carries the sampling rule):
+
+- **Continuous** (`elevation`): `mix(A, B, blend)`, filtered **linearly**, drives
+  both the radial vertex displacement and the hypsometric ramp — continents
+  *morph* rather than pop, and because the (N+2)² seam border is blended with the
+  *same* uniform (borders live in the same textures) no cracks open mid-blend.
+- **Categorical** (`plateId`): picked hold/nearest with `blend < 0.5 ? A : B`,
+  filtered **nearest**, and **never lerped** — a lerp between plate ids 3 and 7 is
+  a meaningless 5. Categorical borders take the neighbor id (not a mean) and
+  categorical corners the own corner cell, so ids stay valid. It drives a subtle
+  per-plate tint gated by the `plateTint` uniform (0 = pure elevation ramp), which
+  keeps plate boundaries crisp across a blend. The codec's bit-exact categorical
+  round-trip (#22) is what makes this crispness possible.
+
+Residency ping-pongs between the two sets (`residency.ts`, `KeyframeBlender`): a
+fractional scrub inside one bracket only moves the `blend` uniform (no upload, so
+the scrub stays tactile), and crossing a keyframe boundary re-uploads **only the
+one set that changed** — keeping the still-needed keyframe resident and flipping
+the blend interpretation (`f` vs `1 − f`) rather than re-uploading both. One
+upload per boundary crossing, either scrub direction. Prefetch into a third set
+is intentionally omitted: with only two sets the incoming keyframe would evict a
+still-displayed one, and Spike B (see `docs/spikes/PHASE_2_SPIKES.md`) showed the
+single-set swap is cheap enough that the playhead never waits on it.

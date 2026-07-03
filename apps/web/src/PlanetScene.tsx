@@ -1,21 +1,28 @@
 import { useEffect, useMemo, useRef } from 'react';
 import { useFrame, useThree } from '@react-three/fiber';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
-import { createPlanetMesh, createStarfield, uploadKeyframe } from 'planet-renderer';
+import { KeyframeBlender, createPlanetMesh, createStarfield } from 'planet-renderer';
 import { EARTH_RADIUS_M } from 'sim-kernel';
-import type { RenderKeyframe } from './usePlanetWorker';
+import type { RenderBlend } from './usePlanetWorker';
 
 const SUN_DIRECTION: [number, number, number] = [1, 0.25, 0.45];
 
 interface PlanetSceneProps {
   gridN: number;
-  keyframe: RenderKeyframe | null;
+  blend: RenderBlend | null;
   onFirstFrame: () => void;
 }
 
-export function PlanetScene({ gridN, keyframe, onFirstFrame }: PlanetSceneProps) {
+export function PlanetScene({ gridN, blend, onFirstFrame }: PlanetSceneProps) {
   const { camera, gl } = useThree();
   const planet = useMemo(() => createPlanetMesh(gridN, EARTH_RADIUS_M), [gridN]);
+  // Ping-pong residency between the two texture sets: re-uploads only the set
+  // that changed on a keyframe-boundary crossing, and moves the blend uniform
+  // for every fractional scrub (no upload, so scrubbing stays tactile).
+  const blender = useMemo(
+    () => new KeyframeBlender(planet.fieldsA, planet.fieldsB, planet.uniforms.blend),
+    [planet],
+  );
   const starfield = useMemo(() => createStarfield(), []);
   const framesSinceUpload = useRef(0);
   const uploadedRef = useRef(false);
@@ -34,17 +41,25 @@ export function PlanetScene({ gridN, keyframe, onFirstFrame }: PlanetSceneProps)
   }, [camera, gl]);
 
   useEffect(() => {
-    uploadedRef.current = false;
-    framesSinceUpload.current = 0;
-    notified.current = false;
-    const elevation = keyframe?.fields.elevation;
-    if (elevation) {
-      uploadKeyframe(planet.fieldsA, { elevation });
-      uploadedRef.current = true;
+    // Regenerate routes blend through null; re-arm so onFirstFrame fires again
+    // for the new run (readiness is per-run, not once per component lifetime).
+    if (!blend) {
+      uploadedRef.current = false;
+      notified.current = false;
+      framesSinceUpload.current = 0;
+      return;
     }
-  }, [keyframe, planet]);
+    blender.set(blend.aIndex, blend.aFields, blend.bIndex, blend.bFields, blend.fraction);
+    // Arm the readiness countdown only on the first upload of a run — not on
+    // every fractional scrub, which would re-fire onFirstFrame needlessly.
+    if (!uploadedRef.current) {
+      uploadedRef.current = true;
+      framesSinceUpload.current = 0;
+      notified.current = false;
+    }
+  }, [blend, blender]);
 
-  // Report readiness a few frames after the keyframe upload so the canvas
+  // Report readiness a few frames after the first keyframe upload so the canvas
   // has actually presented the planet (e2e keys off this).
   useFrame(() => {
     if (!uploadedRef.current || notified.current) return;
@@ -58,7 +73,7 @@ export function PlanetScene({ gridN, keyframe, onFirstFrame }: PlanetSceneProps)
   return (
     <>
       <primitive object={starfield} />
-      {keyframe ? <primitive object={planet.group} /> : null}
+      {blend ? <primitive object={planet.group} /> : null}
       {/* Scene sun light matching the material's sun uniform, for future
           standard-lit objects (moons, atmosphere). */}
       <directionalLight position={SUN_DIRECTION} intensity={2} />
