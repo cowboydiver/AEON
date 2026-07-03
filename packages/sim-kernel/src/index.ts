@@ -21,9 +21,11 @@ export {
   STORED_FIELD_NAMES,
   encodeKeyframe,
   decodeKeyframe,
+  encodeHistory,
   quantStep,
   type StoredFieldName,
   type DecodedKeyframe,
+  type EncodedKeyframe,
 } from './codec';
 export {
   createPlanetParams,

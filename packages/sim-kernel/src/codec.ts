@@ -23,6 +23,9 @@
  */
 
 import { FIELD_NAMES, type FieldName, type Fields } from './fields';
+import { cellCount } from './grid';
+import type { PlanetParams } from './state';
+import { keyframes } from './step';
 
 /**
  * Container-layout version. Bump on ANY change to the byte layout, the stored
@@ -204,4 +207,42 @@ export function decodeKeyframe(buffer: ArrayBuffer): DecodedKeyframe {
 export function quantStep(name: StoredFieldName): number {
   const q = QUANT_TABLE[name];
   return q.categorical ? 0 : (q.max - q.min) / levelsFor(q.format);
+}
+
+/** One streamed history keyframe: metadata + the transferable encoded payload. */
+export interface EncodedKeyframe {
+  /** 0-based index in emission order (0 = initial state). */
+  readonly index: number;
+  readonly timeYears: number;
+  /** Fraction of cells above the 0 m datum — derived from elevation, same as
+   *  `PlanetState.globals.landFraction`, so the UI needn't decode to show it. */
+  readonly landFraction: number;
+  /** Codec container for this keyframe; a fresh ArrayBuffer, safe to transfer. */
+  readonly payload: ArrayBuffer;
+}
+
+/**
+ * Lazily generate a full history as encoded, transferable keyframes (#23). Pure
+ * and deterministic — it wraps the `keyframes` cadence and the codec, so a
+ * worker can pull one at a time, `postMessage` its payload with transfer, and
+ * yield to its event loop between pulls for cooperative cancellation. Keeping
+ * the loop here (not in the worker) makes it unit-testable off the DOM.
+ */
+export function* encodeHistory(
+  params: PlanetParams,
+  untilYears: number,
+): Generator<EncodedKeyframe> {
+  const count = cellCount(params.gridN);
+  let index = 0;
+  for (const kf of keyframes(params, untilYears)) {
+    const elevation = kf.fields.elevation;
+    let land = 0;
+    for (let i = 0; i < count; i++) if (elevation[i]! >= 0) land++;
+    yield {
+      index: index++,
+      timeYears: kf.timeYears,
+      landFraction: land / count,
+      payload: encodeKeyframe(kf.fields, count),
+    };
+  }
 }

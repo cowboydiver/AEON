@@ -72,32 +72,56 @@ export function snapshotKeyframe(state: PlanetState): Keyframe {
 }
 
 /**
- * Run a full simulation from t=0 to untilYears, emitting a keyframe for the
- * initial state and then one every params.keyframeIntervalYears (and a final
+ * Lazily generate a full simulation's keyframes from t=0 to untilYears: one for
+ * the initial state, then one every params.keyframeIntervalYears (and a final
  * one at untilYears if it does not land on the interval). Both the loop bound
  * and keyframe emission are integer-derived: comparing accumulated float time
  * against untilYears could spin forever when the final remainder is below one
  * ULP of the elapsed time.
+ *
+ * This is the single source of truth for keyframe cadence. A consumer that
+ * pulls one keyframe at a time (the Phase 2 worker, #23) can yield to its event
+ * loop between pulls for cooperative cancellation while producing byte-identical
+ * history to a straight-through `run()`. The generator returns the final state.
  */
-export function run(
+export function* keyframes(
   params: PlanetParams,
   untilYears: number,
-  onKeyframe: (keyframe: Keyframe) => void,
-): PlanetState {
+): Generator<Keyframe, PlanetState> {
   const ctx: SimContext = { rng: createRng(params.seed).fork('sim') };
   const stepsPerKeyframe = Math.max(1, Math.round(params.keyframeIntervalYears / params.stepYears));
   const totalSteps = Math.max(0, Math.ceil(untilYears / params.stepYears));
 
   let state = createInitialState(params);
-  onKeyframe(snapshotKeyframe(state));
+  yield snapshotKeyframe(state);
 
   for (let i = 1; i <= totalSteps; i++) {
     const dt = Math.min(params.stepYears, untilYears - state.timeYears);
     if (dt <= 0) break; // float ties: nothing left to simulate
     state = step(state, dt, ctx);
     if (i % stepsPerKeyframe === 0 || i === totalSteps || state.timeYears >= untilYears) {
-      onKeyframe(snapshotKeyframe(state));
+      yield snapshotKeyframe(state);
     }
   }
   return state;
+}
+
+/**
+ * Eager convenience wrapper over `keyframes`: run to completion, invoking
+ * `onKeyframe` for each, and return the final state. Existing callers (the CLI,
+ * tests) keep their callback shape; the cadence lives in `keyframes`.
+ */
+export function run(
+  params: PlanetParams,
+  untilYears: number,
+  onKeyframe: (keyframe: Keyframe) => void,
+): PlanetState {
+  const gen = keyframes(params, untilYears);
+  let r = gen.next();
+  while (!r.done) {
+    onKeyframe(r.value);
+    r = gen.next();
+  }
+  // On the `done` result, `value` is the generator's return (the final state).
+  return r.value;
 }
