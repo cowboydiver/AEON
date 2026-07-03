@@ -404,8 +404,18 @@ The web app (`apps/web`) streams a full history in a Web Worker:
 live, and exposes `select(index | null)` to pin the view to a keyframe (deep-time
 scrub) or follow the streaming edge. The renderer only needs `elevation`, which
 every keyframe carries, so scrubbing is decode-nearest-keyframe today; GPU
-`fieldsB + blend` interpolation (#25) is the follow-up polish. Default extent is
-1 Gyr @ 10 Myr until the memory budget + clamp (#27) enables the full 4.5 Gyr.
+`fieldsB + blend` interpolation (#25) is the follow-up polish.
+
+The default extent is the full 4.5 Gyr @ 10 Myr. A **memory budget** (#27)
+guards it: `planHistory(gridN, untilYears, interval, budget = MAX_RETAINED_HISTORY_BYTES)`
+sizes the retained history against `MAX_RETAINED_HISTORY_BYTES` (0.5 GB) using
+`encodedKeyframeBytes(gridN)` — the exact byte size of one encoded keyframe,
+derived from the same layout `encodeKeyframe` writes. If the request fits it is
+passed through unchanged (`clamped: false`); if not, the interval is coarsened by
+an integer factor (never below the requested one, so cadence stays a multiple of
+the ask) until the whole span fits — the tail of history is never dropped, only
+sampled more sparsely, and the app flags the coarser step. At N=128, 4.5 Gyr @
+10 Myr is 451 keyframes ≈ 0.35 GB, so it streams as asked.
 
 ## Determinism contract
 

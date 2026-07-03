@@ -209,6 +209,62 @@ export function quantStep(name: StoredFieldName): number {
   return q.categorical ? 0 : (q.max - q.min) / levelsFor(q.format);
 }
 
+/** Exact byte length `encodeKeyframe` produces for a grid — the container
+ *  header/entries plus each field's aligned data — without allocating it.
+ *  Used to size a history against the memory budget before generating it. */
+export function encodedKeyframeBytes(gridN: number): number {
+  const count = cellCount(gridN);
+  let offset = HEADER_BYTES + STORED_FIELD_NAMES.length * ENTRY_BYTES;
+  for (const name of STORED_FIELD_NAMES) {
+    const q = QUANT_TABLE[name];
+    if (q.format === 'u16' && offset % 2 !== 0) offset += 1;
+    offset += (q.format === 'u16' ? 2 : 1) * count;
+  }
+  return offset;
+}
+
+/**
+ * Main-thread retained-history budget, bytes (#27). The full history's quantized
+ * keyframes live in memory for scrubbing; this caps that. 0.5 GB comfortably
+ * holds 4.5 Gyr @ 10 Myr @ N=128 (~0.30 GB) with headroom, and `planHistory`
+ * coarsens the keyframe interval to stay under it for heavier requests.
+ */
+export const MAX_RETAINED_HISTORY_BYTES = 0.5 * 1024 * 1024 * 1024;
+
+export interface HistoryPlan {
+  readonly untilYears: number;
+  readonly keyframeIntervalYears: number;
+  readonly keyframeCount: number;
+  readonly bytes: number;
+  /** True if the interval was coarsened from the request to fit the budget. */
+  readonly clamped: boolean;
+}
+
+/**
+ * Fit a requested history to a retained-memory budget by coarsening the
+ * keyframe interval (keeping the full time span). Pure: given the same inputs it
+ * returns the same plan. The interval only ever grows by an integer factor, so
+ * it stays a multiple of the requested one (and thus of the step).
+ */
+export function planHistory(
+  gridN: number,
+  untilYears: number,
+  keyframeIntervalYears: number,
+  budgetBytes: number = MAX_RETAINED_HISTORY_BYTES,
+): HistoryPlan {
+  const per = encodedKeyframeBytes(gridN);
+  const countFor = (interval: number) => Math.floor(untilYears / interval) + 1; // +1 for t=0
+  const requested = countFor(keyframeIntervalYears);
+  if (per * requested <= budgetBytes) {
+    return { untilYears, keyframeIntervalYears, keyframeCount: requested, bytes: per * requested, clamped: false };
+  }
+  const maxKeyframes = Math.max(2, Math.floor(budgetBytes / per));
+  const factor = Math.max(2, Math.ceil(requested / maxKeyframes));
+  const interval = keyframeIntervalYears * factor;
+  const count = countFor(interval);
+  return { untilYears, keyframeIntervalYears: interval, keyframeCount: count, bytes: per * count, clamped: true };
+}
+
 /** One streamed history keyframe: metadata + the transferable encoded payload. */
 export interface EncodedKeyframe {
   /** 0-based index in emission order (0 = initial state). */

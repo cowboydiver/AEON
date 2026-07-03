@@ -5,6 +5,8 @@ import {
   STORED_FIELD_NAMES,
   decodeKeyframe,
   encodeKeyframe,
+  encodedKeyframeBytes,
+  planHistory,
   quantStep,
 } from '../src/codec';
 import { FIELD_NAMES, type Fields } from '../src/fields';
@@ -137,6 +139,37 @@ describe('codec byte goldens (#22)', () => {
       }).toMatchSnapshot();
     });
   }
+});
+
+describe('history memory budget (#27)', () => {
+  it('encodedKeyframeBytes matches an actually-encoded keyframe', () => {
+    for (const gridN of [16, 32, 64, 128]) {
+      const count = cellCount(gridN);
+      const fields = blankFields(count);
+      expect(encodedKeyframeBytes(gridN)).toBe(encodeKeyframe(fields, count).byteLength);
+    }
+  });
+
+  it('leaves a within-budget request unclamped', () => {
+    // 4.5 Gyr @ 10 Myr @ N=128 is the headline history; it must fit 0.5 GB.
+    const plan = planHistory(128, 4.5e9, 10e6);
+    expect(plan.clamped).toBe(false);
+    expect(plan.keyframeIntervalYears).toBe(10e6);
+    expect(plan.keyframeCount).toBe(451); // t=0 plus 450 intervals
+    expect(plan.bytes).toBeLessThanOrEqual(0.5 * 1024 * 1024 * 1024);
+  });
+
+  it('coarsens the interval by an integer factor to fit a tight budget', () => {
+    const per = encodedKeyframeBytes(128);
+    const budget = per * 60; // room for ~60 keyframes only
+    const plan = planHistory(128, 4.5e9, 10e6, budget);
+    expect(plan.clamped).toBe(true);
+    expect(plan.keyframeIntervalYears % 10e6).toBe(0); // still a multiple of the request
+    expect(plan.keyframeIntervalYears).toBeGreaterThan(10e6);
+    expect(plan.keyframeCount).toBeLessThanOrEqual(60);
+    expect(plan.bytes).toBeLessThanOrEqual(budget);
+    expect(plan.untilYears).toBe(4.5e9); // full span preserved
+  });
 });
 
 function blankFields(count: number): Fields {

@@ -19,13 +19,17 @@ export {
   HISTORY_FORMAT_VERSION,
   QUANT_TABLE,
   STORED_FIELD_NAMES,
+  MAX_RETAINED_HISTORY_BYTES,
   encodeKeyframe,
   decodeKeyframe,
   encodeHistory,
+  encodedKeyframeBytes,
+  planHistory,
   quantStep,
   type StoredFieldName,
   type DecodedKeyframe,
   type EncodedKeyframe,
+  type HistoryPlan,
 } from './codec';
 export {
   createPlanetParams,

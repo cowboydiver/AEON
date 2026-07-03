@@ -1,25 +1,32 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Canvas } from '@react-three/fiber';
 import { WebGPURenderer } from 'three/webgpu';
-import { DEFAULT_GRID_N } from 'sim-kernel';
+import { DEFAULT_GRID_N, planHistory } from 'sim-kernel';
 import { PlanetScene } from './PlanetScene';
 import { usePlanetWorker } from './usePlanetWorker';
 
 const DEFAULT_SEED = 42;
 
-// History extent streamed on load. Kept modest until the memory budget + clamp
-// (#27) lands; the full 4.5 Gyr scrub follows once that guardrail exists.
-const DEFAULT_UNTIL_YEARS = 1e9;
+// The full deep-time span: planet formation through 4.5 Gyr, one keyframe per
+// 10 Myr. `planHistory` (#27) coarsens the interval only if this would blow the
+// retained-memory budget; at N=128 the request fits, so it streams as asked.
+const DEFAULT_UNTIL_YEARS = 4.5e9;
 const DEFAULT_KEYFRAME_INTERVAL_YEARS = 10e6;
 
 export function App() {
   const webgpuAvailable = typeof navigator !== 'undefined' && 'gpu' in navigator;
   const [seedInput, setSeedInput] = useState(String(DEFAULT_SEED));
   const [ready, setReady] = useState(false);
+  // Clamp the request to the memory budget before streaming: a tight budget
+  // coarsens the keyframe interval rather than dropping the tail of history.
+  const plan = useMemo(
+    () => planHistory(DEFAULT_GRID_N, DEFAULT_UNTIL_YEARS, DEFAULT_KEYFRAME_INTERVAL_YEARS),
+    [],
+  );
   const { current, progress, done, keyframeCount, pinnedIndex, generate, select } = usePlanetWorker({
     gridN: DEFAULT_GRID_N,
-    untilYears: DEFAULT_UNTIL_YEARS,
-    keyframeIntervalYears: DEFAULT_KEYFRAME_INTERVAL_YEARS,
+    untilYears: plan.untilYears,
+    keyframeIntervalYears: plan.keyframeIntervalYears,
   });
 
   useEffect(() => {
@@ -100,6 +107,15 @@ export function App() {
             {done
               ? `${progress.keyframesEmitted} keyframes`
               : `${((progress.currentYears / progress.untilYears) * 100).toFixed(0)}%`}
+          </span>
+        ) : null}
+        {plan.clamped ? (
+          <span
+            data-history-clamped
+            title={`Memory budget coarsened the keyframe interval to ${(plan.keyframeIntervalYears / 1e6).toFixed(0)} Myr`}
+            style={{ opacity: 0.6, color: '#e0b050' }}
+          >
+            ⚠ {(plan.keyframeIntervalYears / 1e6).toFixed(0)} Myr steps
           </span>
         ) : null}
       </div>
