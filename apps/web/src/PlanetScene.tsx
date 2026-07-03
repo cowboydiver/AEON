@@ -3,13 +3,13 @@ import { useFrame, useThree } from '@react-three/fiber';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { createPlanetMesh, createStarfield, uploadKeyframe } from 'planet-renderer';
 import { EARTH_RADIUS_M } from 'sim-kernel';
-import type { KeyframeMessage } from './worker/messages';
+import type { RenderKeyframe } from './usePlanetWorker';
 
 const SUN_DIRECTION: [number, number, number] = [1, 0.25, 0.45];
 
 interface PlanetSceneProps {
   gridN: number;
-  keyframe: KeyframeMessage | null;
+  keyframe: RenderKeyframe | null;
   onFirstFrame: () => void;
 }
 
@@ -37,8 +37,9 @@ export function PlanetScene({ gridN, keyframe, onFirstFrame }: PlanetSceneProps)
     uploadedRef.current = false;
     framesSinceUpload.current = 0;
     notified.current = false;
-    if (keyframe) {
-      uploadKeyframe(planet.fieldsA, keyframe.fields);
+    const elevation = keyframe?.fields.elevation;
+    if (elevation) {
+      uploadKeyframe(planet.fieldsA, { elevation });
       uploadedRef.current = true;
     }
   }, [keyframe, planet]);

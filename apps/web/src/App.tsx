@@ -7,11 +7,20 @@ import { usePlanetWorker } from './usePlanetWorker';
 
 const DEFAULT_SEED = 42;
 
+// History extent streamed on load. Kept modest until the memory budget + clamp
+// (#27) lands; the full 4.5 Gyr scrub follows once that guardrail exists.
+const DEFAULT_UNTIL_YEARS = 1e9;
+const DEFAULT_KEYFRAME_INTERVAL_YEARS = 10e6;
+
 export function App() {
   const webgpuAvailable = typeof navigator !== 'undefined' && 'gpu' in navigator;
   const [seedInput, setSeedInput] = useState(String(DEFAULT_SEED));
   const [ready, setReady] = useState(false);
-  const { keyframe, busy, generate } = usePlanetWorker(DEFAULT_GRID_N);
+  const { current, progress, done, generate } = usePlanetWorker({
+    gridN: DEFAULT_GRID_N,
+    untilYears: DEFAULT_UNTIL_YEARS,
+    keyframeIntervalYears: DEFAULT_KEYFRAME_INTERVAL_YEARS,
+  });
 
   useEffect(() => {
     if (webgpuAvailable) generate(DEFAULT_SEED);
@@ -23,6 +32,8 @@ export function App() {
     setReady(false);
     generate(Math.trunc(seed));
   }, [seedInput, generate]);
+
+  const streaming = progress !== null && !done;
 
   if (!webgpuAvailable) {
     return (
@@ -50,7 +61,7 @@ export function App() {
         }}
       >
         <color attach="background" args={['#000000']} />
-        <PlanetScene gridN={DEFAULT_GRID_N} keyframe={keyframe} onFirstFrame={() => setReady(true)} />
+        <PlanetScene gridN={DEFAULT_GRID_N} keyframe={current} onFirstFrame={() => setReady(true)} />
       </Canvas>
 
       <div
@@ -76,11 +87,20 @@ export function App() {
           inputMode="numeric"
           style={{ width: 90, background: '#0b1020', color: 'inherit', border: '1px solid #33405e', borderRadius: 4, padding: '4px 6px' }}
         />
-        <button onClick={regenerate} disabled={busy} style={{ padding: '4px 10px' }}>
-          {busy ? 'Generating…' : 'Regenerate'}
+        <button onClick={regenerate} disabled={streaming} style={{ padding: '4px 10px' }}>
+          {streaming ? 'Generating…' : 'Regenerate'}
         </button>
-        {keyframe ? (
-          <span style={{ opacity: 0.7 }}>land {(keyframe.landFraction * 100).toFixed(1)}%</span>
+        {current ? (
+          <span style={{ opacity: 0.7 }}>
+            {(current.timeYears / 1e9).toFixed(2)} Gyr · land {(current.landFraction * 100).toFixed(1)}%
+          </span>
+        ) : null}
+        {progress ? (
+          <span style={{ opacity: 0.55 }} data-history-progress={done ? 'done' : 'streaming'}>
+            {done
+              ? `${progress.keyframesEmitted} keyframes`
+              : `${((progress.currentYears / progress.untilYears) * 100).toFixed(0)}%`}
+          </span>
         ) : null}
       </div>
     </div>
