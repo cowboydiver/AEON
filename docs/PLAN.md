@@ -68,15 +68,41 @@ Dependency sketch: #9 → #12; #10 → #13; #11 and #17 anytime; #13 → #14 →
 
 ## Phase 2 — Timeline scrubbing · [milestone](https://github.com/cowboydiver/AEON/milestone/2) · overview [#4](https://github.com/cowboydiver/AEON/issues/4)
 
-Placeholders, to be re-planned after PHASE_1_REPORT.md:
-[#22](https://github.com/cowboydiver/AEON/issues/22) field quantization codec ·
-[#23](https://github.com/cowboydiver/AEON/issues/23) progressive worker streaming ·
-[#24](https://github.com/cowboydiver/AEON/issues/24) IndexedDB keyframe cache ·
-[#25](https://github.com/cowboydiver/AEON/issues/25) GPU blending (fieldsB + blend uniform) ·
-[#26](https://github.com/cowboydiver/AEON/issues/26) timeline UI with event markers ·
-[#27](https://github.com/cowboydiver/AEON/issues/27) memory budget (the named risk) ·
-[#28](https://github.com/cowboydiver/AEON/issues/28) adaptive keyframe density (stretch) ·
-[#29](https://github.com/cowboydiver/AEON/issues/29) acceptance + PHASE_2_REPORT.md
+**Status: re-planned, awaiting sign-off** — spec `docs/PHASE_2_SPEC.md`, Stage 0
+de-risking measurements in `docs/PHASE_2_STAGE0_FINDINGS.md` (evidence under
+`docs/phase2-evidence/stage0/`). **Open go/no-go at sign-off:** the 4.5 Gyr runs
+show 2 of 3 acceptance seeds go tectonically dead by ~1.5 Gyr (a confirmed
+`riftPlate` antipodal-pole bug freezes any whole-sphere plate) and seed 1337
+sinks below the 10% land floor. See the spec §0 for the sequencing decision
+(recommendation: fix the small rift bug first via new kernel issue #57).
+
+Issues (each gets full motivation, approach, files, acceptance, and size on the
+issue itself in the Stage 1 tracker sync — deferred until the §0 decision fixes
+the dependency graph):
+
+| # | Issue | Labels | Size |
+|---|-------|--------|------|
+| Spike A | Quantization fidelity round-trip (PNG harness) | spike, infra | S |
+| Spike B | Blend-path frame rate on the Xvfb e2e path | spike, renderer | M |
+| [#22](https://github.com/cowboydiver/AEON/issues/22) | Field quantization codec (`codec.ts`, versioned container) | kernel, goldens | M |
+| [#23](https://github.com/cowboydiver/AEON/issues/23) | Worker protocol: progressive full-history streaming | ui, infra | M |
+| [#24](https://github.com/cowboydiver/AEON/issues/24) | IndexedDB keyframe cache + version invalidation | ui, infra | M |
+| [#25](https://github.com/cowboydiver/AEON/issues/25) | GPU keyframe blending: fieldsB + blend uniform | renderer | L |
+| [#26](https://github.com/cowboydiver/AEON/issues/26) | Timeline UI: scrubber with event markers | ui | M |
+| [#27](https://github.com/cowboydiver/AEON/issues/27) | Memory budget: measure and enforce (the named risk) | infra | S |
+| [#28](https://github.com/cowboydiver/AEON/issues/28) | Adaptive keyframe density (stretch — skip by default) | ui, infra | S |
+| [#29](https://github.com/cowboydiver/AEON/issues/29) | Phase 2 acceptance + PHASE_2_REPORT.md | ui, infra | M |
+
+New issues to file at sign-off (labels depend on the §0 choice):
+**#54 pt 2** land-budget-4.5Gyr (measured, this doc) ·
+**#57** rift antipodal-pole fix (kernel, goldens; Phase 2 prerequisite under
+choice A) · **#58** deep-time land balance for the 1337 canary (kernel, goldens;
+optional follow-up).
+
+Dependency sketch: [#57] → #22; Spike A → #22; Spike B → #25;
+#22 → {#23, #24, #25, #27}; #23 → #26; #25 → #26; #24 needs #22, #23;
+#27 refines after #25/#26; #28 gated on #27 (default skip);
+{#23, #24, #25, #26, #27} → #29.
 
 ## Phase 3 — Climate, hydrology, biomes · [milestone](https://github.com/cowboydiver/AEON/milestone/3) · overview [#5](https://github.com/cowboydiver/AEON/issues/5)
 

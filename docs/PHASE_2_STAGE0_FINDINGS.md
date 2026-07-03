@@ -81,20 +81,54 @@ So the narrow question "do continents still look like continents at 4.5 Gyr?"
 is **yes** — but "do they visibly drift across the timeline?" is **no for the
 back two-thirds** on 2 of 3 seeds.
 
-### Root-cause hypothesis (not yet confirmed in code)
+### Root cause (confirmed by code read — `wilson.ts` `riftPlate`)
 
-The endgame events are telling: at 1226 Myr plate 0 rifts off a 48k-cell plate,
-which re-sutures back into plate 0 within one step; at 1509 Myr a rift produces
-a **1-cell** plate (`newPlateCells=1`), and at 1510 Myr the last real plate is
-absorbed into plate 0. After that the single super-plate never rifts again for
-3 Gyr, even though it is old, large, and continent-carrying (nominally eligible
-at `RIFT_PROBABILITY_PER_MYR = 0.006`, ~1 expected rift per 167 Myr). Something
-in the Wilson rift path either fails to fire, or fails to "take," once the world
-is a single plate — the split halves immediately re-collide and re-suture, so
-the supercontinent is a one-way ratchet with no breakup. This is `#54`-adjacent
-kernel work (knobs in `sim-kernel/src/constants.ts`: `RIFT_*`, `SUTURE_*`,
-`MIN_PLATES`, arc maturation) and is **golden-changing** — out of scope for a
-Stage 0 measurement pass; flagged here for the human's decision.
+This is **a specific bug, not a tuning problem.** The rift split picks two seed
+cells (min-hash cell `seedA` and the plate cell farthest from it, `seedB`),
+grows two half-plates by Dijkstra, and rotates the halves apart about a pole
+built from their centroids:
+
+```
+const rawPole = cross3(normalize3(centroidA), normalize3(centroidB));
+const poleMag  = |rawPole|;
+if (poleMag < 1e-9) return state;   // wilson.ts ~L325-327 — skip the rift
+```
+
+That guard was added in PR #55 for the *rare* near-antipodal degenerate (a
+vanishing cross product would give a NaN pole). But **when one plate covers the
+whole sphere, every bisection is two hemispheres, and hemisphere centroids are
+always near-antipodal** (`seedB` is chosen as the most distant cell from
+`seedA`, i.e. its antipode). So `centroidA ≈ −centroidB`, the cross product
+collapses, and the rift is skipped — *every step, forever*. The supercontinent
+becomes a **one-way ratchet with no possible breakup.**
+
+The event trace matches exactly: plate 0 rifts successfully at 538 and 1226 Myr
+(when it is *not* the whole sphere — the halves are not antipodal), but the
+instant it absorbs the last remaining plate (~1510 Myr) and becomes
+sphere-spanning, the antipodal guard trips on every subsequent draw and
+`plateId` freezes bit-for-bit. Seed 1337 never fully merges (stays ~2 plates),
+so its rift splits are never whole-sphere-antipodal — which is precisely why it
+stays tectonically alive to ~4 Gyr.
+
+**The fix is small and localized** (~a handful of lines in `riftPlate`): when
+`poleMag` is tiny, fall back to a deterministic valid pole (any axis
+perpendicular to the `seedA`/`seedB` separation opens the rift) instead of
+`return state`. It is **golden-changing** (it revives deep-time tectonics for
+every seed), so it is out of scope for a Stage 0 measurement pass and out of
+scope for "no implementation before sign-off" — flagged here for the human's
+decision. It is `#54`-adjacent but far cheaper than the broad retune the plan
+anticipated.
+
+### A second, distinct deep-time issue (tuning, not a bug)
+
+Seed 1337's slide to 7.5% land is separate: it stays *alive*, so ongoing
+continent–continent collisions keep consuming continental area, and the
+arc-maturation creation term (`ARC_MATURATION_ELEVATION_M`) doesn't fully
+replace it over 4.5 Gyr at N=64. That is genuine tuning territory (`#54`:
+arc-creation vs collision-consumption balance) and is *independent* of the rift
+bug above — fixing the rift bug revives 42/1 but would not by itself lift 1337
+back over 10%. Both belong in a deep-time kernel pass; they are different
+defects with different fixes.
 
 ## 0b. Margin herringbone + speckle (#54 pt 1)
 
@@ -136,7 +170,12 @@ if generation time bites on slow machines.
   show a static planet for the last ~3 Gyr; seed 1337 stays lively but low-land.
 - Phase 1's 2 Gyr acceptance sat right at the edge of activity, which is why
   none of this was visible before.
-- Per the plan this is a **stop-and-decide** point: the fix is golden-changing
-  deep-time kernel re-tuning, which reshapes Phase 2's acceptance criteria and
-  possibly its issue order. The scope decision is the human's; this document is
-  the measurement input to it.
+- **Root cause is two separable deep-time defects:** (1) a *small, specific
+  bug* — the antipodal rift-pole guard forbids a whole-sphere plate from ever
+  rifting, freezing 42/1; (2) a *tuning imbalance* — arc creation lags collision
+  consumption over 4.5 Gyr, sinking 1337 below 10% land. Both are
+  golden-changing.
+- Per the plan this is a **stop-and-decide** point: fixing (1) revives deep-time
+  drift for the whole timeline and is cheap; (2) is a separate tuning pass. The
+  scope/sequencing decision (fix-first vs. scope-the-timeline vs. accept) is the
+  human's; this document is the measurement input to it.
