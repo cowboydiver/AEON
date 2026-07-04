@@ -368,7 +368,9 @@ confetti, no freeze.
   churn of ~200 reorganizations reworks continental shapes; conservation +
   accretionary creation keep them cluster-coherent, but "bold clean Pangaea
   pieces at 4 Gyr" would need shape-preserving crust dynamics (e.g. craton
-  stiffness / suture-line memory) — out of scope here.
+  stiffness / suture-line memory) — out of scope here; filed as
+  [#60](https://github.com/cowboydiver/AEON/issues/60) alongside the
+  #57/#58 kernel follow-ups.
 - Herringbone margin shredding (§0b) is unchanged in kind; arc memory
   visibly softens the stripe contrast (partial arcs no longer snap to
   abyssal depth between advection events).
