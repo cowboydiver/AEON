@@ -2,7 +2,9 @@ import { Vector3, type DataTexture } from 'three';
 import { MeshBasicNodeMaterial } from 'three/webgpu';
 import {
   clamp,
+  cos,
   float,
+  fract,
   mix,
   normalWorld,
   positionLocal,
@@ -15,11 +17,21 @@ import {
 import { INITIAL_LAND_HEIGHT_M, INITIAL_OCEAN_DEPTH_M } from 'sim-kernel';
 
 /**
- * TSL node material for one cube face. Samples the face's elevation texture
- * (keyframe set A) for radial vertex displacement and a hypsometric color
- * ramp, lit Lambert-ish from a sun-direction uniform. Uniforms are shared by
- * all six face materials; a second keyframe texture set and a blend uniform
- * slot in later without restructuring.
+ * TSL node material for one cube face. Samples TWO keyframe texture sets (A and
+ * B) and blends them with a shared `blend` uniform so the whole planet morphs
+ * between bracketing keyframes entirely on the GPU:
+ *
+ *   - **elevation** is CONTINUOUS: `mix(A, B, blend)` drives both the radial
+ *     vertex displacement and the hypsometric color ramp, so continents *morph*
+ *     across a keyframe boundary instead of popping. The (N+2)² seam border is
+ *     blended with the same uniform (borders live in the same textures), so no
+ *     cracks open at cube-face edges mid-blend.
+ *   - **plateId** is CATEGORICAL: picked hold/nearest with `blend < 0.5 ? A : B`
+ *     and NEVER lerped. It drives a subtle per-plate tint gated by `plateTint`
+ *     (0 = pure elevation ramp). The nearest pick keeps plate boundaries crisp
+ *     across a blend.
+ *
+ * Uniforms are shared by all six face materials.
  */
 
 export function createPlanetUniforms() {
@@ -28,10 +40,20 @@ export function createPlanetUniforms() {
     exaggeration: uniform(40),
     /** Unit vector toward the sun, world space. */
     sunDirection: uniform(new Vector3(1, 0.2, 0.4).normalize()),
+    /** Fraction from keyframe set A (0) to set B (1); the timeline scrubber. */
+    blend: uniform(0),
+    /** Per-plate tint strength over the hypsometric ramp (0 = elevation only). */
+    plateTint: uniform(0.12),
   };
 }
 
 export type PlanetUniforms = ReturnType<typeof createPlanetUniforms>;
+
+/** One face's textures from a single keyframe set (A or B). */
+export interface FaceTextures {
+  elevation: DataTexture;
+  plateId: DataTexture;
+}
 
 // Color ramp anchors (linear-ish sRGB values).
 const DEEP_OCEAN = vec3(0.012, 0.035, 0.18);
@@ -40,14 +62,23 @@ const LOWLAND = vec3(0.1, 0.38, 0.15);
 const UPLAND = vec3(0.5, 0.37, 0.2);
 const PEAK = vec3(0.95, 0.95, 0.95);
 
+const TAU = 6.283185307179586;
+// Golden-ratio conjugate: fract(id · φ⁻¹) spreads consecutive plate ids across
+// [0, 1) so neighbouring plates get well-separated hues.
+const PLATE_HUE_STRIDE = 0.6180339887498949;
+
 export function createPlanetMaterial(
-  elevationA: DataTexture,
+  a: FaceTextures,
+  b: FaceTextures,
   uniforms: PlanetUniforms,
   radiusMeters: number,
 ): MeshBasicNodeMaterial {
   const material = new MeshBasicNodeMaterial();
+  const coord = uv();
 
-  const elevation = texture(elevationA, uv()).r;
+  // Continuous: blend the two keyframes' elevation. Vertex displacement and the
+  // color ramp both read this blended value, so relief interpolates smoothly.
+  const elevation = mix(texture(a.elevation, coord).r, texture(b.elevation, coord).r, uniforms.blend);
 
   // Radial displacement: the mesh is a unit sphere, so scaling the position
   // by (1 + elevation/radius * exaggeration) displaces along the normal.
@@ -65,9 +96,18 @@ export function createPlanetMaterial(
   );
   const albedo = select(elevation.lessThan(0), ocean, land);
 
+  // Categorical: nearest-pick the plate id (never lerp) and modulate the albedo
+  // by a stable per-plate colour. A cosine palette maps the spread hue to RGB;
+  // `plateTint` scales the modulation around 1.0 (so 0 leaves albedo untouched).
+  const plateId = select(uniforms.blend.lessThan(0.5), texture(a.plateId, coord).r, texture(b.plateId, coord).r);
+  const hueT = fract(plateId.mul(PLATE_HUE_STRIDE));
+  const plateColor = cos(vec3(hueT, hueT.add(0.33), hueT.add(0.67)).mul(TAU)).mul(0.5).add(0.5);
+  const plateFactor = mix(vec3(1, 1, 1), plateColor.mul(2), uniforms.plateTint);
+  const tinted = albedo.mul(plateFactor);
+
   // Lambert-ish: geometric (radial) normal against the sun uniform + ambient.
   const nDotL = normalWorld.dot(uniforms.sunDirection).max(0);
-  material.colorNode = albedo.mul(nDotL.mul(0.92).add(0.08));
+  material.colorNode = tinted.mul(nDotL.mul(0.92).add(0.08));
 
   return material;
 }

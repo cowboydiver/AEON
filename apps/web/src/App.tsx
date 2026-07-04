@@ -38,7 +38,7 @@ export function App() {
     () => planHistory(DEFAULT_GRID_N, url.untilYears, DEFAULT_KEYFRAME_INTERVAL_YEARS),
     [url.untilYears],
   );
-  const { current, progress, done, keyframeCount, pinnedIndex, source, generate, select } =
+  const { blend, progress, done, keyframeCount, pinnedPosition, source, generate, select } =
     usePlanetWorker({
       gridN: DEFAULT_GRID_N,
       untilYears: plan.untilYears,
@@ -88,7 +88,7 @@ export function App() {
         }}
       >
         <color attach="background" args={['#000000']} />
-        <PlanetScene gridN={DEFAULT_GRID_N} keyframe={current} onFirstFrame={() => setReady(true)} />
+        <PlanetScene gridN={DEFAULT_GRID_N} blend={blend} onFirstFrame={() => setReady(true)} />
       </Canvas>
 
       <div
@@ -117,9 +117,9 @@ export function App() {
         <button onClick={regenerate} disabled={streaming} style={{ padding: '4px 10px' }}>
           {streaming ? 'Generating…' : 'Regenerate'}
         </button>
-        {current ? (
+        {blend ? (
           <span style={{ opacity: 0.7 }}>
-            {(current.timeYears / 1e9).toFixed(2)} Gyr · land {(current.landFraction * 100).toFixed(1)}%
+            {(blend.timeYears / 1e9).toFixed(2)} Gyr · land {(blend.landFraction * 100).toFixed(1)}%
           </span>
         ) : null}
         {progress ? (
@@ -150,8 +150,8 @@ export function App() {
 
       <Timeline
         keyframeCount={keyframeCount}
-        pinnedIndex={pinnedIndex}
-        currentYears={current?.timeYears ?? 0}
+        pinnedPosition={pinnedPosition}
+        currentYears={blend?.timeYears ?? 0}
         onScrub={select}
       />
     </div>
@@ -160,18 +160,19 @@ export function App() {
 
 interface TimelineProps {
   keyframeCount: number;
-  pinnedIndex: number | null;
+  pinnedPosition: number | null;
   currentYears: number;
-  onScrub: (index: number | null) => void;
+  onScrub: (position: number | null) => void;
 }
 
-/** Deep-time scrubber over the streamed history. Dragging pins a keyframe;
- *  the Live button resumes following the streaming edge. */
-function Timeline({ keyframeCount, pinnedIndex, currentYears, onScrub }: TimelineProps) {
+/** Deep-time scrubber over the streamed history. Dragging pins a fractional
+ *  position between keyframes (the GPU blends across it, #25); the Live button
+ *  resumes following the streaming edge. */
+function Timeline({ keyframeCount, pinnedPosition, currentYears, onScrub }: TimelineProps) {
   if (keyframeCount === 0) return null;
   const maxIndex = keyframeCount - 1;
-  const value = pinnedIndex ?? maxIndex;
-  const live = pinnedIndex === null;
+  const value = pinnedPosition ?? maxIndex;
+  const live = pinnedPosition === null;
   return (
     <div
       data-timeline
@@ -200,6 +201,7 @@ function Timeline({ keyframeCount, pinnedIndex, currentYears, onScrub }: Timelin
         type="range"
         min={0}
         max={maxIndex}
+        step="any"
         value={value}
         onChange={(e) => onScrub(Number(e.target.value))}
         aria-label="Timeline"

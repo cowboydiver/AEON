@@ -16,8 +16,10 @@ import { createPlanetTextures, type PlanetFieldTextures } from './textures';
 export interface PlanetHandle {
   group: Group;
   uniforms: PlanetUniforms;
-  /** Keyframe texture set A (a B set + blend uniform arrive with the timeline). */
+  /** Keyframe texture set A. Blended against B by `uniforms.blend` (see material.ts). */
   fieldsA: PlanetFieldTextures;
+  /** Keyframe texture set B; the residency manager ping-pongs uploads between the two. */
+  fieldsB: PlanetFieldTextures;
 }
 
 /** Geometry for one cube face: (N+1)^2 corner vertices, 2 N^2 triangles. */
@@ -69,17 +71,23 @@ export function createFaceGeometry(face: number, gridN: number): BufferGeometry 
 export function createPlanetMesh(gridN: number, radiusMeters: number): PlanetHandle {
   const uniforms = createPlanetUniforms();
   const fieldsA = createPlanetTextures(gridN);
+  const fieldsB = createPlanetTextures(gridN);
   const group = new Group();
   group.name = 'planet';
 
   for (let face = 0; face < 6; face++) {
     const mesh = new Mesh(
       createFaceGeometry(face, gridN),
-      createPlanetMaterial(fieldsA.elevation[face]!, uniforms, radiusMeters),
+      createPlanetMaterial(
+        { elevation: fieldsA.elevation[face]!, plateId: fieldsA.plateId[face]! },
+        { elevation: fieldsB.elevation[face]!, plateId: fieldsB.plateId[face]! },
+        uniforms,
+        radiusMeters,
+      ),
     );
     mesh.name = `planet-face-${face}`;
     mesh.frustumCulled = false; // displaced in the vertex stage
     group.add(mesh);
   }
-  return { group, uniforms, fieldsA };
+  return { group, uniforms, fieldsA, fieldsB };
 }

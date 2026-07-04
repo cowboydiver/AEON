@@ -1,4 +1,4 @@
-import { DataUtils } from 'three';
+import { DataUtils, LinearFilter, NearestFilter } from 'three';
 import { describe, expect, it } from 'vitest';
 import {
   cellCount,
@@ -103,6 +103,51 @@ describe('uploadKeyframe', () => {
       const data = textures.elevation[face]!.image.data as Uint16Array;
       const corners = [0, W - 1, (W - 1) * W, (W - 1) * W + W - 1].map((i) => data[i]!);
       expect(corners, `face ${face} should share face 0's corner mean`).toContain(expected);
+    }
+  });
+
+  it('filters continuous elevation linearly and categorical plateId nearest', () => {
+    const textures = uploaded();
+    for (let face = 0; face < 6; face++) {
+      expect(textures.elevation[face]!.magFilter).toBe(LinearFilter);
+      expect(textures.elevation[face]!.minFilter).toBe(LinearFilter);
+      expect(textures.plateId[face]!.magFilter).toBe(NearestFilter);
+      expect(textures.plateId[face]!.minFilter).toBe(NearestFilter);
+    }
+  });
+
+  it('packs plateId with exact interior and neighbor borders (categorical, never averaged)', () => {
+    const textures = uploaded();
+    const src = state.fields.plateId;
+    const half = DataUtils.toHalfFloat;
+    for (let face = 0; face < 6; face++) {
+      const data = textures.plateId[face]!.image.data as Uint16Array;
+      // Interior cells round-trip bit-exact (small ids are exact in half-float).
+      for (const [row, col] of [
+        [0, 0],
+        [N - 1, N - 1],
+        [7, 11],
+      ] as const) {
+        expect(data[(row + 1) * W + col + 1]).toBe(half(src[faceRCToIndex(face, row, col, N)]!));
+      }
+      // Edge border is the cross-seam neighbor id (a nearest value).
+      const left = neighbors(faceRCToIndex(face, 3, 0, N), N)[0]!;
+      expect(data[(3 + 1) * W]).toBe(half(src[left]!));
+    }
+  });
+
+  it('categorical corners hold the own corner cell, not a fabricated mean', () => {
+    const textures = uploaded();
+    const src = state.fields.plateId;
+    const half = DataUtils.toHalfFloat;
+    for (let face = 0; face < 6; face++) {
+      const data = textures.plateId[face]!.image.data as Uint16Array;
+      // Each diagonal corner texel equals the face's own corner cell id — a
+      // valid id — never the 3-cell average the continuous path uses.
+      expect(data[0]).toBe(half(src[faceRCToIndex(face, 0, 0, N)]!));
+      expect(data[W - 1]).toBe(half(src[faceRCToIndex(face, 0, N - 1, N)]!));
+      expect(data[(W - 1) * W]).toBe(half(src[faceRCToIndex(face, N - 1, 0, N)]!));
+      expect(data[(W - 1) * W + W - 1]).toBe(half(src[faceRCToIndex(face, N - 1, N - 1, N)]!));
     }
   });
 });

@@ -6,16 +6,28 @@ import type { RunHistoryRequest, WorkerRequest, WorkerResponse } from './worker/
 /** Where the currently-loaded history came from, for the HUD and e2e proof. */
 export type HistorySource = 'cache' | 'worker' | null;
 
-/** A decoded keyframe ready for the renderer (stored fields only). */
-export interface RenderKeyframe {
+/** Decoded fields of one keyframe (stored fields only). */
+type DecodedFields = Partial<Record<FieldName, Float32Array>>;
+
+/**
+ * The renderer's view of a scrub position: the two bracketing keyframes plus a
+ * fraction between them (#25). The GPU blends A→B by `fraction`; when the
+ * playhead sits on an exact keyframe (or the history has a single frame),
+ * aIndex === bIndex and fraction is 0. `timeYears`/`landFraction` are linearly
+ * interpolated for the HUD.
+ */
+export interface RenderBlend {
+  aIndex: number;
+  bIndex: number;
+  aFields: DecodedFields;
+  bFields: DecodedFields;
+  fraction: number;
   timeYears: number;
   landFraction: number;
   gridN: number;
-  fields: Partial<Record<FieldName, Float32Array>>;
 }
 
-/** One retained history slot: metadata + the still-encoded payload (kept for
- *  the timeline scrubber, #26, which will decode on demand). */
+/** One retained history slot: metadata + the still-encoded payload (decoded on demand). */
 export interface HistoryEntry {
   index: number;
   timeYears: number;
@@ -36,38 +48,76 @@ export interface PlanetWorkerConfig {
 }
 
 /**
- * Runs the sim kernel in a Web Worker and streams a full history (#23).
- * `generate(seed)` supersedes any in-flight run. Keyframes accumulate in a ref
- * (the scrubber reads them later); `current` is the latest decoded keyframe so
- * the planet visibly evolves while it streams. Stale responses are dropped.
+ * Runs the sim kernel in a Web Worker and streams a full history (#23), then
+ * exposes it as a continuously-scrubbable blend (#25). Keyframes accumulate in a
+ * ref; `blend` is the bracketing pair + fraction the renderer morphs between.
+ * `select(position | null)` pins a fractional keyframe position or follows the
+ * live streaming edge. Keyframes are decoded lazily and cached, so scrubbing
+ * within a bracket costs nothing and crossing a boundary decodes at most one new
+ * keyframe (never per animation frame).
  */
 export function usePlanetWorker({ gridN, untilYears, keyframeIntervalYears }: PlanetWorkerConfig) {
   const workerRef = useRef<Worker | null>(null);
   const requestIdRef = useRef(0);
   const historyRef = useRef<HistoryEntry[]>([]);
+  // Decoded-field cache keyed by keyframe index. Kept tiny: only indices in the
+  // current bracket survive, so at most ~2 decoded field-sets are retained.
+  const decodeCacheRef = useRef<Map<number, DecodedFields>>(new Map());
   // The cache key for the in-flight run, set synchronously in generate() so
   // write-through and finalize file keyframes under the right history.
   const writeKeyRef = useRef<string | null>(null);
-  // null = follow the live edge; a number pins the view to that keyframe while
-  // streaming continues behind it. A ref so the worker callback reads it fresh.
-  const pinnedIndexRef = useRef<number | null>(null);
+  // null = follow the live edge; a number pins the view to that fractional
+  // keyframe position while streaming continues. A ref so the worker callback
+  // reads it fresh.
+  const pinnedPositionRef = useRef<number | null>(null);
 
-  const [current, setCurrent] = useState<RenderKeyframe | null>(null);
-  const [pinnedIndex, setPinnedIndex] = useState<number | null>(null);
+  const [blend, setBlend] = useState<RenderBlend | null>(null);
+  const [pinnedPosition, setPinnedPosition] = useState<number | null>(null);
   const [keyframeCount, setKeyframeCount] = useState(0);
   const [progress, setProgress] = useState<StreamProgress | null>(null);
   const [done, setDone] = useState(false);
   const [source, setSource] = useState<HistorySource>(null);
 
-  const renderEntry = useCallback(
-    (entry: HistoryEntry) => {
-      const decoded = decodeKeyframe(entry.payload);
-      setCurrent({
-        timeYears: entry.timeYears,
-        landFraction: entry.landFraction,
+  // Build the blend view for a position (null = live edge = the last keyframe).
+  // Reads historyRef/decodeCache directly so it is safe to call from the worker
+  // callback and from select(). Decodes only the two bracketing keyframes and
+  // evicts any others, so the cache never grows with scrub distance.
+  const buildBlend = useCallback(
+    (position: number | null): RenderBlend | null => {
+      const history = historyRef.current;
+      const n = history.length;
+      if (n === 0) return null;
+
+      const clamped = Math.max(0, Math.min(position ?? n - 1, n - 1));
+      const ai = Math.floor(clamped);
+      const bi = Math.min(ai + 1, n - 1);
+      const fraction = bi === ai ? 0 : clamped - ai;
+
+      const cache = decodeCacheRef.current;
+      for (const key of cache.keys()) {
+        if (key !== ai && key !== bi) cache.delete(key);
+      }
+      const decode = (index: number): DecodedFields => {
+        let fields = cache.get(index);
+        if (!fields) {
+          fields = decodeKeyframe(history[index]!.payload).fields;
+          cache.set(index, fields);
+        }
+        return fields;
+      };
+
+      const a = history[ai]!;
+      const b = history[bi]!;
+      return {
+        aIndex: ai,
+        bIndex: bi,
+        aFields: decode(ai),
+        bFields: decode(bi),
+        fraction,
+        timeYears: a.timeYears + (b.timeYears - a.timeYears) * fraction,
+        landFraction: a.landFraction + (b.landFraction - a.landFraction) * fraction,
         gridN,
-        fields: decoded.fields,
-      });
+      };
     },
     [gridN],
   );
@@ -94,7 +144,7 @@ export function usePlanetWorker({ gridN, untilYears, keyframeIntervalYears }: Pl
           const writeKey = writeKeyRef.current;
           if (writeKey) void historyCache.putKeyframe(writeKey, entry);
           // Only advance the view if the user hasn't pinned a scrub position.
-          if (pinnedIndexRef.current === null) renderEntry(entry);
+          if (pinnedPositionRef.current === null) setBlend(buildBlend(null));
           break;
         }
         case 'historyProgress':
@@ -116,7 +166,7 @@ export function usePlanetWorker({ gridN, untilYears, keyframeIntervalYears }: Pl
       workerRef.current = null;
       worker.terminate();
     };
-  }, [renderEntry]);
+  }, [buildBlend]);
 
   const generate = useCallback(
     (seed: number) => {
@@ -124,10 +174,11 @@ export function usePlanetWorker({ gridN, untilYears, keyframeIntervalYears }: Pl
       if (!worker) return;
       const runId = ++requestIdRef.current;
       historyRef.current = [];
-      pinnedIndexRef.current = null;
-      setPinnedIndex(null);
+      decodeCacheRef.current.clear();
+      pinnedPositionRef.current = null;
+      setPinnedPosition(null);
       setKeyframeCount(0);
-      setCurrent(null);
+      setBlend(null);
       setProgress(null);
       setDone(false);
       setSource(null);
@@ -151,8 +202,8 @@ export function usePlanetWorker({ gridN, untilYears, keyframeIntervalYears }: Pl
             });
           }
           setKeyframeCount(historyRef.current.length);
+          setBlend(buildBlend(null));
           const last = historyRef.current[historyRef.current.length - 1]!;
-          renderEntry(last);
           setProgress({
             currentYears: last.timeYears,
             untilYears,
@@ -178,29 +229,28 @@ export function usePlanetWorker({ gridN, untilYears, keyframeIntervalYears }: Pl
         worker.postMessage(message);
       })();
     },
-    [gridN, untilYears, keyframeIntervalYears, renderEntry],
+    [gridN, untilYears, keyframeIntervalYears, buildBlend],
   );
 
-  /** Pin the view to a keyframe index, or pass null to resume following live. */
+  /** Pin the view to a fractional keyframe position, or null to follow live. */
   const select = useCallback(
-    (index: number | null) => {
-      const history = historyRef.current;
-      if (index === null) {
-        pinnedIndexRef.current = null;
-        setPinnedIndex(null);
-        const last = history.at(-1);
-        if (last) renderEntry(last);
-        return;
-      }
-      const clamped = Math.max(0, Math.min(index, history.length - 1));
-      const entry = history[clamped];
-      if (!entry) return;
-      pinnedIndexRef.current = clamped;
-      setPinnedIndex(clamped);
-      renderEntry(entry);
+    (position: number | null) => {
+      pinnedPositionRef.current = position;
+      setPinnedPosition(position);
+      setBlend(buildBlend(position));
     },
-    [renderEntry],
+    [buildBlend],
   );
 
-  return { current, progress, done, keyframeCount, pinnedIndex, source, generate, select, history: historyRef };
+  return {
+    blend,
+    progress,
+    done,
+    keyframeCount,
+    pinnedPosition,
+    source,
+    generate,
+    select,
+    history: historyRef,
+  };
 }

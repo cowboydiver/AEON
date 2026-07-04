@@ -185,12 +185,23 @@ Findings go in `docs/spikes/PHASE_2_SPIKES.md` (create it, format per
   piecewise-near-0 fallback is not needed.** Locked by fidelity + coastline-
   integrity tests and byte-level goldens in `codec.test.ts` (no separate
   `PHASE_2_SPIKES.md` entry needed for A; Spike B still pending).
-- **Spike B — Blend-path frame rate (M, spike, renderer).** Minimal harness
-  (dev-only route/flag in `apps/web`): two texture sets uploaded, `blend`
-  animated, set-swap every second; measure fps + upload stalls **on the actual
-  Xvfb e2e path**, not just a desktop browser. Answers: (a) dual-sample + lerp
-  holds 60 fps at N=128 across six faces; (b) cost of a set-swap (the
-  scrub-crossing-keyframe cost); (c) whether quantized uploads need staging.
+- **Spike B — Blend-path frame rate (M, spike, renderer). ✅ RESOLVED (folded
+  into #25).** Rather than a throwaway harness, the real dual-sample material was
+  measured directly through the `pnpm -F web e2e` Xvfb path (Spike-B test in
+  `planet.spec.ts`; full write-up in `docs/spikes/PHASE_2_SPIKES.md`). Findings at
+  N=128, six faces, Vulkan-on-SwiftShader: **(a)** the dual-sample + `mix`
+  material renders at **~2.6 fps steady** — this path is software rasterization,
+  **not the 60 fps oracle a real GPU is** (see `PHASE0_REPORT.md`); it proves the
+  blend loop is live and correct, not fast. The fractional-scrub morph test
+  confirms interpolation is deterministic and pops nowhere. **(b)** A
+  keyframe-boundary set-swap completes in ~1.7 s here, **dominated by SwiftShader
+  render latency, not the upload** — a fraction-only scrub within a bracket
+  touches no texture (uniform only), so perceived scrub smoothness is bounded by
+  render fps, which a real GPU makes a non-issue. **(c)** The straight
+  `toHalfFloat` decode-to-Float16 upload path needs **no staging** — it is not the
+  bottleneck — confirming the recorded default (textures stay R16F). Prefetch into
+  a third set is omitted: the single-set swap is cheap and the wall is render fps,
+  not upload, so a third set would not help.
 
 ### Milestone 2 — Storage + streaming (issues #22, #23, #24)
 
