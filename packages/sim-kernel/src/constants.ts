@@ -9,8 +9,16 @@
  * stale history. Distinct from HISTORY_FORMAT_VERSION (codec byte layout).
  * Started at 1 for Phase 2; the #57 rift fix and the post-rift suture cooldown
  * did not regenerate goldens, so no bump was owed there.
+ * 2 — the #59 deep-time dispersal pass: fragment-carving rift kinematics +
+ *     oversize rift pressure (deep-time-only; goldens untouched), and the
+ *     crust-budget/coherence pass that IS golden-changing — continental
+ *     conservation in advection (bulldozer push-back), accretionary arc
+ *     maturation, micro-continent foundering, and rate-bounded oceanic
+ *     relief relaxation all act within the 10-step golden window. Goldens
+ *     regenerated deliberately in the same commit; cached histories must
+ *     invalidate.
  */
-export const KERNEL_BEHAVIOR_VERSION = 1;
+export const KERNEL_BEHAVIOR_VERSION = 2;
 
 /** IUGG mean Earth radius, m. */
 export const EARTH_RADIUS_M = 6.371e6;
@@ -124,6 +132,23 @@ export const OCEAN_SUBSIDENCE_K_M_PER_SQRT_YR = 0.35;
 export const OCEAN_ABYSSAL_DEPTH_M = -6000;
 
 /**
+ * Rate at which inactive oceanic relief relaxes toward the age-depth curve,
+ * m/yr (#59). Replaces the Phase-1 hard-set ("dead arcs sink instantly"):
+ * excess relief (an abandoned volcanic arc) decays and deficit relief (an
+ * abandoned trench) fills at this bounded rate instead of snapping to the
+ * curve in one step. 2e-4 m/yr (200 m/Myr) is well above the steady
+ * subsidence increment (~145 m/Myr at 1 Myr crust, falling with age), so
+ * ordinary seafloor still tracks the curve to within a step — but a
+ * half-built arc now survives the margin flickering off it (quantized
+ * advection does this constantly — the herringbone), letting arcs finish
+ * maturing. Without this memory, arc creation weakened with grid resolution
+ * (margins dwell on a cell ∝ 1/N) and the continental budget starved at
+ * N=128. A dead arc at +800 m now founders over ~4 Myr — a real guyot
+ * timescale, not a keyframe pop.
+ */
+export const OCEAN_RELIEF_RELAX_M_PER_YR = 2e-4;
+
+/**
  * Initial crustAge of continental crust, yr. Order of Archean cratons /
  * continental shields; only relevance in-kernel is being far older than any
  * oceanic crust so age comparisons never confuse the two.
@@ -174,11 +199,17 @@ export const OROGENY_MAX_ELEVATION_M = 9000;
 export const TRENCH_EXTRA_DEPTH_M = 2500;
 
 /**
- * Island-arc crust growth rate at reference convergence, m/yr. Arcs climb
- * from abyssal depth toward the surface over ~20-30 Myr of subduction
- * (order of real arc construction timescales).
+ * Island-arc crust growth rate at reference convergence, m/yr. 1 mm/yr at
+ * full reference speed builds an arc from abyssal depth to the maturation
+ * threshold in ~10-15 Myr of sustained subduction — the fast end of real
+ * arc construction (Izu-Bonin order). Raised 4e-4 -> 1e-3 in #59 to
+ * rebalance creation after maturation became accretionary (continent-
+ * adjacent only) and margins were measured to dwell on a cell for less
+ * time at finer grids: without a faster climb, the deep-time continental
+ * budget equilibrium fell with grid resolution (healthy at N=16, starved
+ * at N=128).
  */
-export const ARC_GROWTH_RATE_M_PER_YR = 4e-4;
+export const ARC_GROWTH_RATE_M_PER_YR = 1e-3;
 
 /** Ceiling for volcanic-arc elevation, m (island arcs, not continents). */
 export const ARC_MAX_ELEVATION_M = 1000;
@@ -188,9 +219,43 @@ export const ARC_MAX_ELEVATION_M = 1000;
  * crust. Arc magmatism is how Earth manufactures continental crust; this is
  * also the counterweight to collision consuming continental area — without
  * it, long runs slowly lose land (seed-1337 N=16 dipped below the 10% land
- * invariant at ~1.3 Gyr).
+ * invariant at ~1.3 Gyr). Lowered -200 -> -500 in #59 alongside the
+ * accretionary-maturation gate: an accreting margin terrane counts as
+ * continental well before it fully emerges (real accreted terranes are
+ * largely submarine), which shortens the subduction time creation needs.
  */
-export const ARC_MATURATION_ELEVATION_M = -200;
+export const ARC_MATURATION_ELEVATION_M = -500;
+
+/**
+ * Fraction of a bulldozed continental cell's positive relief added to the
+ * cell it is shoved onto when that cell is already continental (#59 /
+ * direction (b)). Continental crust does not subduct: when a convergent
+ * overlap displaces a continental cell, its crust is pushed one cell deeper
+ * into its own plate. Onto oceanic crust it re-roots there (area conserved,
+ * like a fold-and-thrust belt propagating over the foreland); onto
+ * continental crust the collision shortens and THICKENS — half the
+ * displaced relief piles on (India–Asia: ~50% of shortened crustal section
+ * goes into thickening the plateau, the rest into lateral extrusion and
+ * erosion), capped at OROGENY_MAX_ELEVATION_M. Without this, every
+ * continent-continent margin destroyed one continental cell per overlap:
+ * measured 4.5 Gyr N=64 runs ground continental crust from 40% of the
+ * sphere to ~5-8% dust and starved the rift gates (#58's root).
+ */
+export const COLLISION_THICKENING_FACTOR = 0.5;
+
+/**
+ * Elevation ceiling for an isolated continental cell (no continental
+ * 4-neighbor), m (#59). Such micro-continents are kept as continental crust
+ * (Zealandia-style submerged fragments — the area stays in the crustal
+ * budget and can later re-accrete) but are pinned below sea level: a
+ * one-cell fleck is 100+ km of "land" with no cratonic root, and letting
+ * stranded collision debris stand as 9 km white peaks — which the
+ * subsea-damped erosion then preserves for gigayears — shredded every
+ * deep-time elevation map into speckle once the world stayed tectonically
+ * alive. Value matches the arc-maturation threshold: a drowned fragment
+ * sits at shelf depth, not abyssal depth.
+ */
+export const MICROCONTINENT_FOUNDER_ELEVATION_M = -200;
 
 // --- Wilson cycles (#18) -----------------------------------------------------
 

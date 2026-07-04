@@ -207,7 +207,28 @@ export function applyConvergentTopography(
           elevation[i]! + ARC_GROWTH_RATE_M_PER_YR * dtYears * norm,
           ARC_MAX_ELEVATION_M,
         );
-        if (elevation[i]! >= ARC_MATURATION_ELEVATION_M) crustType[i] = 1;
+        // Maturation is accretionary (#59): an arc becomes continental crust
+        // only where it touches continental crust already, so new continent
+        // grows compactly at continent margins (accretionary belts) instead
+        // of freckling along mid-ocean herringbone advection trails. At
+        // deep-time equilibrium most continental crust has been recycled
+        // through this term, so continents take the SHAPE of the creation
+        // process — ungated maturation dissolved them into lace by ~3 Gyr.
+        // Isolated arcs still build toward ARC_MAX_ELEVATION_M but stay
+        // oceanic (a dead arc re-subsides to the age-depth curve). The
+        // neighbor check reads the immutable pre-topography field, never the
+        // working copy this loop mutates, so scan order cannot leak into the
+        // result. The crustal-area budget this slows is protected by the
+        // continental-conservation bulldozer in tectonics.ts (#16/#58).
+        if (elevation[i]! >= ARC_MATURATION_ELEVATION_M) {
+          const preCrust = state.fields.crustType;
+          for (let k = 0; k < 4; k++) {
+            if (preCrust[nbTable[i * 4 + k]!] === 1) {
+              crustType[i] = 1;
+              break;
+            }
+          }
+        }
       }
     } else {
       // Subducting side is always oceanic (continental crust never loses to

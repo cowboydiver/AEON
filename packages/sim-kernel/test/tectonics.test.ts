@@ -125,10 +125,15 @@ describe('tectonics advection', () => {
       if (end.fields.crustType[i] === 0) {
         youngOcean++;
         minAge = Math.min(minAge, end.fields.crustAge[i]!);
-        // Oceanic crust obeys the half-space cooling curve (float32 rounding).
-        expect(
-          Math.abs(end.fields.elevation[i]! - oceanicDepthForAge(end.fields.crustAge[i]!)),
-        ).toBeLessThan(0.5);
+        // Oceanic crust obeys the half-space cooling curve. Subsidence is
+        // rate-bounded (OCEAN_RELIEF_RELAX_M_PER_YR, #59), and the curve's
+        // first ~3 Myr subside faster than the bound, so the youngest crust
+        // may lag the curve by up to ~150 m before it catches up; settled
+        // crust must sit on the curve to float32 rounding.
+        const deviation = Math.abs(
+          end.fields.elevation[i]! - oceanicDepthForAge(end.fields.crustAge[i]!),
+        );
+        expect(deviation).toBeLessThan(end.fields.crustAge[i]! < 5e6 ? 200 : 0.5);
         // All ocean here was created during the run, so it is younger than the run.
         expect(end.fields.crustAge[i]).toBeLessThan(61e6);
       }
