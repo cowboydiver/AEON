@@ -254,17 +254,25 @@ function advect(
   // bulldozed at most once, so crust is never duplicated.
   const wonFrom = new Uint8Array(count);
   const winPlateArr = new Int32Array(count).fill(-1);
+  // Memoized inverse-rotation map from the claim loop, srcOf[i * movers + mi]:
+  // the blocked-mover pass below needs the same (target, plate) -> source
+  // mapping, but only after wonFrom is complete — recomputing it doubled the
+  // most expensive per-cell trig in the kernel's hottest system.
+  const movers = moving.length;
+  const srcOf = new Int32Array(count * movers);
   for (let i = 0; i < count; i++) {
     let winSrc = -1;
     let winPlate = -1;
     dir[0] = centers[i * 3]!;
     dir[1] = centers[i * 3 + 1]!;
     dir[2] = centers[i * 3 + 2]!;
-    for (const p of moving) {
+    for (let mi = 0; mi < movers; mi++) {
+      const p = moving[mi]!;
       const src = directionToIndex(
         rotateAroundAxis(dir, state.plates[p]!.eulerPole, -accumulated[p]!),
         N,
       );
+      srcOf[i * movers + mi] = src;
       if (oldPlate[src] !== p) continue;
       if (
         winPlate === -1 ||
@@ -336,18 +344,17 @@ function advect(
   // stronger claim everywhere it mapped). That column failed to advance —
   // it stacks onto the cell behind it (most anti-aligned with its own
   // motion, still owned by its plate): the pile-up half of the shortening.
-  // Recomputing the source map here is the same deterministic arithmetic as
-  // the claim loop above.
+  // This must run after the claim loop completes (a source may win at a
+  // later target), so it replays the memoized srcOf map instead of
+  // recomputing the rotations.
   for (let i = 0; i < count; i++) {
     dir[0] = centers[i * 3]!;
     dir[1] = centers[i * 3 + 1]!;
     dir[2] = centers[i * 3 + 2]!;
-    for (const p of moving) {
+    for (let mi = 0; mi < movers; mi++) {
+      const p = moving[mi]!;
       if (p === winPlateArr[i]) continue;
-      const src = directionToIndex(
-        rotateAroundAxis(dir, state.plates[p]!.eulerPole, -accumulated[p]!),
-        N,
-      );
+      const src = srcOf[i * movers + mi]!;
       if (oldPlate[src] !== p || old.crustType[src] !== 1) continue;
       if (wonFrom[src]) continue; // survived somewhere; not consumed
       wonFrom[src] = 1; // handle each consumed source exactly once

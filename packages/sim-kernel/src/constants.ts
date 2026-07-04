@@ -284,8 +284,10 @@ export const COLLISION_THICKENING_FACTOR = 0.5;
  * stranded collision debris stand as 9 km white peaks — which the
  * subsea-damped erosion then preserves for gigayears — shredded every
  * deep-time elevation map into speckle once the world stayed tectonically
- * alive. Value matches the arc-maturation threshold: a drowned fragment
- * sits at shelf depth, not abyssal depth.
+ * alive. -200 m is continental-shelf depth (real shelf breaks sit at
+ * ~120-200 m): a drowned fragment is submerged continental platform, not
+ * abyssal floor. Deliberately independent of ARC_MATURATION_ELEVATION_M
+ * (-500 m, an accretion gate, not a flotation level) — do not re-sync them.
  */
 export const MICROCONTINENT_FOUNDER_ELEVATION_M = -200;
 
