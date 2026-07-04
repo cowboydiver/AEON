@@ -14,8 +14,8 @@
 import { oceanicDepthForAge } from '../bathymetry';
 import {
   ACTIVE_MARGIN_STRESS_M_PER_YR,
+  ARC_CREATION_REFERENCE_GRID_N,
   ARC_GROWTH_RATE_M_PER_YR,
-  ARC_GROWTH_REFERENCE_GRID_N,
   ARC_MATURATION_ELEVATION_M,
   ARC_MAX_ELEVATION_M,
   COLLISION_WIDTH_CELLS,
@@ -180,10 +180,41 @@ export function applyConvergentTopography(
   const { plateId, crustAge } = state.fields;
   // Arc magmatic flux is per unit margin length, concentrated onto a
   // one-cell-wide boundary line whose width shrinks ∝ 1/N — so the per-cell
-  // elevation rate scales with N above the reference grid (see
-  // ARC_GROWTH_REFERENCE_GRID_N for the saturation argument below it).
+  // elevation rate scales with N above the reference grid, and the
+  // accretionary belt (fixed physical width) does too (see
+  // ARC_CREATION_REFERENCE_GRID_N for both arguments).
   const arcGrowthRate =
-    ARC_GROWTH_RATE_M_PER_YR * Math.max(1, N / ARC_GROWTH_REFERENCE_GRID_N);
+    ARC_GROWTH_RATE_M_PER_YR * Math.max(1, N / ARC_CREATION_REFERENCE_GRID_N);
+  const beltRadius = Math.max(1, Math.round(N / ARC_CREATION_REFERENCE_GRID_N));
+  // Cells within beltRadius of pre-topography continental crust, computed
+  // lazily (at most once per call) by multi-source BFS. Order-independent:
+  // a cell's mask bit is set exactly once, so scan order cannot leak in.
+  let nearContinent: Uint8Array | null = null;
+  const computeNearContinent = (): Uint8Array => {
+    const preCrust = state.fields.crustType;
+    const mask = new Uint8Array(plateId.length);
+    let frontier: number[] = [];
+    for (let i = 0; i < plateId.length; i++) {
+      if (preCrust[i] === 1) {
+        mask[i] = 1;
+        frontier.push(i);
+      }
+    }
+    for (let d = 0; d < beltRadius; d++) {
+      const next: number[] = [];
+      for (const c of frontier) {
+        for (let k = 0; k < 4; k++) {
+          const nb = nbTable[c * 4 + k]!;
+          if (mask[nb] === 0) {
+            mask[nb] = 1;
+            next.push(nb);
+          }
+        }
+      }
+      frontier = next;
+    }
+    return mask;
+  };
 
   interface Seed {
     cell: number;
@@ -212,26 +243,23 @@ export function applyConvergentTopography(
       } else {
         elevation[i] = Math.min(elevation[i]! + arcGrowthRate * dtYears * norm, ARC_MAX_ELEVATION_M);
         // Maturation is accretionary (#59): an arc becomes continental crust
-        // only where it touches continental crust already, so new continent
-        // grows compactly at continent margins (accretionary belts) instead
-        // of freckling along mid-ocean herringbone advection trails. At
-        // deep-time equilibrium most continental crust has been recycled
-        // through this term, so continents take the SHAPE of the creation
-        // process — ungated maturation dissolved them into lace by ~3 Gyr.
-        // Isolated arcs still build toward ARC_MAX_ELEVATION_M but stay
-        // oceanic (a dead arc re-subsides to the age-depth curve). The
-        // neighbor check reads the immutable pre-topography field, never the
-        // working copy this loop mutates, so scan order cannot leak into the
-        // result. The crustal-area budget this slows is protected by the
-        // continental-conservation bulldozer in tectonics.ts (#16/#58).
+        // only inside the accretionary belt — within beltRadius cells
+        // (fixed physical width, ∝N in cells) of pre-existing continental
+        // crust — so new continent grows compactly at continent margins
+        // (accretionary belts) instead of freckling along mid-ocean
+        // herringbone advection trails. At deep-time equilibrium most
+        // continental crust has been recycled through this term, so
+        // continents take the SHAPE of the creation process — ungated
+        // maturation dissolved them into lace by ~3 Gyr. Isolated arcs
+        // still build toward ARC_MAX_ELEVATION_M but stay oceanic (a dead
+        // arc re-subsides to the age-depth curve). The belt mask reads the
+        // immutable pre-topography field, never the working copy this loop
+        // mutates, so scan order cannot leak into the result. The
+        // crustal-area budget this slows is protected by the continental-
+        // conservation bulldozer in tectonics.ts (#16/#58).
         if (elevation[i]! >= ARC_MATURATION_ELEVATION_M) {
-          const preCrust = state.fields.crustType;
-          for (let k = 0; k < 4; k++) {
-            if (preCrust[nbTable[i * 4 + k]!] === 1) {
-              crustType[i] = 1;
-              break;
-            }
-          }
+          nearContinent ??= computeNearContinent();
+          if (nearContinent[i] === 1) crustType[i] = 1;
         }
       }
     } else {

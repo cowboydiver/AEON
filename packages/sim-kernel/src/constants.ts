@@ -220,22 +220,28 @@ export const TRENCH_EXTRA_DEPTH_M = 2500;
 export const ARC_GROWTH_RATE_M_PER_YR = 1.25e-3;
 
 /**
- * Reference grid for arc growth, and the pivot of its resolution scaling.
- * Physically, arc magmatism supplies a crust flux per unit margin length;
- * the model concentrates that flux onto the one-cell-wide boundary line, so
- * the per-cell elevation rate should scale with N (cell width ∝ 1/N). The
- * same 1/N shows up dynamically: a migrating margin dwells on a cell for a
- * time ∝ cell width, so the elevation climbed per margin pass is ∝ rate/N —
- * constant rate means creation efficiency falls with resolution, which is
- * the measured deep-time land dip at fine grids (#59 residual: N=16 healthy
- * at 23-28% land min, N=64 ~10%, N=128 6.6%). Applied as
- * max(1, N/reference): at or below N=32 a typical margin pass (~5 cm/yr
- * closing over a ~300 km cell ≈ 6 Myr dwell) already climbs abyssal → the
- * maturation threshold, i.e. growth is saturated against the maturation/
- * ARC_MAX ceilings and scaling it down would only starve grids that are
- * measured healthy.
+ * Reference grid for arc creation, the pivot of its two resolution
+ * scalings (#59 follow-up). Both exist because creation is written in
+ * per-cell terms while the physics is per-length: (1) arc magmatism
+ * supplies a crust flux per unit margin length, concentrated onto a
+ * one-cell-wide boundary line whose width shrinks ∝ 1/N — and a migrating
+ * margin dwells on a cell for a time ∝ that width — so the per-cell
+ * elevation rate scales max(1, N/reference); (2) the accretionary belt in
+ * which a mature arc counts as continent-adjacent has a fixed *physical*
+ * width (~one reference cell, ~300 km — the scale of real accreted
+ * terrane belts), so the maturation gate radius is max(1,
+ * round(N/reference)) cells. Without these, creation efficiency fell with
+ * resolution — the measured deep-time land dip at fine grids (#59
+ * residual: N=16 healthy at 23-28% land min, N=64 ~10%, N=128 6.6%; rate
+ * scaling alone recovered ~9.5-10%, and the frontier-area term (2) is the
+ * remainder: matured area per unit time goes as frontier cells × cell
+ * area ∝ (N·belt)/N², which only stays resolution-independent if belt ∝
+ * N). max(1, ·) because at or below the reference grid a margin pass
+ * already saturates against the maturation/ARC_MAX ceilings and the belt
+ * is already one cell — scaling down would only starve grids measured
+ * healthy.
  */
-export const ARC_GROWTH_REFERENCE_GRID_N = 32;
+export const ARC_CREATION_REFERENCE_GRID_N = 32;
 
 /** Ceiling for volcanic-arc elevation, m (island arcs, not continents). */
 export const ARC_MAX_ELEVATION_M = 1000;

@@ -213,8 +213,11 @@ ceiling;
 **continent–continent** contact is collision — symmetric uplift on both
 sides, 4 cells wide, no subduction. Arc maturation into continental crust
 is **accretionary** (#59): an arc that builds above −500 m becomes
-continental only where it touches continental crust already, so new
-continent grows compactly at continent margins. At deep-time equilibrium
+continental only inside the accretionary belt — within `max(1, round(N/32))`
+cells of pre-existing continental crust, a fixed *physical* belt width
+(~300 km, real accreted-terrane scale) so the maturation frontier area
+stays resolution-independent — and new continent grows compactly at
+continent margins. At deep-time equilibrium
 most continental crust has been recycled through this term, so continents
 take the *shape* of the creation process — ungated maturation freckled
 along herringbone advection trails dissolved them into lace by ~3 Gyr.
