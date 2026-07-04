@@ -194,8 +194,20 @@ export const ARC_MATURATION_ELEVATION_M = -200;
 
 // --- Wilson cycles (#18) -----------------------------------------------------
 
-/** Live-plate count bounds: sutures pause at the floor, rifts at the ceiling. */
-export const MIN_PLATES = 4;
+/**
+ * Live-plate count bounds: sutures pause at the floor, rifts at the ceiling.
+ * The floor is 2 (a suture may never leave a single-plate world in one step);
+ * it was 4 until #59, when it was doing active harm: a world parked AT the
+ * floor has its collisions permanently barred from suturing, so they grind
+ * continent-on-continent forever (#16 consumption) — measured on seed 1,
+ * which sat at the floor from ~0.25 Gyr and bled continental crust from 40%
+ * of the sphere to 5.4% by 4.5 Gyr, at which point nothing could pass the
+ * rift gates and the world died. A high floor was protecting timeline
+ * variety before the #59 oversize rift pressure existed; now a post-suture
+ * monopoly re-fragments within a few tens of Myr, so collisions can be
+ * allowed to complete instead.
+ */
+export const MIN_PLATES = 2;
 export const MAX_PLATES = 16;
 
 /**
@@ -221,8 +233,15 @@ export const RIFT_MIN_AREA_FRACTION = 0.08;
  * post-suture mega-plates carry proportional ocean and never qualified
  * (seed 42 produced one rift in 2 Gyr). What rifts is a plate with a big
  * continent on it, however much ocean it also drags along.
+ *
+ * Lowered 0.05 -> 0.02 in #59: at 0.05 the gate could dead-lock the planet —
+ * a low-continent world (seed 1 fell to ~5% continental crust by ~3.5 Gyr)
+ * had no rift-eligible plate, so tectonics froze, and a frozen world can
+ * never rebuild crust (arc creation needs active margins). 2% of the sphere
+ * is still a real continent's worth of crust (~500 cells at N=64), but the
+ * gate can no longer starve the Wilson cycle to death.
  */
-export const RIFT_MIN_CONTINENTAL_AREA_FRACTION = 0.05;
+export const RIFT_MIN_CONTINENTAL_AREA_FRACTION = 0.02;
 
 /**
  * Time quantization of the rift decision hash, yr. Steps shorter than this
@@ -239,6 +258,70 @@ export const RIFT_DRAW_QUANTUM_YEARS = 1e4;
  * 300-500 Myr). Raised from 0.004 in the #21 acceptance tuning.
  */
 export const RIFT_PROBABILITY_PER_MYR = 0.006;
+
+/**
+ * Fraction of the rifting plate's cells carved off as the new fragment,
+ * drawn per rift in [min, max] (#59). A rift detaches a continental block —
+ * a Gondwana-piece fraction of its parent, not a 50/50 bisection: splitting a
+ * near-whole-sphere plate in half necessarily yields two antipodal
+ * hemispheres that can only shear about their shared pole and re-suture
+ * (measured: max plate area pinned at ~100% from ~1.2 Gyr with hemisphere
+ * splits). A sub-half fragment on a translating pole can instead sail across
+ * the remaining plate's ocean. Range chosen so a whole-sphere monopoly is
+ * broken below 60% within two rifts while fragments stay above
+ * RIFT_MIN_AREA_FRACTION-scale (rift-eligible themselves).
+ */
+export const RIFT_FRAGMENT_MIN_FRACTION = 0.2;
+export const RIFT_FRAGMENT_MAX_FRACTION = 0.4;
+
+/**
+ * A plate owning more than this fraction of the sphere is oversized (#59):
+ * its rift age gate (RIFT_MIN_AGE_YEARS) is waived and its per-Myr rift
+ * probability is multiplied by RIFT_OVERSIZE_PROBABILITY_FACTOR. This is the
+ * monopoly brake: a supercontinent's plate keeps growing by suture until one
+ * plate owns ~100% of cells (plate ≠ land — land is ~20%), after which no
+ * kinematics can show continents dispersing across an ocean. Physically:
+ * a sphere-spanning plate has no external slab pull balancing its interior
+ * heat, and real supercontinents self-break on ~100 Myr insulation
+ * timescales. 0.55 keeps ordinary large plates — up to and including a clean
+ * hemisphere (~50%) — on the normal draw; only genuinely monopolistic plates
+ * feel the pressure, and a whole-sphere plate still drops below the
+ * threshold within two fragment sheds.
+ */
+export const RIFT_OVERSIZE_AREA_FRACTION = 0.55;
+
+/**
+ * Number of candidate travel directions scored when a rift fragment picks
+ * its Euler pole (#59). Continents rift toward the ocean: each candidate
+ * azimuth's forward great-circle arc is scored by how much oceanic crust
+ * lies beyond the fragment's edge, and the most oceanic heading wins (ties
+ * to the first candidate; the candidate fan is phase-shifted by a per-rift
+ * hash draw so there is no global axis bias). Sailing into ocean instead of
+ * into the parent's continent is what keeps the fragment's leading edge
+ * subducting oceanic crust — continent-on-continent grinding during the
+ * post-rift lock was the dominant continental-area bleed (#16, #58).
+ */
+export const RIFT_AZIMUTH_CANDIDATES = 8;
+
+/**
+ * How far beyond the fragment's edge each candidate heading is sampled, rad
+ * (great-circle arc). ~1 rad ≈ 57° ≈ the width of a decent superocean
+ * basin; shorter scans see only the rift's own margin, longer ones wrap
+ * toward the antipode where every heading converges to the same terrain.
+ */
+export const RIFT_OCEAN_SCAN_RAD = 1.0;
+
+/** Sample count along each scanned heading (cell-scale steps at N=64). */
+export const RIFT_OCEAN_SCAN_SAMPLES = 12;
+
+/**
+ * Rift-probability multiplier for oversized plates (#59). With the base
+ * 0.006/Myr draw this gives an expected shedding wait of ~20 Myr, so a
+ * whole-sphere plate breaks below RIFT_OVERSIZE_AREA_FRACTION within
+ * ~40-100 Myr (a few keyframes) instead of persisting for the
+ * RIFT_MIN_AGE_YEARS + ~1/p ≈ 300-400 Myr normal cycle.
+ */
+export const RIFT_OVERSIZE_PROBABILITY_FACTOR = 8;
 
 /**
  * After a rift, neither new half can suture (to anyone) for this long, yr.

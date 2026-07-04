@@ -1,13 +1,21 @@
 import { describe, expect, it } from 'vitest';
-import { MIN_PLATES, RIFT_SUTURE_COOLDOWN_YEARS, SUTURE_AFTER_YEARS } from '../src/constants';
+import {
+  PLATE_OMEGA_MAX_RAD_PER_YR,
+  PLATE_OMEGA_MIN_RAD_PER_YR,
+  RIFT_FRAGMENT_MAX_FRACTION,
+  RIFT_FRAGMENT_MIN_FRACTION,
+  RIFT_MIN_AGE_YEARS,
+  RIFT_SUTURE_COOLDOWN_YEARS,
+  SUTURE_AFTER_YEARS,
+} from '../src/constants';
 import { EVENT_KINDS } from '../src/events';
 import { FIELD_NAMES, type Fields } from '../src/fields';
-import { cellCount, neighbors } from '../src/grid';
+import { cellCenterDirection, cellCount, neighbors, type Vec3 } from '../src/grid';
 import { hash2, hashString } from '../src/hash';
 import { createPlanetParams, type PlanetState } from '../src/state';
 import { tectonicsSystem } from '../src/systems/tectonics';
 import { riftPlate, wilsonSystem } from '../src/systems/wilson';
-import { dot3 } from '../src/vec';
+import { dot3, normalize3 } from '../src/vec';
 import { makePlate, runSystems, twoPlateState } from './helpers';
 
 /** A single continental plate covering the whole sphere — the seed-42/1
@@ -32,8 +40,10 @@ function wholeSpherePlate(): PlanetState {
 
 const N = 32;
 
-/** Two converging continental plates + zero-cell filler plates so the live
- *  count sits above/at the MIN_PLATES floor as each test needs. */
+/** Two converging continental plates + zero-cell filler plates (which the
+ *  wilson pass retires as consumed on its first step — see the retirement
+ *  suite; tests that need a live count above the floor must use plates that
+ *  own cells, e.g. collisionWorldWithCap). */
 function collisionWorld(fillerPlates: number): PlanetState {
   const s = twoPlateState(N, { pole: [1, 0, 0], omega: 4e-9 }, { pole: [1, 0, 0], omega: -4e-9 });
   const elevation = s.fields.elevation.slice();
@@ -45,13 +55,33 @@ function collisionWorld(fillerPlates: number): PlanetState {
   return { ...s, plates, fields: { ...s.fields, elevation } };
 }
 
+/** collisionWorld plus a small static south-polar cap owned by plate 2, so
+ *  three plates own cells and the 0/1 collision may suture above the
+ *  MIN_PLATES floor. */
+function collisionWorldWithCap(): PlanetState {
+  const s = collisionWorld(0);
+  const plateId = s.fields.plateId.slice();
+  for (let i = 0; i < cellCount(N); i++) {
+    if (cellCenterDirection(i, N)[2] <= -0.95) plateId[i] = 2;
+  }
+  return {
+    ...s,
+    plates: [...s.plates, makePlate({ pole: [0, 1, 0], omega: 0 })],
+    fields: { ...s.fields, plateId },
+  };
+}
+
 const WILSON_PIPELINE = [tectonicsSystem, wilsonSystem];
 
 describe('suturing (#18)', () => {
   it('merges two continents after sustained collision and stops their motion', () => {
-    // Enough fillers that the live count sits above MIN_PLATES: suturing allowed.
-    let state = collisionWorld(MIN_PLATES + 2);
-    state = runSystems(state, 80, WILSON_PIPELINE);
+    // The polar cap keeps three cell-owning plates, so the live count sits
+    // above the MIN_PLATES floor and the 0/1 collision may suture. 20 steps:
+    // past the ~16 Myr suture, but before the merged plate — now a
+    // near-sphere-spanning monopoly — sheds its first fragment under the #59
+    // oversize pressure, which would re-introduce boundaries and stress.
+    let state = collisionWorldWithCap();
+    state = runSystems(state, 20, WILSON_PIPELINE);
 
     const sutures = state.events.filter((e) => e.kind === EVENT_KINDS.plateSuture);
     expect(sutures.length).toBe(1);
@@ -59,25 +89,35 @@ describe('suturing (#18)', () => {
     expect([0, 1]).toContain(absorbed);
     expect([0, 1]).toContain(into);
 
-    // Loser is dead; every cell belongs to the winner; suture time respects
-    // the sustained-contact requirement.
+    // Loser is dead; every cell belongs to the winner or the untouched cap;
+    // suture time respects the sustained-contact requirement.
     expect(state.plates[absorbed!]!.alive).toBe(false);
-    for (const p of state.fields.plateId) expect(p).toBe(into);
+    for (const p of state.fields.plateId) expect([into, 2]).toContain(p);
     expect(sutures[0]!.timeYears).toBeGreaterThanOrEqual(SUTURE_AFTER_YEARS);
 
-    // With one owner there are no boundaries, so no stress anywhere.
-    for (const s of state.fields.boundaryStress) expect(s).toBe(0);
+    // Relative motion across the old 0/1 boundary is gone: it is interior
+    // now, and interior cells carry exactly zero stress. Only cells touching
+    // the still-separate cap plate may be stressed.
+    const nearCap = (i: number) =>
+      state.fields.plateId[i] === 2 ||
+      [...neighbors(i, N)].some((nb) => state.fields.plateId[nb] === 2);
+    for (let i = 0; i < cellCount(N); i++) {
+      if (!nearCap(i)) expect(state.fields.boundaryStress[i]).toBe(0);
+    }
   });
 
   it('is deterministic (identical event lists across runs)', () => {
     const run = () =>
-      runSystems(collisionWorld(MIN_PLATES + 2), 80, WILSON_PIPELINE).events.map((e) => ({ ...e }));
+      runSystems(collisionWorldWithCap(), 80, WILSON_PIPELINE).events.map((e) => ({ ...e }));
     expect(run()).toEqual(run());
   });
 
   it('respects the MIN_PLATES floor', () => {
-    // Fillers chosen so the live count sits exactly at MIN_PLATES: no suture.
-    const state = runSystems(collisionWorld(MIN_PLATES - 2), 80, WILSON_PIPELINE);
+    // Exactly MIN_PLATES cell-owning plates: the collision may not suture (a
+    // merge would leave a single-plate world). 50 steps keeps the window
+    // clear of the #59 oversize rift that fires once convergent ownership
+    // transfer pushes one hemisphere past the threshold (~90 steps in).
+    const state = runSystems(collisionWorld(0), 50, WILSON_PIPELINE);
     expect(state.events.filter((e) => e.kind === EVENT_KINDS.plateSuture)).toEqual([]);
     // Both plates still alive and still colliding.
     expect(state.plates[0]!.alive).toBe(true);
@@ -85,10 +125,25 @@ describe('suturing (#18)', () => {
   });
 });
 
-describe('rifting (#18)', () => {
+describe('consumed-plate retirement (#59)', () => {
+  it('retires alive plates that own no cells and emits plateConsumed', () => {
+    // The two filler plates own zero cells (fully "subducted" by construction);
+    // one wilson pass must retire them and record the events, leaving the
+    // cell-owning plates untouched.
+    const state = runSystems(collisionWorld(2), 1, WILSON_PIPELINE);
+    const consumed = state.events.filter((e) => e.kind === EVENT_KINDS.plateConsumed);
+    expect(consumed.map((e) => e.data!['plate'])).toEqual([2, 3]);
+    expect(state.plates[2]!.alive).toBe(false);
+    expect(state.plates[3]!.alive).toBe(false);
+    expect(state.plates[0]!.alive).toBe(true);
+    expect(state.plates[1]!.alive).toBe(true);
+  });
+});
+
+describe('rifting (#18, fragment kinematics #59)', () => {
   const riftSeed = hash2(7, hashString('wilsonRift'), 0);
 
-  it('splits a plate into two contiguous diverging halves and emits the event', () => {
+  it('carves a contiguous sub-half fragment that translates, and emits the event', () => {
     const state = collisionWorld(0);
     const before0 = countCells(state, 0);
     const next = riftPlate(state, 0, riftSeed);
@@ -99,30 +154,34 @@ describe('rifting (#18)', () => {
     expect(rifts.length).toBe(1);
     expect(rifts[0]!.data).toMatchObject({ plate: 0, newPlate: newId });
 
-    // Halves partition the old plate; both non-empty; total conserved.
+    // Fragment + remainder partition the old plate; total conserved.
     const a = countCells(next, 0);
     const b = countCells(next, newId);
     expect(a).toBeGreaterThan(0);
     expect(b).toBeGreaterThan(0);
     expect(a + b).toBe(before0);
 
-    // Both halves contiguous.
-    for (const plate of [0, newId]) expect(isContiguous(next, plate)).toBe(true);
+    // The fragment is a hash-drawn sub-half fraction of the plate (never a
+    // 50/50 bisection — see the whole-sphere test for why), and contiguous.
+    expect(b / before0).toBeGreaterThanOrEqual(RIFT_FRAGMENT_MIN_FRACTION * 0.9);
+    expect(b / before0).toBeLessThanOrEqual(RIFT_FRAGMENT_MAX_FRACTION * 1.1);
+    expect(isContiguous(next, newId)).toBe(true);
 
-    // Diverging kinematics: same pole, opposite senses, and the plates'
-    // relative motion opens the boundary between them.
+    // Translating kinematics: the fragment's pole is a finite unit vector
+    // perpendicular to its own centroid (the fragment sits on the equator of
+    // its rotation, so it translates across the sphere instead of spinning).
     const p0 = next.plates[0]!;
     const p2 = next.plates[newId]!;
-    // Poles must be finite unit vectors. (Antipodal-centroid splits, where the
-    // half-centroids' cross product vanishes, fall back to a deterministic
-    // perpendicular pole rather than being skipped — see the whole-sphere test.)
-    for (const plate of [p0, p2]) {
-      for (const c of plate.eulerPole) expect(Number.isFinite(c)).toBe(true);
-      expect(dot3(plate.eulerPole, plate.eulerPole)).toBeCloseTo(1, 10);
-      expect(Number.isFinite(plate.angularVelRadPerYr)).toBe(true);
-    }
-    expect(dot3(p0.eulerPole, p2.eulerPole)).toBeCloseTo(1, 10);
-    expect(Math.sign(p0.angularVelRadPerYr)).toBe(-Math.sign(p2.angularVelRadPerYr));
+    for (const c of p2.eulerPole) expect(Number.isFinite(c)).toBe(true);
+    expect(dot3(p2.eulerPole, p2.eulerPole)).toBeCloseTo(1, 10);
+    expect(dot3(p2.eulerPole, normalize3(plateCentroid(next, newId)))).toBeCloseTo(0, 6);
+    expect(p2.angularVelRadPerYr).toBeGreaterThanOrEqual(PLATE_OMEGA_MIN_RAD_PER_YR);
+    expect(p2.angularVelRadPerYr).toBeLessThanOrEqual(PLATE_OMEGA_MAX_RAD_PER_YR);
+
+    // The parent keeps its kinematics (the fragment leaves; the remaining
+    // plate is not recoiled), but its rift-age clock restarts.
+    expect(p0.eulerPole).toEqual(state.plates[0]!.eulerPole);
+    expect(p0.angularVelRadPerYr).toBe(state.plates[0]!.angularVelRadPerYr);
     expect(p0.createdAtYears).toBe(state.timeYears);
     expect(p2.createdAtYears).toBe(state.timeYears);
   });
@@ -146,12 +205,14 @@ describe('rifting (#18)', () => {
     expect(a.plates).toEqual(b.plates);
   });
 
-  it('rifts a whole-sphere plate so a supercontinent can break up', () => {
-    // Regression for the tectonic-death bug: when one plate covers the whole
-    // sphere, seedA/seedB are antipodal and the half-centroids' cross product
-    // vanishes (poleMag ~1e-15). The old zero-cross guard skipped the rift, so
-    // a merged supercontinent froze forever (seeds 42/1 died by ~1.5 Gyr). The
-    // fallback pole must let it split.
+  it('rifts a whole-sphere plate into a translating fragment, not antipodal halves', () => {
+    // The deep-time endgame (#59): when one plate covers the whole sphere, a
+    // 50/50 split necessarily yields two antipodal hemispheres — already
+    // maximally separated, they can only shear about their shared pole and
+    // re-suture, so the supercontinent never visibly disperses (and the
+    // pre-#57 cross-product pole was outright degenerate, freezing the world).
+    // The fragment rift must instead carve a sub-half piece whose pole
+    // translates it across the remaining plate.
     const state = wholeSpherePlate();
     const next = riftPlate(state, 0, riftSeed);
 
@@ -161,25 +222,57 @@ describe('rifting (#18)', () => {
     const newId = 1;
     expect(next.events.filter((e) => e.kind === EVENT_KINDS.plateRift).length).toBe(1);
 
-    // Both halves non-empty, contiguous, and conserve the sphere's cells.
+    // Fragment + remainder non-empty, conserve the sphere's cells, and the
+    // fragment is a contiguous sub-half piece — NOT a hemisphere.
     const a = countCells(next, 0);
     const b = countCells(next, newId);
     expect(a).toBeGreaterThan(0);
     expect(b).toBeGreaterThan(0);
     expect(a + b).toBe(cellCount(N));
-    for (const plate of [0, newId]) expect(isContiguous(next, plate)).toBe(true);
+    expect(isContiguous(next, newId)).toBe(true);
+    expect(b / cellCount(N)).toBeGreaterThanOrEqual(RIFT_FRAGMENT_MIN_FRACTION * 0.9);
+    expect(b / cellCount(N)).toBeLessThanOrEqual(RIFT_FRAGMENT_MAX_FRACTION * 1.1);
 
-    // Valid diverging kinematics: finite unit poles, opposite senses — no NaN
-    // from the degenerate cross product.
-    const p0 = next.plates[0]!;
+    // Translating kinematics: finite unit pole perpendicular to the
+    // fragment's centroid, non-zero speed — no NaN from any degeneracy.
     const p1 = next.plates[newId]!;
-    for (const plate of [p0, p1]) {
-      for (const c of plate.eulerPole) expect(Number.isFinite(c)).toBe(true);
-      expect(dot3(plate.eulerPole, plate.eulerPole)).toBeCloseTo(1, 10);
-      expect(Number.isFinite(plate.angularVelRadPerYr)).toBe(true);
-      expect(plate.angularVelRadPerYr).not.toBe(0);
-    }
-    expect(Math.sign(p0.angularVelRadPerYr)).toBe(-Math.sign(p1.angularVelRadPerYr));
+    for (const c of p1.eulerPole) expect(Number.isFinite(c)).toBe(true);
+    expect(dot3(p1.eulerPole, p1.eulerPole)).toBeCloseTo(1, 10);
+    expect(dot3(p1.eulerPole, normalize3(plateCentroid(next, newId)))).toBeCloseTo(0, 6);
+    expect(p1.angularVelRadPerYr).not.toBe(0);
+
+    // Parent motion is untouched by the departure.
+    expect(next.plates[0]!.eulerPole).toEqual(state.plates[0]!.eulerPole);
+    expect(next.plates[0]!.angularVelRadPerYr).toBe(state.plates[0]!.angularVelRadPerYr);
+  });
+});
+
+describe('oversize rift pressure (#59)', () => {
+  it('waives the rift age gate for a sphere-monopoly plate under the pipeline', () => {
+    // A freshly-created whole-sphere plate (age 0 — e.g. it just absorbed the
+    // last other plate) must NOT have to wait out RIFT_MIN_AGE_YEARS: the
+    // monopoly brake keeps drawing at boosted probability, so it sheds a
+    // fragment within a few tens of Myr.
+    const base = wholeSpherePlate();
+    const state: PlanetState = {
+      ...base,
+      plates: [{ ...base.plates[0]!, createdAtYears: base.timeYears }],
+    };
+    const steps = 100; // 100 Myr at the default step — well under the 150 Myr age gate
+    expect(steps * state.params.stepYears).toBeLessThan(RIFT_MIN_AGE_YEARS);
+    const after = runSystems(state, steps, WILSON_PIPELINE);
+    expect(after.events.filter((e) => e.kind === EVENT_KINDS.plateRift).length).toBeGreaterThan(0);
+  });
+
+  it('keeps the age gate for a plate at or below a hemisphere', () => {
+    // Control: two ~50% plates, both age 0. Neither is oversized, so the age
+    // gate holds and no rift fires. 50 steps: convergent advection slowly
+    // grows one hemisphere (ownership transfer), and it crosses the 55%
+    // oversize threshold near step ~90 for this seed — the window must end
+    // well before that so this stays a pure age-gate check.
+    const state = collisionWorld(0);
+    const after = runSystems(state, 50, WILSON_PIPELINE);
+    expect(after.events.filter((e) => e.kind === EVENT_KINDS.plateRift)).toEqual([]);
   });
 });
 
@@ -187,24 +280,25 @@ describe('post-rift suture cooldown (#57 follow-up)', () => {
   const riftSeed = hash2(7, hashString('wilsonRift'), 0);
 
   it('stamps both rift halves with a suture lock, leaving other plates free', () => {
-    const state = collisionWorld(MIN_PLATES + 2); // timeYears 0
+    const state = collisionWorld(0); // timeYears 0
     const rifted = riftPlate(state, 0, riftSeed);
     const lockUntil = state.timeYears + RIFT_SUTURE_COOLDOWN_YEARS;
-    // Parent remnant (0) and the new half (last slot) are locked; the untouched
-    // colliding plate (1) and the zero-cell fillers keep their free (0) lock.
+    // Parent remnant (0) and the fragment (last slot) are locked; the
+    // untouched colliding plate (1) keeps its free (0) lock.
     expect(rifted.plates[0]!.sutureLockUntilYears).toBe(lockUntil);
     expect(rifted.plates.at(-1)!.sutureLockUntilYears).toBe(lockUntil);
     expect(rifted.plates[1]!.sutureLockUntilYears).toBe(0);
   });
 
   it('bars a rifted half from re-suturing until the cooldown lifts', () => {
-    // collisionWorld(MIN_PLATES + 2) sutures within one SUTURE_AFTER_YEARS
-    // (~15 Myr) WITHOUT a rift — see the suturing suite. Rift plate 0 first and
-    // that same convergent contact must produce no suture for the whole lock
-    // window: a rifted margin is passive, not ready to re-collide. Run length
-    // is derived from the constant (well inside the lock, past SUTURE_AFTER)
-    // so the test tracks any retuning of RIFT_SUTURE_COOLDOWN_YEARS.
-    const rifted = riftPlate(collisionWorld(MIN_PLATES + 2), 0, riftSeed);
+    // A colliding pair sutures within one SUTURE_AFTER_YEARS (~15 Myr) — see
+    // the suturing suite. Rift plate 0 first: three plates own cells (above
+    // the floor), but 0 and the fragment carry the lock, so that same
+    // convergent contact must produce no suture for the whole lock window: a
+    // rifted margin is passive, not ready to re-collide. Run length is
+    // derived from the constant (well inside the lock, past SUTURE_AFTER) so
+    // the test tracks any retuning of RIFT_SUTURE_COOLDOWN_YEARS.
+    const rifted = riftPlate(collisionWorld(0), 0, riftSeed);
     const withinLock = Math.floor((0.6 * RIFT_SUTURE_COOLDOWN_YEARS) / rifted.params.stepYears);
     expect(withinLock * rifted.params.stepYears).toBeGreaterThan(SUTURE_AFTER_YEARS);
     const aliveBefore = rifted.plates.filter((p) => p.alive).length;
@@ -219,6 +313,19 @@ function countCells(state: PlanetState, plate: number): number {
   let n = 0;
   for (const p of state.fields.plateId) if (p === plate) n++;
   return n;
+}
+
+/** Sum of unit cell-center directions over the plate's cells (not normalized). */
+function plateCentroid(state: PlanetState, plate: number): Vec3 {
+  const c: [number, number, number] = [0, 0, 0];
+  for (let i = 0; i < state.fields.plateId.length; i++) {
+    if (state.fields.plateId[i] !== plate) continue;
+    const d = cellCenterDirection(i, N);
+    c[0] += d[0];
+    c[1] += d[1];
+    c[2] += d[2];
+  }
+  return c;
 }
 
 function isContiguous(state: PlanetState, plate: number): boolean {

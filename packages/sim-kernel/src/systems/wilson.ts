@@ -22,15 +22,26 @@
  * decision draw is `hash3(seed', plate, timeQuantum)` — deterministic and
  * independent of any other system's PRNG consumption (documented deviation
  * from the issue's rng.fork sketch: a fork taken inside a pure system would
- * restart its stream every step). The plate splits by two-seed jittered
- * Dijkstra (most-distant seed pair, same machinery as the #9 partition);
- * the halves get opposite rotations about the pole normal to both centroids,
- * so they separate and a new ocean opens along the rift.
+ * restart its stream every step). An OVERSIZED plate (area above
+ * RIFT_OVERSIZE_AREA_FRACTION) skips the age gate and draws at a boosted
+ * probability — the monopoly brake that keeps one plate from owning the
+ * sphere for geological ages (#59). The rift carves a contiguous continental
+ * FRAGMENT (a hash-drawn RIFT_FRAGMENT_MIN/MAX_FRACTION of the plate, grown
+ * by jittered Dijkstra from a continental seed cell) and gives it an Euler
+ * pole perpendicular to its own centroid, so the fragment TRANSLATES across
+ * the sphere — new ocean opens along its trailing edge while its leading
+ * edge subducts the ocean ahead, Pangaea-style dispersal. The parent keeps
+ * its kinematics. (The previous two-seed 50/50 split gave two antipodal
+ * hemispheres whenever the plate was sphere-spanning; already maximally
+ * separated, they could only shear about the shared pole and re-suture, so
+ * deep time was supercontinent-locked.)
  *
  * Both directions emit events (plateSuture / plateRift) and respect the
  * MIN_PLATES / MAX_PLATES live-count bounds. At most one suture and one
  * rift fire per step (deterministic first-eligible order), which keeps each
- * reorganization reviewable in the event log.
+ * reorganization reviewable in the event log. Plates whose last cell was
+ * consumed by advection are retired here each step (plateConsumed) so the
+ * live count those bounds gate on stays honest (#59).
  */
 
 import {
@@ -39,10 +50,17 @@ import {
   PLATE_FILL_JITTER,
   PLATE_OMEGA_MAX_RAD_PER_YR,
   PLATE_OMEGA_MIN_RAD_PER_YR,
+  RIFT_AZIMUTH_CANDIDATES,
   RIFT_DRAW_QUANTUM_YEARS,
+  RIFT_FRAGMENT_MAX_FRACTION,
+  RIFT_FRAGMENT_MIN_FRACTION,
+  RIFT_OCEAN_SCAN_RAD,
+  RIFT_OCEAN_SCAN_SAMPLES,
   RIFT_MIN_AGE_YEARS,
   RIFT_MIN_AREA_FRACTION,
   RIFT_MIN_CONTINENTAL_AREA_FRACTION,
+  RIFT_OVERSIZE_AREA_FRACTION,
+  RIFT_OVERSIZE_PROBABILITY_FACTOR,
   RIFT_PROBABILITY_PER_MYR,
   RIFT_SUTURE_COOLDOWN_YEARS,
   SUTURE_AFTER_YEARS,
@@ -50,7 +68,7 @@ import {
   ACTIVE_MARGIN_STRESS_M_PER_YR,
 } from '../constants';
 import { EVENT_KINDS, type SimEvent } from '../events';
-import { cellCenterTable, cellCount, neighborTable, type Vec3 } from '../grid';
+import { cellCenterTable, cellCount, directionToIndex, neighborTable, type Vec3 } from '../grid';
 import { hash2, hash3, hashString } from '../hash';
 import { TriHeap } from '../heap';
 import type { PlateRecord } from '../plates';
@@ -81,6 +99,37 @@ function applyWilson(state: PlanetState, dtYears: number): PlanetState {
     const s = stats[plateId[i]!]!;
     s.cells++;
     s.continental += crustType[i]!;
+  }
+
+  // Retire fully-consumed plates (#59): advection can eat a plate's last cell
+  // (subduction/override transfers ownership one cell at a time, and nothing
+  // else notices). Leaving such a plate `alive` inflates the live count that
+  // gates MIN_PLATES/MAX_PLATES — measured deep-time runs accumulated zombie
+  // plates that held the suture floor "satisfied" while only two plates
+  // actually owned crust. Death keeps the slot (plateId stability contract).
+  const consumed: number[] = [];
+  for (let p = 0; p < state.plates.length; p++) {
+    if (state.plates[p]!.alive && stats[p]!.cells === 0) consumed.push(p);
+  }
+  if (consumed.length > 0) {
+    state = {
+      ...state,
+      plates: state.plates.map((rec, idx) =>
+        consumed.includes(idx)
+          ? { ...rec, alive: false, angularVelRadPerYr: 0, accumulatedRadians: 0 }
+          : rec,
+      ),
+      events: [
+        ...state.events,
+        ...consumed.map(
+          (p): SimEvent => ({
+            timeYears: state.timeYears,
+            kind: EVENT_KINDS.plateConsumed,
+            data: { plate: p },
+          }),
+        ),
+      ],
+    };
   }
   const liveCount = state.plates.filter((p) => p.alive).length;
 
@@ -152,10 +201,15 @@ function applyWilson(state: PlanetState, dtYears: number): PlanetState {
       const plate = next.plates[p]!;
       const s = stats[p];
       if (!plate.alive || !s || s.cells === 0) continue;
-      if (state.timeYears - plate.createdAtYears < RIFT_MIN_AGE_YEARS) continue;
+      // Oversized plates (#59) skip the age gate and draw boosted: a plate
+      // that owns most of the sphere must keep shedding fragments, or the
+      // world re-locks into the whole-sphere monopoly.
+      const oversized = s.cells / count > RIFT_OVERSIZE_AREA_FRACTION;
+      if (!oversized && state.timeYears - plate.createdAtYears < RIFT_MIN_AGE_YEARS) continue;
       if (s.cells / count < RIFT_MIN_AREA_FRACTION) continue;
       if (s.continental / count < RIFT_MIN_CONTINENTAL_AREA_FRACTION) continue;
-      if (hash3(riftSeed, p, timeQuantum, 0) / 4294967296 >= pRift) continue;
+      const pDraw = oversized ? pRift * RIFT_OVERSIZE_PROBABILITY_FACTOR : pRift;
+      if (hash3(riftSeed, p, timeQuantum, 0) / 4294967296 >= pDraw) continue;
       const rifted = riftPlate(next, p, riftSeed);
       reorganized = reorganized || rifted !== next;
       next = rifted;
@@ -250,9 +304,21 @@ function suture(
 }
 
 /**
- * Split plate p in two along a jittered two-seed Dijkstra; halves diverge.
- * Exported for direct unit testing (the probabilistic trigger above is
- * exercised by long-run integration tests instead).
+ * Rift plate p by carving off a contiguous continental fragment that then
+ * translates across the sphere (#59). Exported for direct unit testing (the
+ * probabilistic trigger above is exercised by long-run integration tests).
+ *
+ * The fragment is grown by jittered Dijkstra from a continental seed cell to
+ * a hash-drawn RIFT_FRAGMENT_MIN/MAX_FRACTION of the plate, and its Euler
+ * pole is perpendicular to its own centroid — the rotation that maximally
+ * TRANSLATES a spherical cap rather than spinning it in place. Its trailing
+ * edge opens young ocean while its leading edge subducts the ocean ahead,
+ * which is how real supercontinent fragments (India, the Gondwana pieces)
+ * disperse. The parent keeps its kinematics: rifting is the fragment pulling
+ * away, not the whole remaining sphere recoiling. A 50/50 split (the
+ * previous scheme) cannot do this for a sphere-spanning plate — its halves
+ * are antipodal, already maximally separated, and can only shear about a
+ * shared pole and re-suture.
  */
 export function riftPlate(state: PlanetState, p: number, riftSeed: number): PlanetState {
   const N = state.params.gridN;
@@ -260,56 +326,67 @@ export function riftPlate(state: PlanetState, p: number, riftSeed: number): Plan
   const centers = cellCenterTable(N);
   const nbTable = neighborTable(N);
   const plateId = state.fields.plateId.slice();
+  const { crustType } = state.fields;
 
-  // Seed A: min-hash cell of the plate. Seed B: the plate cell farthest
-  // from A (ties to the lower index). Both pure functions of the state.
+  // Fragment seed: min-hash continental cell of the plate — rifts nucleate
+  // in continental lithosphere, and a fragment carved around a continent is
+  // a block that can sail. Plates with no continental cell (unit-test
+  // states; the pipeline gate requires continental area) fall back to the
+  // min-hash over all their cells.
   let seedA = -1;
   let bestHash = Infinity;
+  let plateCells = 0;
+  let seedFallback = -1;
+  let bestFallbackHash = Infinity;
   for (let i = 0; i < count; i++) {
     if (plateId[i] !== p) continue;
+    plateCells++;
     const h = hash2(riftSeed, i, 1);
-    if (h < bestHash) {
+    if (h < bestFallbackHash) {
+      bestFallbackHash = h;
+      seedFallback = i;
+    }
+    if (crustType[i] === 1 && h < bestHash) {
       bestHash = h;
       seedA = i;
     }
   }
-  let seedB = -1;
-  let bestDot = Infinity;
-  for (let i = 0; i < count; i++) {
-    if (plateId[i] !== p) continue;
-    const d =
-      centers[i * 3]! * centers[seedA * 3]! +
-      centers[i * 3 + 1]! * centers[seedA * 3 + 1]! +
-      centers[i * 3 + 2]! * centers[seedA * 3 + 2]!;
-    if (d < bestDot) {
-      bestDot = d;
-      seedB = i;
-    }
-  }
-  if (seedA === seedB) return state; // degenerate single-cell plate: skip
+  if (seedA === -1) seedA = seedFallback;
+  if (plateCells < 2) return state; // degenerate single-cell plate: skip
 
-  // Two-source jittered Dijkstra restricted to the plate (same recipe as the
-  // initial partition): label 0 stays plate p, label 1 becomes the new plate.
-  const label = new Int8Array(count).fill(-1);
+  const newId = state.plates.length;
+  // Fragment size: a sub-half fraction of the plate, drawn per rift (the
+  // hash input newId is unique per rift because dead slots are never
+  // reclaimed).
+  const sizeDraw = hash2(riftSeed, newId, 4) / 4294967296;
+  const fraction =
+    RIFT_FRAGMENT_MIN_FRACTION +
+    sizeDraw * (RIFT_FRAGMENT_MAX_FRACTION - RIFT_FRAGMENT_MIN_FRACTION);
+  const targetCells = Math.min(plateCells - 1, Math.max(1, Math.round(fraction * plateCells)));
+
+  // Single-source jittered Dijkstra restricted to the plate (same recipe as
+  // the #9 partition, distinct hash stream: salt 2), stopped at the target
+  // size. The fragment is contiguous by construction. If the plate itself is
+  // disconnected (advection can strand pieces) the fragment is capped at the
+  // seed's component.
+  const label = new Int8Array(count); // 1 = fragment
   const heap = new TriHeap();
   heap.push(0, seedA, 0);
-  heap.push(0, seedB, 1);
-  while (heap.size > 0) {
-    const [cost, cell, side] = heap.pop();
-    if (label[cell] !== -1) continue;
-    label[cell] = side;
+  let claimed = 0;
+  while (heap.size > 0 && claimed < targetCells) {
+    const [cost, cell] = heap.pop();
+    if (label[cell] === 1) continue;
+    label[cell] = 1;
+    claimed++;
     for (let k = 0; k < 4; k++) {
       const nb = nbTable[cell * 4 + k]!;
-      if (plateId[nb] === p && label[nb] === -1) {
-        // Same recipe as the #9 partition (PLATE_FILL_JITTER), distinct
-        // hash stream (salt 2).
-        heap.push(cost + 1 + PLATE_FILL_JITTER * (hash2(riftSeed, nb, 2) / 4294967296), nb, side);
+      if (plateId[nb] === p && label[nb] === 0) {
+        heap.push(cost + 1 + PLATE_FILL_JITTER * (hash2(riftSeed, nb, 2) / 4294967296), nb, 1);
       }
     }
   }
+  if (claimed === 0 || claimed === plateCells) return state; // degenerate split: skip
 
-  const newId = state.plates.length;
-  const centroidA: Vec3 = [0, 0, 0];
   const centroidB: Vec3 = [0, 0, 0];
   let contA = 0;
   let cellsA = 0;
@@ -317,54 +394,86 @@ export function riftPlate(state: PlanetState, p: number, riftSeed: number): Plan
   let cellsB = 0;
   for (let i = 0; i < count; i++) {
     if (plateId[i] !== p) continue;
-    const target = label[i] === 1 ? centroidB : centroidA;
-    target[0] += centers[i * 3]!;
-    target[1] += centers[i * 3 + 1]!;
-    target[2] += centers[i * 3 + 2]!;
     if (label[i] === 1) {
       plateId[i] = newId;
+      centroidB[0] += centers[i * 3]!;
+      centroidB[1] += centers[i * 3 + 1]!;
+      centroidB[2] += centers[i * 3 + 2]!;
       cellsB++;
-      contB += state.fields.crustType[i]!;
+      contB += crustType[i]!;
     } else {
       cellsA++;
-      contA += state.fields.crustType[i]!;
+      contA += crustType[i]!;
     }
   }
-  if (cellsA === 0 || cellsB === 0) return state; // degenerate split: skip
 
-  // Diverging kinematics: rotate both halves about a pole so they separate
-  // along the rift. The natural choice is the pole normal to the two
-  // half-centroids (opposite rotations then open the boundary between them).
-  // But when the halves are (near-)antipodal that cross product vanishes and
-  // can't pick a pole — and that is *always* the case when the rifting plate
-  // covers the whole sphere, because seedB is chosen as seedA's most-distant
-  // (antipodal) cell, so the two hemispheres' centroids are anti-parallel to
-  // machine precision (measured poleMag ~1e-15). This branch previously
-  // skipped the rift, which froze any supercontinent forever — a whole-sphere
-  // plate could never break up, so seeds 42/1 went tectonically dead by
-  // ~1.5 Gyr. Fall back to a deterministic pole in the rift's dividing-circle
-  // plane (perpendicular to centroidA): opposite rotations about it still
-  // shear the halves apart along their shared boundary (relative velocity
-  // 2ω·(pole×r) is non-zero there), so the boundary reactivates and Wilson
-  // cycling resumes. Real supercontinents break up; this lets ours.
-  const rawPole = cross3(normalize3(centroidA), normalize3(centroidB));
-  const poleMag = Math.sqrt(rawPole[0] ** 2 + rawPole[1] ** 2 + rawPole[2] ** 2);
-  const pole: Vec3 =
-    poleMag < 1e-9
-      ? perpendicular3(centroidA)
-      : [rawPole[0] / poleMag, rawPole[1] / poleMag, rawPole[2] / poleMag];
+  // Translating kinematics: an Euler pole perpendicular to the fragment's
+  // centroid puts the fragment on the equator of its own rotation, so it
+  // translates across the surface at ω·R instead of spinning in place.
+  // Guard: a pathologically balanced fragment can have a near-zero centroid
+  // sum; its seed cell's direction is always a valid stand-in.
+  const cMag = Math.sqrt(centroidB[0] ** 2 + centroidB[1] ** 2 + centroidB[2] ** 2);
+  const c: Vec3 =
+    cMag < 1e-9
+      ? [centers[seedA * 3]!, centers[seedA * 3 + 1]!, centers[seedA * 3 + 2]!]
+      : [centroidB[0] / cMag, centroidB[1] / cMag, centroidB[2] / cMag];
+  const u = perpendicular3(c);
+  const v = cross3(c, u);
+
+  // Direction of travel: continents rift toward the ocean. Score a fan of
+  // candidate azimuths (phase-shifted per rift so no global axis is
+  // favored) by the oceanic-crust count along the forward great circle
+  // between the fragment's edge and RIFT_OCEAN_SCAN_RAD beyond it, and sail
+  // the most oceanic heading. A fragment sent into open ocean subducts
+  // oceanic crust ahead of it; sent into the parent's continent it would
+  // grind continent-on-continent through the whole post-rift lock — the
+  // dominant continental-area bleed (#16/#58). Deterministic: pure function
+  // of the fields and the hash stream.
+  const phase = hash2(riftSeed, newId, 5) / 4294967296;
+  // Angular radius of a spherical cap covering the fragment's share of the
+  // sphere: cos θ = 1 − 2·fraction. Scanning starts at the cap edge.
+  const capCos = Math.max(-1, Math.min(1, 1 - (2 * cellsB) / count));
+  const edgeRad = Math.acos(capCos);
+  let bestScore = -1;
+  let pole: Vec3 = u;
+  for (let k = 0; k < RIFT_AZIMUTH_CANDIDATES; k++) {
+    const azimuth = ((phase + k / RIFT_AZIMUTH_CANDIDATES) % 1) * 2 * Math.PI;
+    const cand: Vec3 = [
+      Math.cos(azimuth) * u[0] + Math.sin(azimuth) * v[0],
+      Math.cos(azimuth) * u[1] + Math.sin(azimuth) * v[1],
+      Math.cos(azimuth) * u[2] + Math.sin(azimuth) * v[2],
+    ];
+    // Unit travel direction of the fragment centroid under +ω about cand.
+    const d = cross3(cand, c);
+    let score = 0;
+    for (let s = 1; s <= RIFT_OCEAN_SCAN_SAMPLES; s++) {
+      const delta = edgeRad + (s / RIFT_OCEAN_SCAN_SAMPLES) * RIFT_OCEAN_SCAN_RAD;
+      const cosD = Math.cos(delta);
+      const sinD = Math.sin(delta);
+      const cell = directionToIndex(
+        [cosD * c[0] + sinD * d[0], cosD * c[1] + sinD * d[1], cosD * c[2] + sinD * d[2]],
+        N,
+      );
+      if (label[cell] !== 1 && crustType[cell] === 0) score++;
+    }
+    if (score > bestScore) {
+      bestScore = score;
+      pole = cand;
+    }
+  }
   const omegaRift =
     PLATE_OMEGA_MIN_RAD_PER_YR +
     (hash2(riftSeed, newId, 3) / 4294967296) *
       (PLATE_OMEGA_MAX_RAD_PER_YR - PLATE_OMEGA_MIN_RAD_PER_YR);
 
+  // Parent keeps pole/velocity (the fragment leaves; the remaining plate is
+  // not recoiled), but its rift-age clock restarts and both sides get the
+  // post-rift suture lock so the new passive margin can open before it may
+  // collide again.
   const plates: PlateRecord[] = state.plates.map((rec, idx) =>
     idx === p
       ? {
           ...rec,
-          eulerPole: pole,
-          angularVelRadPerYr: -omegaRift,
-          accumulatedRadians: 0,
           createdAtYears: state.timeYears, // rift-age cooldown restarts
           sutureLockUntilYears: state.timeYears + RIFT_SUTURE_COOLDOWN_YEARS,
           continentalFraction: contA / cellsA,
