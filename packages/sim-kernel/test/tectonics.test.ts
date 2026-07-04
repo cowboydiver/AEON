@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { oceanicDepthForAge } from '../src/bathymetry';
 import { FIELD_NAMES } from '../src/fields';
-import { directionToIndex, neighbors } from '../src/grid';
+import { cellCenterDirection, directionToIndex, neighbors } from '../src/grid';
 import { hashFloat32Array } from '../src/hash';
 import { createRng } from '../src/rng';
 import { createInitialState, createPlanetParams } from '../src/state';
@@ -125,10 +125,15 @@ describe('tectonics advection', () => {
       if (end.fields.crustType[i] === 0) {
         youngOcean++;
         minAge = Math.min(minAge, end.fields.crustAge[i]!);
-        // Oceanic crust obeys the half-space cooling curve (float32 rounding).
-        expect(
-          Math.abs(end.fields.elevation[i]! - oceanicDepthForAge(end.fields.crustAge[i]!)),
-        ).toBeLessThan(0.5);
+        // Oceanic crust obeys the half-space cooling curve. Subsidence is
+        // rate-bounded (OCEAN_RELIEF_RELAX_M_PER_YR, #59), and the curve's
+        // first ~3 Myr subside faster than the bound, so the youngest crust
+        // may lag the curve by up to ~150 m before it catches up; settled
+        // crust must sit on the curve to float32 rounding.
+        const deviation = Math.abs(
+          end.fields.elevation[i]! - oceanicDepthForAge(end.fields.crustAge[i]!),
+        );
+        expect(deviation).toBeLessThan(end.fields.crustAge[i]! < 5e6 ? 200 : 0.5);
         // All ocean here was created during the run, so it is younger than the run.
         expect(end.fields.crustAge[i]).toBeLessThan(61e6);
       }
@@ -156,5 +161,118 @@ describe('tectonics advection', () => {
     runSystems(state, 20);
     expect(FIELD_NAMES.map((n) => hashFloat32Array(state.fields[n]))).toEqual(before);
     expect(state.plates.map((p) => p.accumulatedRadians)).toEqual(acc);
+  });
+});
+
+describe('continental conservation: the pickPushTarget -1 leak is bounded (#59)', () => {
+  // The bulldozer's one documented exception: a displaced continental cell
+  // with NO same-plate 4-neighbor has nowhere to go and is genuinely
+  // consumed (pickPushTarget returns -1). These tests pin down that the
+  // leak is exactly that corner — one column, once, only when the salient
+  // is fully surrounded — and that the ordinary escape path conserves
+  // continental cell count exactly.
+
+  const continentalCells = (crustType: Float32Array): number => {
+    let n = 0;
+    for (const c of crustType) if (c === 1) n++;
+    return n;
+  };
+
+  /**
+   * Plate 0 (z >= 0, all continental) shears eastward about +Z along the
+   * static plate-1 hemisphere. One plate-0 cell near +X is repainted as a
+   * static plate-1 continental salient with elevation 777. Returns the
+   * salient index and, for the escape variant, the same-plate oceanic cell.
+   */
+  function salientWorld(isolated: boolean): {
+    state: ReturnType<typeof twoPlateState>;
+    salient: number;
+    escape: number;
+  } {
+    const state = twoPlateState(N, { pole: [0, 0, 1], omega: 8e-9 }, { pole: [0, 1, 0], omega: 0 });
+    const { plateId } = state.fields;
+    // The plate-0 boundary cell nearest +X (has a plate-1 neighbor).
+    let boundary = -1;
+    let bestDot = -Infinity;
+    for (let i = 0; i < plateId.length; i++) {
+      if (plateId[i] !== 0) continue;
+      let touchesP1 = false;
+      for (const nb of neighbors(i, N)) if (plateId[nb] === 1) touchesP1 = true;
+      if (!touchesP1) continue;
+      const d = cellCenterDirection(i, N)[0];
+      if (d > bestDot) {
+        bestDot = d;
+        boundary = i;
+      }
+    }
+    // Isolated salient: a neighbor of the boundary cell with no plate-1
+    // neighbor of its own (one row deeper into plate 0). Escape salient:
+    // the boundary cell itself, whose plate-1 neighbor becomes the
+    // same-plate oceanic ground the displaced column re-roots on.
+    let salient = boundary;
+    if (isolated) {
+      salient = -1;
+      for (const nb of neighbors(boundary, N)) {
+        if (plateId[nb] !== 0) continue;
+        let touchesP1 = false;
+        for (const nb2 of neighbors(nb, N)) if (plateId[nb2] === 1) touchesP1 = true;
+        if (!touchesP1) salient = nb;
+      }
+      expect(salient).not.toBe(-1);
+    }
+    let escape = -1;
+    if (!isolated) {
+      for (const nb of neighbors(salient, N)) if (plateId[nb] === 1) escape = nb;
+      expect(escape).not.toBe(-1);
+    }
+    const plateIdNew = plateId.slice();
+    const elevation = state.fields.elevation.slice();
+    const crustType = state.fields.crustType.slice();
+    const crustAge = state.fields.crustAge.slice();
+    plateIdNew[salient] = 1;
+    elevation[salient] = 777;
+    if (escape !== -1) {
+      crustType[escape] = 0; // oceanic same-plate ground: the escape route
+      crustAge[escape] = 60e6;
+      elevation[escape] = oceanicDepthForAge(60e6);
+    }
+    if (isolated) {
+      // The precondition the leak needs: no same-plate neighbor at all.
+      for (const nb of neighbors(salient, N)) expect(plateIdNew[nb]).toBe(0);
+    }
+    return {
+      state: { ...state, fields: { ...state.fields, plateId: plateIdNew, elevation, crustType, crustAge } },
+      salient,
+      escape,
+    };
+  }
+
+  it('a fully-surrounded salient loses exactly its one column, never more', () => {
+    const { state, salient } = salientWorld(true);
+    const before = continentalCells(state.fields.crustType);
+    const end = runSystems(state, 40);
+    expect(end.plates[0]!.advectionCount).toBeGreaterThan(0);
+    // The mover overrode the salient (it is no longer plate 1).
+    expect(end.fields.plateId[salient]).toBe(0);
+    // The displaced column is gone — its marker elevation survives nowhere.
+    for (const e of end.fields.elevation) expect(e).not.toBe(777);
+    // Bounded: continental cell count dropped by exactly the one dropped
+    // column (the advecting hole's young-ocean wake swaps ownership with
+    // continental ground content-conservingly; it does not compound).
+    expect(continentalCells(end.fields.crustType)).toBe(before - 1);
+  });
+
+  it('a salient with same-plate oceanic ground escapes: area conserved, column intact', () => {
+    const { state, salient, escape } = salientWorld(false);
+    const before = continentalCells(state.fields.crustType);
+    const end = runSystems(state, 40);
+    expect(end.plates[0]!.advectionCount).toBeGreaterThan(0);
+    expect(end.fields.plateId[salient]).toBe(0);
+    // The displaced column re-rooted on its plate's oceanic neighbor.
+    expect(end.fields.crustType[escape]).toBe(1);
+    expect(end.fields.elevation[escape]).toBe(777);
+    // Conserved exactly: ocean lost one cell to the re-root, the wake took
+    // one back — the continental budget never shrinks on this path.
+    expect(continentalCells(end.fields.crustType)).toBe(before);
   });
 });

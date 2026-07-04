@@ -118,8 +118,12 @@ describe('codec container (#22)', () => {
         expect(Math.abs(a)).toBeLessThanOrEqual(half + 1e-6); // only hair's-breadth cells
       }
     }
-    // A tiny handful at most; assert it never becomes a visible coastline shift.
-    expect(flipped, 'coastline cells flipped by quantization').toBeLessThan(count * 0.001);
+    // A tiny handful at most; assert it never becomes a visible coastline
+    // shift. 0.3%: since oceanic relief decays at a bounded rate instead of
+    // snapping to the age-depth curve (#59 arc memory), dying arcs traverse
+    // the 0 m datum over several steps, so a few more hair's-breadth cells
+    // exist at any instant — each still bounded by the sub-step check above.
+    expect(flipped, 'coastline cells flipped by quantization').toBeLessThan(count * 0.003);
   });
 });
 

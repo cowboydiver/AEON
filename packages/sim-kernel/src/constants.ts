@@ -9,8 +9,22 @@
  * stale history. Distinct from HISTORY_FORMAT_VERSION (codec byte layout).
  * Started at 1 for Phase 2; the #57 rift fix and the post-rift suture cooldown
  * did not regenerate goldens, so no bump was owed there.
+ * 2 — the #59 deep-time dispersal pass: fragment-carving rift kinematics +
+ *     oversize rift pressure (deep-time-only; goldens untouched), and the
+ *     crust-budget/coherence pass that IS golden-changing — continental
+ *     conservation in advection (bulldozer push-back), accretionary arc
+ *     maturation, micro-continent foundering, and rate-bounded oceanic
+ *     relief relaxation all act within the 10-step golden window. Goldens
+ *     regenerated deliberately in the same commit; cached histories must
+ *     invalidate.
+ * 3 — creation retune for the fine-grid land dip (#59 follow-up): the
+ *     per-cell arc rate scales max(1, N/32) (arc flux is per unit margin
+ *     length; the boundary line it lands on thins ∝ 1/N) and the base rate
+ *     rose 1e-3 -> 1.25e-3. Field and codec goldens regenerated
+ *     deliberately in the same commit; cached histories at every grid must
+ *     invalidate.
  */
-export const KERNEL_BEHAVIOR_VERSION = 1;
+export const KERNEL_BEHAVIOR_VERSION = 3;
 
 /** IUGG mean Earth radius, m. */
 export const EARTH_RADIUS_M = 6.371e6;
@@ -124,6 +138,23 @@ export const OCEAN_SUBSIDENCE_K_M_PER_SQRT_YR = 0.35;
 export const OCEAN_ABYSSAL_DEPTH_M = -6000;
 
 /**
+ * Rate at which inactive oceanic relief relaxes toward the age-depth curve,
+ * m/yr (#59). Replaces the Phase-1 hard-set ("dead arcs sink instantly"):
+ * excess relief (an abandoned volcanic arc) decays and deficit relief (an
+ * abandoned trench) fills at this bounded rate instead of snapping to the
+ * curve in one step. 2e-4 m/yr (200 m/Myr) is well above the steady
+ * subsidence increment (~145 m/Myr at 1 Myr crust, falling with age), so
+ * ordinary seafloor still tracks the curve to within a step — but a
+ * half-built arc now survives the margin flickering off it (quantized
+ * advection does this constantly — the herringbone), letting arcs finish
+ * maturing. Without this memory, arc creation weakened with grid resolution
+ * (margins dwell on a cell ∝ 1/N) and the continental budget starved at
+ * N=128. A dead arc at +800 m now founders over ~4 Myr — a real guyot
+ * timescale, not a keyframe pop.
+ */
+export const OCEAN_RELIEF_RELAX_M_PER_YR = 2e-4;
+
+/**
  * Initial crustAge of continental crust, yr. Order of Archean cratons /
  * continental shields; only relevance in-kernel is being far older than any
  * oceanic crust so age comparisons never confuse the two.
@@ -174,11 +205,43 @@ export const OROGENY_MAX_ELEVATION_M = 9000;
 export const TRENCH_EXTRA_DEPTH_M = 2500;
 
 /**
- * Island-arc crust growth rate at reference convergence, m/yr. Arcs climb
- * from abyssal depth toward the surface over ~20-30 Myr of subduction
- * (order of real arc construction timescales).
+ * Island-arc crust growth rate at reference convergence, m/yr. ~1 mm/yr at
+ * full reference speed builds an arc from abyssal depth to the maturation
+ * threshold in ~10-15 Myr of sustained subduction — the fast end of real
+ * arc construction (Izu-Bonin order). Raised 4e-4 -> 1e-3 in #59 to
+ * rebalance creation after maturation became accretionary (continent-
+ * adjacent only), then 1e-3 -> 1.25e-3 in the #59 follow-up retune: with
+ * the ∝N scaling below restoring per-pass climb, N=128 deep-time land
+ * still grazed 9.5-9.9% (floor 10%) — the last quarter-turn on the base
+ * rate. At and below the reference grid growth is largely saturated
+ * against the maturation/ARC_MAX clamps (one margin pass fully matures a
+ * cell), so the increase acts mainly on fine grids.
  */
-export const ARC_GROWTH_RATE_M_PER_YR = 4e-4;
+export const ARC_GROWTH_RATE_M_PER_YR = 1.25e-3;
+
+/**
+ * Reference grid for arc creation, the pivot of its two resolution
+ * scalings (#59 follow-up). Both exist because creation is written in
+ * per-cell terms while the physics is per-length: (1) arc magmatism
+ * supplies a crust flux per unit margin length, concentrated onto a
+ * one-cell-wide boundary line whose width shrinks ∝ 1/N — and a migrating
+ * margin dwells on a cell for a time ∝ that width — so the per-cell
+ * elevation rate scales max(1, N/reference); (2) the accretionary belt in
+ * which a mature arc counts as continent-adjacent has a fixed *physical*
+ * width (~one reference cell, ~300 km — the scale of real accreted
+ * terrane belts), so the maturation gate radius is max(1,
+ * round(N/reference)) cells. Without these, creation efficiency fell with
+ * resolution — the measured deep-time land dip at fine grids (#59
+ * residual: N=16 healthy at 23-28% land min, N=64 ~10%, N=128 6.6%; rate
+ * scaling alone recovered ~9.5-10%, and the frontier-area term (2) is the
+ * remainder: matured area per unit time goes as frontier cells × cell
+ * area ∝ (N·belt)/N², which only stays resolution-independent if belt ∝
+ * N). max(1, ·) because at or below the reference grid a margin pass
+ * already saturates against the maturation/ARC_MAX ceilings and the belt
+ * is already one cell — scaling down would only starve grids measured
+ * healthy.
+ */
+export const ARC_CREATION_REFERENCE_GRID_N = 32;
 
 /** Ceiling for volcanic-arc elevation, m (island arcs, not continents). */
 export const ARC_MAX_ELEVATION_M = 1000;
@@ -188,14 +251,62 @@ export const ARC_MAX_ELEVATION_M = 1000;
  * crust. Arc magmatism is how Earth manufactures continental crust; this is
  * also the counterweight to collision consuming continental area — without
  * it, long runs slowly lose land (seed-1337 N=16 dipped below the 10% land
- * invariant at ~1.3 Gyr).
+ * invariant at ~1.3 Gyr). Lowered -200 -> -500 in #59 alongside the
+ * accretionary-maturation gate: an accreting margin terrane counts as
+ * continental well before it fully emerges (real accreted terranes are
+ * largely submarine), which shortens the subduction time creation needs.
  */
-export const ARC_MATURATION_ELEVATION_M = -200;
+export const ARC_MATURATION_ELEVATION_M = -500;
+
+/**
+ * Fraction of a bulldozed continental cell's positive relief added to the
+ * cell it is shoved onto when that cell is already continental (#59 /
+ * direction (b)). Continental crust does not subduct: when a convergent
+ * overlap displaces a continental cell, its crust is pushed one cell deeper
+ * into its own plate. Onto oceanic crust it re-roots there (area conserved,
+ * like a fold-and-thrust belt propagating over the foreland); onto
+ * continental crust the collision shortens and THICKENS — half the
+ * displaced relief piles on (India–Asia: ~50% of shortened crustal section
+ * goes into thickening the plateau, the rest into lateral extrusion and
+ * erosion), capped at OROGENY_MAX_ELEVATION_M. Without this, every
+ * continent-continent margin destroyed one continental cell per overlap:
+ * measured 4.5 Gyr N=64 runs ground continental crust from 40% of the
+ * sphere to ~5-8% dust and starved the rift gates (#58's root).
+ */
+export const COLLISION_THICKENING_FACTOR = 0.5;
+
+/**
+ * Elevation ceiling for an isolated continental cell (no continental
+ * 4-neighbor), m (#59). Such micro-continents are kept as continental crust
+ * (Zealandia-style submerged fragments — the area stays in the crustal
+ * budget and can later re-accrete) but are pinned below sea level: a
+ * one-cell fleck is 100+ km of "land" with no cratonic root, and letting
+ * stranded collision debris stand as 9 km white peaks — which the
+ * subsea-damped erosion then preserves for gigayears — shredded every
+ * deep-time elevation map into speckle once the world stayed tectonically
+ * alive. -200 m is continental-shelf depth (real shelf breaks sit at
+ * ~120-200 m): a drowned fragment is submerged continental platform, not
+ * abyssal floor. Deliberately independent of ARC_MATURATION_ELEVATION_M
+ * (-500 m, an accretion gate, not a flotation level) — do not re-sync them.
+ */
+export const MICROCONTINENT_FOUNDER_ELEVATION_M = -200;
 
 // --- Wilson cycles (#18) -----------------------------------------------------
 
-/** Live-plate count bounds: sutures pause at the floor, rifts at the ceiling. */
-export const MIN_PLATES = 4;
+/**
+ * Live-plate count bounds: sutures pause at the floor, rifts at the ceiling.
+ * The floor is 2 (a suture may never leave a single-plate world in one step);
+ * it was 4 until #59, when it was doing active harm: a world parked AT the
+ * floor has its collisions permanently barred from suturing, so they grind
+ * continent-on-continent forever (#16 consumption) — measured on seed 1,
+ * which sat at the floor from ~0.25 Gyr and bled continental crust from 40%
+ * of the sphere to 5.4% by 4.5 Gyr, at which point nothing could pass the
+ * rift gates and the world died. A high floor was protecting timeline
+ * variety before the #59 oversize rift pressure existed; now a post-suture
+ * monopoly re-fragments within a few tens of Myr, so collisions can be
+ * allowed to complete instead.
+ */
+export const MIN_PLATES = 2;
 export const MAX_PLATES = 16;
 
 /**
@@ -221,8 +332,15 @@ export const RIFT_MIN_AREA_FRACTION = 0.08;
  * post-suture mega-plates carry proportional ocean and never qualified
  * (seed 42 produced one rift in 2 Gyr). What rifts is a plate with a big
  * continent on it, however much ocean it also drags along.
+ *
+ * Lowered 0.05 -> 0.02 in #59: at 0.05 the gate could dead-lock the planet —
+ * a low-continent world (seed 1 fell to ~5% continental crust by ~3.5 Gyr)
+ * had no rift-eligible plate, so tectonics froze, and a frozen world can
+ * never rebuild crust (arc creation needs active margins). 2% of the sphere
+ * is still a real continent's worth of crust (~500 cells at N=64), but the
+ * gate can no longer starve the Wilson cycle to death.
  */
-export const RIFT_MIN_CONTINENTAL_AREA_FRACTION = 0.05;
+export const RIFT_MIN_CONTINENTAL_AREA_FRACTION = 0.02;
 
 /**
  * Time quantization of the rift decision hash, yr. Steps shorter than this
@@ -239,6 +357,70 @@ export const RIFT_DRAW_QUANTUM_YEARS = 1e4;
  * 300-500 Myr). Raised from 0.004 in the #21 acceptance tuning.
  */
 export const RIFT_PROBABILITY_PER_MYR = 0.006;
+
+/**
+ * Fraction of the rifting plate's cells carved off as the new fragment,
+ * drawn per rift in [min, max] (#59). A rift detaches a continental block —
+ * a Gondwana-piece fraction of its parent, not a 50/50 bisection: splitting a
+ * near-whole-sphere plate in half necessarily yields two antipodal
+ * hemispheres that can only shear about their shared pole and re-suture
+ * (measured: max plate area pinned at ~100% from ~1.2 Gyr with hemisphere
+ * splits). A sub-half fragment on a translating pole can instead sail across
+ * the remaining plate's ocean. Range chosen so a whole-sphere monopoly is
+ * broken below 60% within two rifts while fragments stay above
+ * RIFT_MIN_AREA_FRACTION-scale (rift-eligible themselves).
+ */
+export const RIFT_FRAGMENT_MIN_FRACTION = 0.2;
+export const RIFT_FRAGMENT_MAX_FRACTION = 0.4;
+
+/**
+ * A plate owning more than this fraction of the sphere is oversized (#59):
+ * its rift age gate (RIFT_MIN_AGE_YEARS) is waived and its per-Myr rift
+ * probability is multiplied by RIFT_OVERSIZE_PROBABILITY_FACTOR. This is the
+ * monopoly brake: a supercontinent's plate keeps growing by suture until one
+ * plate owns ~100% of cells (plate ≠ land — land is ~20%), after which no
+ * kinematics can show continents dispersing across an ocean. Physically:
+ * a sphere-spanning plate has no external slab pull balancing its interior
+ * heat, and real supercontinents self-break on ~100 Myr insulation
+ * timescales. 0.55 keeps ordinary large plates — up to and including a clean
+ * hemisphere (~50%) — on the normal draw; only genuinely monopolistic plates
+ * feel the pressure, and a whole-sphere plate still drops below the
+ * threshold within two fragment sheds.
+ */
+export const RIFT_OVERSIZE_AREA_FRACTION = 0.55;
+
+/**
+ * Number of candidate travel directions scored when a rift fragment picks
+ * its Euler pole (#59). Continents rift toward the ocean: each candidate
+ * azimuth's forward great-circle arc is scored by how much oceanic crust
+ * lies beyond the fragment's edge, and the most oceanic heading wins (ties
+ * to the first candidate; the candidate fan is phase-shifted by a per-rift
+ * hash draw so there is no global axis bias). Sailing into ocean instead of
+ * into the parent's continent is what keeps the fragment's leading edge
+ * subducting oceanic crust — continent-on-continent grinding during the
+ * post-rift lock was the dominant continental-area bleed (#16, #58).
+ */
+export const RIFT_AZIMUTH_CANDIDATES = 8;
+
+/**
+ * How far beyond the fragment's edge each candidate heading is sampled, rad
+ * (great-circle arc). ~1 rad ≈ 57° ≈ the width of a decent superocean
+ * basin; shorter scans see only the rift's own margin, longer ones wrap
+ * toward the antipode where every heading converges to the same terrain.
+ */
+export const RIFT_OCEAN_SCAN_RAD = 1.0;
+
+/** Sample count along each scanned heading (cell-scale steps at N=64). */
+export const RIFT_OCEAN_SCAN_SAMPLES = 12;
+
+/**
+ * Rift-probability multiplier for oversized plates (#59). With the base
+ * 0.006/Myr draw this gives an expected shedding wait of ~20 Myr, so a
+ * whole-sphere plate breaks below RIFT_OVERSIZE_AREA_FRACTION within
+ * ~40-100 Myr (a few keyframes) instead of persisting for the
+ * RIFT_MIN_AGE_YEARS + ~1/p ≈ 300-400 Myr normal cycle.
+ */
+export const RIFT_OVERSIZE_PROBABILITY_FACTOR = 8;
 
 /**
  * After a rift, neither new half can suture (to anyone) for this long, yr.

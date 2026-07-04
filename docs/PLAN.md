@@ -97,7 +97,16 @@ New issues to file at sign-off (labels depend on the §0 choice):
 **#54 pt 2** land-budget-4.5Gyr (measured, this doc) ·
 **#57** rift antipodal-pole fix (kernel, goldens; Phase 2 prerequisite under
 choice A) · **#58** deep-time land balance for the 1337 canary (kernel, goldens;
-optional follow-up).
+optional follow-up) ·
+[**#60**](https://github.com/cowboydiver/AEON/issues/60) craton stiffness /
+suture-line memory (kernel, goldens; **filed** 2026-07-04 — deep-time continents
+should keep coherent shapes; the residual left by the PR #59 dispersal pass;
+also scoped to absorb the foundering connected-component threshold from the
+PR #59 review) ·
+[**#61**](https://github.com/cowboydiver/AEON/issues/61) continuous
+size-dependent rift rate to replace the oversize-plate brake (kernel, goldens;
+**filed** 2026-07-04 from the PR #59 review — same monopoly-breaking pressure
+without the 55%-area cliff or the MIN_PLATES coupling).
 
 Dependency sketch: [#57] → #22; Spike A → #22; Spike B → #25;
 #22 → {#23, #24, #25, #27}; #23 → #26; #25 → #26; #24 needs #22, #23;

@@ -13,6 +13,8 @@
 export const EVENT_KINDS = {
   plateRift: 'plateRift',
   plateSuture: 'plateSuture',
+  /** A plate whose last cell was consumed by advection (fully subducted / overridden). */
+  plateConsumed: 'plateConsumed',
 } as const;
 
 export type SimEventKind = (typeof EVENT_KINDS)[keyof typeof EVENT_KINDS];

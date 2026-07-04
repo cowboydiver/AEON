@@ -163,38 +163,74 @@ seam-fold EDGE_MAPS).
 
 `crustAge` ticks +dt every step for every cell, *before* advection (crust
 carries its aged value; divergent gap fill writes 0 afterwards). Oceanic
-elevation (`crustType = 0`) is then a pure function of age — half-space
-cooling (`bathymetry.ts`): ridge crest at −2500 m deepening as
+elevation (`crustType = 0`) then *relaxes toward* a pure function of age —
+half-space cooling (`bathymetry.ts`): ridge crest at −2500 m deepening as
 0.35 m·√age(yr) to the abyssal floor at −6000 m (Parsons & Sclater 1977
-values). Continental elevation is advected, never subsided. New crust from
-divergent gaps therefore starts on the ridge crest and subsides as it ages
-and drifts — spreading stripes for free. At t = 0 the noise ocean is given a
-depth-consistent age by inverting the curve (deep floor = old crust) and
-snapped onto it; initial continents start at a 2 Gyr shield age. Ownership
-of new ridge crust follows the gap-repair majority rule — roughly half to
-each flank, matching symmetric spreading. #16 exempts active convergent
-margins from the hard subsidence set to build trenches and arcs.
+values). The relaxation is rate-bounded (#59,
+`OCEAN_RELIEF_RELAX_M_PER_YR` = 200 m/Myr — above the steady subsidence
+increment, so settled seafloor tracks the curve to float32 precision within
+a few steps, and the youngest crust lags it by ≤150 m for ~3 Myr): inactive
+arc and trench relief has *memory* and decays over Myr instead of snapping
+to the curve the step a margin moves off the cell. Continental elevation is
+advected, never subsided. New crust from divergent gaps starts on the ridge
+crest and subsides as it ages and drifts — spreading stripes for free. At
+t = 0 the noise ocean is given a depth-consistent age by inverting the curve
+(deep floor = old crust) and snapped onto it; initial continents start at a
+2 Gyr shield age. Ownership of new ridge crust follows the gap-repair
+majority rule — roughly half to each flank, matching symmetric spreading.
+#16 exempts active convergent margins from the subsidence relaxation to
+build trenches and arcs.
 
 ### Convergent boundaries (#16)
 
 Advection overlaps (a cell claimed by more than one plate) are convergence:
 the overriding side (per `overrides()`) keeps the surface and the losing
-side's crust is consumed — an ownership transfer, never a hole. Convergent
-topography is driven by `boundaryStress` every step, scaled by
-stress/0.05 m·yr⁻¹ (clamped): the **subducting oceanic** side is pinned up
-to 2500 m below its age-depth floor (trench); the **overriding continental**
-side gets orogenic uplift (0.6 mm/yr at reference speed, before erosion)
-spread 3 cells inland with linear falloff, capped at 9 km; an **overriding
-oceanic** side accumulates arc elevation toward a 1 km island ceiling;
+side's **oceanic** crust is consumed — an ownership transfer, never a hole.
+**Continental crust does not subduct (#59, direction (b)):** a displaced
+continental cell's content is *bulldozed* one cell deeper into its own
+plate along the convergence direction — onto a same-plate oceanic cell it
+re-roots there (area conserved; onto forward ocean first, else any ocean —
+lateral extrusion, the Indochina-style escape), onto continental ground the
+collision shortens and thickens (half the displaced positive relief piles
+on, capped at 9 km). The symmetric case (a *moving* continental source
+whose content won at no target) piles onto the cell behind it. The only
+genuine continental consumption left is a salient's last sliver with no
+same-plate neighbor — the exception that keeps the pass one-shot instead of
+a shortening solver. Without this, every continent–continent margin
+destroyed one continental cell per overlap: 4.5 Gyr N=64 runs ground
+continental crust from 40% of the sphere to ~5% dust, starving the rift
+gates (#58's root). Convergent topography is driven by `boundaryStress`
+every step, scaled by stress/0.05 m·yr⁻¹ (clamped): the **subducting
+oceanic** side is pinned up to 2500 m below its age-depth floor (trench);
+the **overriding continental** side gets orogenic uplift (0.6 mm/yr at
+reference speed, before erosion) spread 3 cells inland with linear falloff,
+capped at 9 km; an **overriding oceanic** side accumulates arc elevation
+(1.25 mm/yr at reference speed, scaled by `max(1, N/32)` — arc magmatic
+flux is per unit margin length, and the one-cell-wide boundary line it
+lands on thins ∝ 1/N, so a constant per-cell rate starved creation at fine
+grids; the #59-residual deep-time land dip at N=128) toward a 1 km island
+ceiling;
 **continent–continent** contact is collision — symmetric uplift on both
-sides, 4 cells wide, no subduction. Arcs that build above −200 m mature
-into continental crust (arc magmatism is how continental crust is
-manufactured) — the creation term balancing the area collisions consume;
-without it long runs sink below the 10% land floor. Oceanic cells on active
-convergent margins (stress > 0.005 m/yr) are exempt from the subsidence
-hard-set; when a margin deactivates they rejoin it, so dead trenches heal
-and dead arcs sink to the age-depth curve immediately (documented
-simplification — no seamount persistence). Plate speeds do not slow in collisions in Phase 1
+sides, 4 cells wide, no subduction. Arc maturation into continental crust
+is **accretionary** (#59): an arc that builds above −500 m becomes
+continental only inside the accretionary belt — within `max(1, round(N/32))`
+cells of pre-existing continental crust, a fixed *physical* belt width
+(~300 km, real accreted-terrane scale) so the maturation frontier area
+stays resolution-independent — and new continent grows compactly at
+continent margins. At deep-time equilibrium
+most continental crust has been recycled through this term, so continents
+take the *shape* of the creation process — ungated maturation freckled
+along herringbone advection trails dissolved them into lace by ~3 Gyr.
+**Isolated continental slivers founder (#59):** a continental cell with no
+continental 4-neighbor is pinned below sea level
+(`MICROCONTINENT_FOUNDER_ELEVATION_M` = −200 m, Zealandia-style — it keeps
+its crustal identity and can re-accrete, but stranded collision debris no
+longer stands as immortal one-cell peaks speckling the deep-time ocean).
+Oceanic cells on active convergent margins (stress > 0.005 m/yr) are exempt
+from subsidence relaxation; when a margin deactivates they rejoin it and
+decay to the age-depth curve over a few Myr (#59 arc memory — a half-built
+arc survives the margin flickering off it, which is what keeps arc creation
+effective at fine grids). Plate speeds do not slow in collisions in Phase 1
 (documented simplification); the 9 km cap plus #19's erosion bound the
 consequences. Old mountain belts advect with their plates and persist until
 erosion (#19) ages them.
@@ -208,39 +244,48 @@ positive) for a continuous 15 Myr merge — smaller absorbed into larger, the
 combined plate takes the area-weighted mean angular-velocity vector, and
 relative motion across the suture stops. Without this, fixed plate speeds
 grind colliding continents away forever (integration runs lost 2/3 of
-continental area in 500 Myr). **Rifting:** a plate that is old (≥150 Myr
-since creation/last rift), large (≥8% of the sphere) and carrying a big
-continent (continental area ≥5% **of the sphere** — plate-relative fraction
-was tried first and silently disabled rifting, since post-suture mega-plates
-carry proportional ocean) rifts with probability 0.006/Myr; the split is a
-two-seed jittered Dijkstra between the plate's most-distant cell pair, and
-the halves get opposite rotations about the pole normal to both centroids,
-opening a new ocean along the rift. When that plate covers the whole sphere
-the two halves are antipodal hemispheres whose centroids are anti-parallel, so
-the normal-to-both-centroids pole degenerates (cross product ≈ 0); the rift
-then falls back to a deterministic pole perpendicular to one centroid (in the
-rift's dividing-circle plane), which still shears the halves apart along their
-shared boundary. Without this fallback a plate that sutured to whole-sphere
-size could never rift again — the supercontinent froze forever and deep-time
-tectonics died (~1.5 Gyr for seeds 42/1); with it, supercontinents break up.
-**Post-rift suture lock:** because those two halves share an in-plane pole,
-~half their new boundary is still convergent, so without a brake they re-sutured
-one 15 Myr suture-window after every breakup (world cycled, but stayed a single
-supercontinent at every keyframe). A rift now stamps both halves with
-`sutureLockUntilYears = now + RIFT_SUTURE_COOLDOWN_YEARS` (30 Myr) and a locked
-plate's contact is not recorded, so it can't re-suture until the lock lifts
-(then needs a fresh 15 Myr). The value is a measured land-budget tradeoff, not a
-physical target — the locked convergent arc grinds continent, so longer locks
-bleed land below the 10% floor (100 Myr → seed 1337 at ~8%); 30 Myr is the knee
-with zero regression. It lengthens each breakup ~3× but does *not* fully
-disperse a whole-sphere supercontinent (whose antipodal halves can only shear,
-not translate apart) — see PHASE_2_STAGE0_FINDINGS.md for the deeper-fix
-follow-up. Both emit events
-(`plateSuture`/`plateRift`); the live count stays within
-[MIN_PLATES, MAX_PLATES] = [4, 16] — the floor is deliberately low because
-a suture *blocked* at the floor means a collision that grinds continent
-forever; all bounds were tuned in the #21 acceptance pass against the land
-budget (seed 1337 was the stress case). Dead plates keep their table slot.
+continental area in 500 Myr). **Rifting (#59 fragment kinematics):** a
+plate that is old (≥150 Myr since creation/last rift), large (≥8% of the
+sphere) and carrying a continent (continental area ≥2% **of the sphere** —
+plate-relative fraction was tried first and silently disabled rifting, and
+the earlier 5% gate dead-locked low-continent worlds) rifts with
+probability 0.006/Myr. The rift *carves off a contiguous continental
+fragment* — a hash-drawn 20–40% of the plate, grown by jittered Dijkstra
+from a continental seed cell — and gives it an Euler pole perpendicular to
+its own centroid, so the fragment **translates** across the sphere at
+ω·R instead of spinning in place; the parent keeps its kinematics. The
+travel azimuth is ocean-seeking: a hash-phased fan of 8 candidate headings
+is scored by the oceanic crust along the forward great circle beyond the
+fragment's edge, and the most oceanic heading wins — continents rift toward
+the superocean, so the fragment's leading edge subducts ocean instead of
+grinding continent through the post-rift lock. (The previous scheme — a
+50/50 two-seed split with opposite rotations about the centroids-normal
+pole — could not disperse a sphere-spanning plate: its halves are antipodal
+hemispheres, already maximally separated, and can only shear about their
+shared in-plane pole and re-suture. That geometry, not any tuning constant,
+is why deep time stayed supercontinent-locked; see
+PHASE_2_STAGE0_FINDINGS.md.) **Oversize rift pressure (#59):** a plate
+owning >55% of the sphere skips the rift age gate and draws at 8× the base
+probability — the monopoly brake. Suturing keeps assembling
+supercontinents, and one plate used to own ~100% of cells from ~1.2 Gyr on
+(plate ≠ land); under pressure a sphere-monopoly sheds fragments every few
+tens of Myr until it is below the threshold, so the measured worst
+>85%-of-sphere monopoly window is now ~60 Myr (was ~3 Gyr), an invariant
+test pins it <400 Myr. **Post-rift suture lock:** a fresh rift margin is
+passive: a rift stamps both halves with `sutureLockUntilYears = now +
+RIFT_SUTURE_COOLDOWN_YEARS` (30 Myr) and a locked plate's contact is not
+recorded, so it can't re-suture until the lock lifts (then needs a fresh
+15 Myr). Both directions emit events (`plateSuture`/`plateRift`), and
+plates whose last cell is consumed by advection are retired each step with
+a `plateConsumed` event, so the live count the bounds gate on stays honest
+(zombie cell-less plates used to hold the suture floor "satisfied"
+indefinitely). The live count stays within [MIN_PLATES, MAX_PLATES] =
+[2, 16] — the floor was lowered from 4 in #59 because a world parked *at*
+the floor has its collisions barred from suturing, so they grind continent
+forever (seed 1 sat there from ~0.25 Gyr and bled continental crust to
+starvation); with the oversize brake guaranteeing a post-suture monopoly
+re-fragments, collisions can be allowed to complete. Dead plates keep
+their table slot.
 Contact bookkeeping lives in `PlanetState.wilson.contactSince` (pair-keyed
 start times, rebuilt each step — never iterated by key order). The rift
 decision draw is `hash3(seed', plate, timeQuantum)` rather than the issue's
@@ -320,8 +365,8 @@ accumulation.
 SimEvent = { timeYears, kind: SimEventKind, data?: Record<string, number> }
 ```
 
-Discrete events (plate rifts/sutures now; impacts, oxygenation later) are
-recorded in simulation order on `PlanetState.events`. Event kinds are a const
+Discrete events (plate rifts/sutures/consumptions now; impacts, oxygenation
+later) are recorded in simulation order on `PlanetState.events`. Event kinds are a const
 object in `events.ts` (`EVENT_KINDS`), single source of truth like `FIELDS`.
 Payloads are numbers only, so events are trivially deterministic and
 serializable. **Purity rule:** a system never mutates the list — it returns a
