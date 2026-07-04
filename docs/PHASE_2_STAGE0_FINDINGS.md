@@ -280,3 +280,95 @@ if generation time bites on slow machines.
   drift for the whole timeline and is cheap; (2) is a separate tuning pass. The
   scope/sequencing decision (fix-first vs. scope-the-timeline vs. accept) is the
   human's; this document is the measurement input to it.
+
+## #59 deep-time dispersal pass — results (fragment rifts + crust conservation)
+
+The "root blocker" section above said bold dispersal needed (a) rift
+kinematics that carve a smaller fragment with a genuinely separating pole,
+(b) an end to continent–continent grinding, and/or (c) a cap on how much of
+the sphere one plate may own. The #59 pass implemented **all three**, plus
+the coherence work they exposed. Mechanisms (each with a constants-level
+source comment):
+
+1. **Fragment rifts** (`riftPlate` rewrite): a rift carves a contiguous
+   continental fragment (hash-drawn 20–40% of the plate, jittered Dijkstra
+   from a continental seed) and puts it on an Euler pole perpendicular to
+   its own centroid — the rotation that *translates* a cap across the
+   sphere. The parent keeps its motion. The travel azimuth is
+   **ocean-seeking** (8 hash-phased candidate headings scored by oceanic
+   crust beyond the fragment edge): continents rift toward the superocean,
+   so the leading edge subducts ocean instead of grinding continent.
+2. **Oversize rift pressure**: a plate owning >55% of the sphere skips the
+   rift age gate and draws at 8× probability — the monopoly brake.
+3. **Suture floor 4 → 2 + consumed-plate retirement** (`plateConsumed`
+   event): a world parked at the floor had its collisions barred from
+   suturing forever (seed 1 sat there from ~0.25 Gyr, grinding continent
+   the whole time), and zombie cell-less plates held the floor "satisfied".
+4. **Continental conservation in advection** (direction (b), the
+   golden-invasive one): displaced continental crust is bulldozed one cell
+   deeper into its own plate — re-rooting on same-plate ocean (area
+   conserved; forward first, else lateral — Indochina-style escape) or
+   thickening continental ground (half the displaced relief, capped 9 km).
+   Covers both the static-displaced and the blocked-mover cases, with
+   source-dedup so the non-bijective advection map can't duplicate crust.
+5. **Accretionary arc maturation** (above −500 m, only adjacent to existing
+   continent, growth raised to 1 mm/yr): at deep-time equilibrium most
+   crust has been recycled through the creation term, so continents take
+   the *shape* of creation — ungated maturation freckled along herringbone
+   trails and dissolved deep-time land into lace.
+6. **Ocean relief memory**: the thermal-subsidence hard-set became bounded
+   relaxation (200 m/Myr), so a half-built arc survives the margin
+   flickering off it (herringbone) and can finish maturing — this is what
+   keeps creation effective at fine grids — and dead arcs/trenches decay
+   over Myr instead of popping.
+7. **Micro-continent foundering**: an isolated continental cell (no
+   continental 4-neighbor) is pinned below −200 m (keeps crustal identity,
+   Zealandia-style) — stranded collision debris no longer speckles the
+   ocean with immortal one-cell peaks.
+8. **Rift continental gate 5% → 2% of sphere**: at 5% a low-continent world
+   dead-locked (no eligible plate → frozen tectonics → no arc creation →
+   permanent death spiral).
+
+`KERNEL_BEHAVIOR_VERSION` 1 → 2; goldens regenerated (arc-maturation gating,
+conservation, and subsidence relaxation all reach the 10-step goldens).
+
+### Measured, N=64 unless noted (baseline = pre-#59 main, same metrics script)
+
+| metric | seed 42 base | seed 42 #59 | seed 1 base | seed 1 #59 | seed 1337 base | seed 1337 #59 |
+|---|---|---|---|---|---|---|
+| dispersed keyframes (max plate <60%) | 22.2% | **68.3%** | 22.0% | **67.4%** | 29.3% | **70.5%** |
+| dispersal in EVERY Gyr bucket? | no (first Gyr only) | **yes (55–80%)** | no | **yes (63–73%)** | no | **yes (62–78%)** |
+| last tectonic event | 4105 Myr | 4483 | 4119 | 4477 | 4427 | 4474 |
+| rift+suture events | 42 | ~200 | 36 | ~200 | 46 | ~190 |
+| land min over 4.5 Gyr | 8.6% | **10.4%** | 4.7% | **10.1%** | 8.8% | 8.7% |
+
+Seed 42 at the N=128 acceptance grid: dispersed 70.1%, alive to 4.47 Gyr,
+land min 6.6%. At the N=16 invariant grid all three seeds hold the [10,60]
+band across the FULL 4.5 Gyr (mins 23–28%), the longest >85%-of-sphere
+monopoly window is 60 Myr (was ~3 Gyr), and the #20 invariant is now
+extended to 4.5 Gyr with a <400 Myr monopoly-duration assertion.
+
+**Flipbooks** (`plateId`): multi-plate partitions at every epoch; the
+4.5 Gyr frame shows a compact fragment sailing inside a larger plate — the
+Pangaea-piece topology the phase premise asks for. (`elevation`): coherent
+drifting continents through ~1.5–2 Gyr; deep time reads as drifting **ragged
+continental clusters** with mountain belts — a live, cycling world, no
+confetti, no freeze.
+
+### Honest residuals (tracked, not hidden)
+
+- **Deep-time land at fine grids dips below the 10% floor** (N=128 min
+  6.6%, N=64 seed 1337 min 8.7%). The creation/consumption balance is
+  resolution-dependent: margins dwell on a cell ∝ 1/N, so arcs mature less
+  efficiently at high N. Arc memory (mech. 6) shrank but did not remove the
+  trend. The band invariant (defined at N=16) passes to 4.5 Gyr; the
+  acceptance-grid dip is the top follow-up candidate — either further
+  creation retune or a resolution-aware maturation term.
+- **Deep-time continents are ragged clusters, not clean cratons.** The
+  churn of ~200 reorganizations reworks continental shapes; conservation +
+  accretionary creation keep them cluster-coherent, but "bold clean Pangaea
+  pieces at 4 Gyr" would need shape-preserving crust dynamics (e.g. craton
+  stiffness / suture-line memory) — out of scope here.
+- Herringbone margin shredding (§0b) is unchanged in kind; arc memory
+  visibly softens the stripe contrast (partial arcs no longer snap to
+  abyssal depth between advection events).

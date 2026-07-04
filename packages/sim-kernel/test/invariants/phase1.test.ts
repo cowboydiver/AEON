@@ -122,12 +122,22 @@ describe('phase 1 invariants (#20)', () => {
     }
   });
 
-  it('2 Gyr coarse-grid runs stay finite, in physical bounds, with sane land', () => {
+  it('4.5 Gyr coarse-grid runs stay finite, in physical bounds, with sane land, never monopoly-locked', () => {
     const started = performance.now();
     for (const seed of SEEDS) {
-      // N=16 with 2 Myr steps: 1000 steps to 2 Gyr, protecting the budget.
+      // N=16 with 2 Myr steps: 2250 steps to 4.5 Gyr. Extended from 2 Gyr in
+      // #59: the 2 Gyr horizon is exactly why the deep-time land bleed (#58)
+      // and the whole-sphere monopoly freeze went unseen for a whole phase —
+      // the invariant must cover the timeline the product scrubs.
       const params = createPlanetParams({ seed, gridN: 16, stepYears: 2e6 });
-      const end = runPipeline(params, 1000, (s, i) => {
+      // Monopoly detector (#59): the whole-sphere-plate failure mode is one
+      // plate owning ~everything for geological ages (pre-fix: the last
+      // ~3 Gyr). With fragment rifts + oversize pressure the measured worst
+      // >85% window is 60 Myr; 400 Myr keeps seed-variance headroom while
+      // still catching any re-frozen monopoly loudly.
+      let monopolySince = -1;
+      let worstMonopolyYears = 0;
+      const end = runPipeline(params, 2250, (s, i) => {
         if (i % 50 !== 0) return;
         expect(allFinite(s), `seed ${seed} step ${i}: non-finite field value`).toBe(true);
         let land = 0;
@@ -143,8 +153,19 @@ describe('phase 1 invariants (#20)', () => {
         expect(max, `seed ${seed} step ${i}`).toBeLessThanOrEqual(9_000);
         expect(landFraction, `seed ${seed} step ${i}`).toBeGreaterThan(0.1);
         expect(landFraction, `seed ${seed} step ${i}`).toBeLessThan(0.6);
+        // Max single-plate area fraction — the monopoly detector.
+        const perPlate = new Array<number>(s.plates.length).fill(0);
+        for (const p of s.fields.plateId) perPlate[p]!++;
+        const maxFrac = Math.max(...perPlate) / s.fields.plateId.length;
+        if (maxFrac > 0.85) {
+          if (monopolySince === -1) monopolySince = s.timeYears;
+          worstMonopolyYears = Math.max(worstMonopolyYears, s.timeYears - monopolySince);
+        } else {
+          monopolySince = -1;
+        }
       });
-      expect(end.timeYears).toBe(2e9);
+      expect(end.timeYears).toBe(4.5e9);
+      expect(worstMonopolyYears, `seed ${seed}: longest >85%-of-sphere plate monopoly`).toBeLessThan(400e6);
       // The plate count bound (#18) over deep time.
       const live = end.plates.filter((p) => p.alive).length;
       expect(live).toBeGreaterThanOrEqual(MIN_PLATES);
