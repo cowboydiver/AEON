@@ -17,8 +17,14 @@
  *     relief relaxation all act within the 10-step golden window. Goldens
  *     regenerated deliberately in the same commit; cached histories must
  *     invalidate.
+ * 3 — creation retune for the fine-grid land dip (#59 follow-up): the
+ *     per-cell arc rate scales max(1, N/32) (arc flux is per unit margin
+ *     length; the boundary line it lands on thins ∝ 1/N) and the base rate
+ *     rose 1e-3 -> 1.25e-3. Field and codec goldens regenerated
+ *     deliberately in the same commit; cached histories at every grid must
+ *     invalidate.
  */
-export const KERNEL_BEHAVIOR_VERSION = 2;
+export const KERNEL_BEHAVIOR_VERSION = 3;
 
 /** IUGG mean Earth radius, m. */
 export const EARTH_RADIUS_M = 6.371e6;
@@ -199,17 +205,37 @@ export const OROGENY_MAX_ELEVATION_M = 9000;
 export const TRENCH_EXTRA_DEPTH_M = 2500;
 
 /**
- * Island-arc crust growth rate at reference convergence, m/yr. 1 mm/yr at
+ * Island-arc crust growth rate at reference convergence, m/yr. ~1 mm/yr at
  * full reference speed builds an arc from abyssal depth to the maturation
  * threshold in ~10-15 Myr of sustained subduction — the fast end of real
  * arc construction (Izu-Bonin order). Raised 4e-4 -> 1e-3 in #59 to
  * rebalance creation after maturation became accretionary (continent-
- * adjacent only) and margins were measured to dwell on a cell for less
- * time at finer grids: without a faster climb, the deep-time continental
- * budget equilibrium fell with grid resolution (healthy at N=16, starved
- * at N=128).
+ * adjacent only), then 1e-3 -> 1.25e-3 in the #59 follow-up retune: with
+ * the ∝N scaling below restoring per-pass climb, N=128 deep-time land
+ * still grazed 9.5-9.9% (floor 10%) — the last quarter-turn on the base
+ * rate. At and below the reference grid growth is largely saturated
+ * against the maturation/ARC_MAX clamps (one margin pass fully matures a
+ * cell), so the increase acts mainly on fine grids.
  */
-export const ARC_GROWTH_RATE_M_PER_YR = 1e-3;
+export const ARC_GROWTH_RATE_M_PER_YR = 1.25e-3;
+
+/**
+ * Reference grid for arc growth, and the pivot of its resolution scaling.
+ * Physically, arc magmatism supplies a crust flux per unit margin length;
+ * the model concentrates that flux onto the one-cell-wide boundary line, so
+ * the per-cell elevation rate should scale with N (cell width ∝ 1/N). The
+ * same 1/N shows up dynamically: a migrating margin dwells on a cell for a
+ * time ∝ cell width, so the elevation climbed per margin pass is ∝ rate/N —
+ * constant rate means creation efficiency falls with resolution, which is
+ * the measured deep-time land dip at fine grids (#59 residual: N=16 healthy
+ * at 23-28% land min, N=64 ~10%, N=128 6.6%). Applied as
+ * max(1, N/reference): at or below N=32 a typical margin pass (~5 cm/yr
+ * closing over a ~300 km cell ≈ 6 Myr dwell) already climbs abyssal → the
+ * maturation threshold, i.e. growth is saturated against the maturation/
+ * ARC_MAX ceilings and scaling it down would only starve grids that are
+ * measured healthy.
+ */
+export const ARC_GROWTH_REFERENCE_GRID_N = 32;
 
 /** Ceiling for volcanic-arc elevation, m (island arcs, not continents). */
 export const ARC_MAX_ELEVATION_M = 1000;

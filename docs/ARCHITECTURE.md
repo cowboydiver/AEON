@@ -205,7 +205,11 @@ oceanic** side is pinned up to 2500 m below its age-depth floor (trench);
 the **overriding continental** side gets orogenic uplift (0.6 mm/yr at
 reference speed, before erosion) spread 3 cells inland with linear falloff,
 capped at 9 km; an **overriding oceanic** side accumulates arc elevation
-(1 mm/yr at reference speed) toward a 1 km island ceiling;
+(1.25 mm/yr at reference speed, scaled by `max(1, N/32)` — arc magmatic
+flux is per unit margin length, and the one-cell-wide boundary line it
+lands on thins ∝ 1/N, so a constant per-cell rate starved creation at fine
+grids; the #59-residual deep-time land dip at N=128) toward a 1 km island
+ceiling;
 **continent–continent** contact is collision — symmetric uplift on both
 sides, 4 cells wide, no subduction. Arc maturation into continental crust
 is **accretionary** (#59): an arc that builds above −500 m becomes

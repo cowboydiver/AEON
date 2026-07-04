@@ -15,6 +15,7 @@ import { oceanicDepthForAge } from '../bathymetry';
 import {
   ACTIVE_MARGIN_STRESS_M_PER_YR,
   ARC_GROWTH_RATE_M_PER_YR,
+  ARC_GROWTH_REFERENCE_GRID_N,
   ARC_MATURATION_ELEVATION_M,
   ARC_MAX_ELEVATION_M,
   COLLISION_WIDTH_CELLS,
@@ -177,6 +178,12 @@ export function applyConvergentTopography(
   const N = state.params.gridN;
   const nbTable = neighborTable(N);
   const { plateId, crustAge } = state.fields;
+  // Arc magmatic flux is per unit margin length, concentrated onto a
+  // one-cell-wide boundary line whose width shrinks ∝ 1/N — so the per-cell
+  // elevation rate scales with N above the reference grid (see
+  // ARC_GROWTH_REFERENCE_GRID_N for the saturation argument below it).
+  const arcGrowthRate =
+    ARC_GROWTH_RATE_M_PER_YR * Math.max(1, N / ARC_GROWTH_REFERENCE_GRID_N);
 
   interface Seed {
     cell: number;
@@ -203,10 +210,7 @@ export function applyConvergentTopography(
       if (myType === 1) {
         seeds.push({ cell: i, amount: OROGENY_RATE_M_PER_YR * dtYears * norm, width: OROGENY_WIDTH_CELLS });
       } else {
-        elevation[i] = Math.min(
-          elevation[i]! + ARC_GROWTH_RATE_M_PER_YR * dtYears * norm,
-          ARC_MAX_ELEVATION_M,
-        );
+        elevation[i] = Math.min(elevation[i]! + arcGrowthRate * dtYears * norm, ARC_MAX_ELEVATION_M);
         // Maturation is accretionary (#59): an arc becomes continental crust
         // only where it touches continental crust already, so new continent
         // grows compactly at continent margins (accretionary belts) instead
