@@ -28,8 +28,10 @@ import { INITIAL_LAND_HEIGHT_M, INITIAL_OCEAN_DEPTH_M } from 'sim-kernel';
  *     cracks open at cube-face edges mid-blend.
  *   - **plateId** is CATEGORICAL: picked hold/nearest with `blend < 0.5 ? A : B`
  *     and NEVER lerped. It drives a subtle per-plate tint gated by `plateTint`
- *     (0 = pure elevation ramp). The nearest pick keeps plate boundaries crisp
- *     across a blend.
+ *     (0 = pure elevation ramp), and — when `plateDebug` is 1 — a full-strength
+ *     debug overlay that paints each plate its own flat colour so the tectonic
+ *     partition is legible at a glance. The nearest pick keeps plate boundaries
+ *     crisp across a blend.
  *
  * Uniforms are shared by all six face materials.
  */
@@ -44,6 +46,8 @@ export function createPlanetUniforms() {
     blend: uniform(0),
     /** Per-plate tint strength over the hypsometric ramp (0 = elevation only). */
     plateTint: uniform(0.12),
+    /** Debug plate map: 0 = normal hypsometric surface, 1 = flat per-plate colours. */
+    plateDebug: uniform(0),
   };
 }
 
@@ -105,9 +109,14 @@ export function createPlanetMaterial(
   const plateFactor = mix(vec3(1, 1, 1), plateColor.mul(2), uniforms.plateTint);
   const tinted = albedo.mul(plateFactor);
 
+  // Debug plate map: swap the hypsometric surface for the flat per-plate colour
+  // (each plate one crisp hue), keeping the radial displacement and shading so the
+  // partition reads on the 3D globe. `plateDebug` is 0/1 so this is a clean swap.
+  const surface = mix(tinted, plateColor, uniforms.plateDebug);
+
   // Lambert-ish: geometric (radial) normal against the sun uniform + ambient.
   const nDotL = normalWorld.dot(uniforms.sunDirection).max(0);
-  material.colorNode = tinted.mul(nDotL.mul(0.92).add(0.08));
+  material.colorNode = surface.mul(nDotL.mul(0.92).add(0.08));
 
   return material;
 }
