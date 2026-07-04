@@ -32,6 +32,8 @@ export function App() {
   const url = useMemo(readUrlParams, []);
   const [seedInput, setSeedInput] = useState(String(url.seed));
   const [ready, setReady] = useState(false);
+  // Debug view: colour-code the individual tectonic plates instead of terrain.
+  const [plateDebug, setPlateDebug] = useState(false);
   // Clamp the request to the memory budget before streaming: a tight budget
   // coarsens the keyframe interval rather than dropping the tail of history.
   const plan = useMemo(
@@ -88,7 +90,12 @@ export function App() {
         }}
       >
         <color attach="background" args={['#000000']} />
-        <PlanetScene gridN={DEFAULT_GRID_N} blend={blend} onFirstFrame={() => setReady(true)} />
+        <PlanetScene
+          gridN={DEFAULT_GRID_N}
+          blend={blend}
+          plateDebug={plateDebug}
+          onFirstFrame={() => setReady(true)}
+        />
       </Canvas>
 
       <div
@@ -117,6 +124,18 @@ export function App() {
         <button onClick={regenerate} disabled={streaming} style={{ padding: '4px 10px' }}>
           {streaming ? 'Generating…' : 'Regenerate'}
         </button>
+        <label
+          title="Colour-code each tectonic plate (debug view)"
+          style={{ display: 'flex', alignItems: 'center', gap: 4, cursor: 'pointer', userSelect: 'none' }}
+        >
+          <input
+            type="checkbox"
+            data-plate-debug
+            checked={plateDebug}
+            onChange={(e) => setPlateDebug(e.target.checked)}
+          />
+          Plates
+        </label>
         {blend ? (
           <span style={{ opacity: 0.7 }}>
             {(blend.timeYears / 1e9).toFixed(2)} Gyr · land {(blend.landFraction * 100).toFixed(1)}%

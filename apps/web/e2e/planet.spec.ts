@@ -173,6 +173,53 @@ test('blends continents across a keyframe boundary (fractional scrub morphs, not
   expect(diffFraction(shotMid, shotMid2), 'fractional scrub is deterministic').toBeLessThan(0.001);
 });
 
+test('plate-debug toggle repaints the globe with per-plate colours', async ({ page }) => {
+  await page.goto('/?until=100e6');
+  await page.waitForSelector('[data-planet-ready="1"]', { timeout: 90_000 });
+
+  const canvas = page.locator('canvas');
+  const toggle = page.locator('[data-plate-debug]');
+  mkdirSync(ARTIFACTS_DIR, { recursive: true });
+
+  // Terrain view first: the normal hypsometric globe.
+  await expect(toggle).not.toBeChecked();
+  await settle(page);
+  const terrain = await canvas.screenshot({ path: join(ARTIFACTS_DIR, 'plates-off.png') });
+
+  // Flip the debug toggle: each plate should now be a flat, distinct colour, so
+  // a large share of the globe changes and the frame gets more chromatic.
+  await toggle.check();
+  await expect(toggle).toBeChecked();
+  await settle(page);
+  const plates = await canvas.screenshot({ path: join(ARTIFACTS_DIR, 'plates-on.png') });
+
+  // The overlay is a wholesale surface swap, not a subtle tint — a big fraction
+  // of pixels must differ from the terrain view.
+  expect(diffFraction(terrain, plates), 'plate map repaints the globe').toBeGreaterThan(0.05);
+
+  // The plate palette is a saturated rainbow; the debug frame carries at least as
+  // much chroma as the terrain view (which is mostly ocean blue + land greens).
+  const chroma = (buf: Buffer): number => {
+    const png = PNG.sync.read(buf);
+    let colored = 0;
+    const n = png.width * png.height;
+    for (let i = 0; i < n; i++) {
+      const r = png.data[i * 4]!;
+      const g = png.data[i * 4 + 1]!;
+      const b = png.data[i * 4 + 2]!;
+      if (r + g + b > 45 && Math.max(r, g, b) - Math.min(r, g, b) > 25) colored++;
+    }
+    return colored / n;
+  };
+  expect(chroma(plates), 'plate map is chromatic').toBeGreaterThan(chroma(terrain) * 0.8);
+
+  // Toggling back returns to terrain (uniform flip only — deterministic frame).
+  await toggle.uncheck();
+  await settle(page);
+  const back = await canvas.screenshot();
+  expect(diffFraction(terrain, back), 'toggling off restores terrain').toBeLessThan(0.02);
+});
+
 test('renders the dual-sample blend material without stalling (Spike B)', async ({ page }) => {
   await page.goto('/?until=100e6');
   await page.waitForSelector('[data-planet-ready="1"]', { timeout: 90_000 });

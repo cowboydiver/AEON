@@ -10,10 +10,12 @@ const SUN_DIRECTION: [number, number, number] = [1, 0.25, 0.45];
 interface PlanetSceneProps {
   gridN: number;
   blend: RenderBlend | null;
+  /** Debug overlay: paint each tectonic plate its own flat colour. */
+  plateDebug: boolean;
   onFirstFrame: () => void;
 }
 
-export function PlanetScene({ gridN, blend, onFirstFrame }: PlanetSceneProps) {
+export function PlanetScene({ gridN, blend, plateDebug, onFirstFrame }: PlanetSceneProps) {
   const { camera, gl } = useThree();
   const planet = useMemo(() => createPlanetMesh(gridN, EARTH_RADIUS_M), [gridN]);
   // Ping-pong residency between the two texture sets: re-uploads only the set
@@ -31,6 +33,12 @@ export function PlanetScene({ gridN, blend, onFirstFrame }: PlanetSceneProps) {
   useEffect(() => {
     planet.uniforms.sunDirection.value.set(...SUN_DIRECTION).normalize();
   }, [planet]);
+
+  // Drive the plate-debug overlay uniform (0/1) from the toggle. Cheap: flips a
+  // single uniform, no re-upload — the material's `plateDebug` swaps the surface.
+  useEffect(() => {
+    planet.uniforms.plateDebug.value = plateDebug ? 1 : 0;
+  }, [planet, plateDebug]);
 
   useEffect(() => {
     const controls = new OrbitControls(camera, gl.domElement);

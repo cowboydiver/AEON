@@ -552,6 +552,14 @@ strategy; the material in `material.ts` carries the sampling rule):
   keeps plate boundaries crisp across a blend. The codec's bit-exact categorical
   round-trip (#22) is what makes this crispness possible.
 
+A **plate-debug toggle** (web app checkbox → `plateDebug` uniform, 0/1) swaps the
+hypsometric surface for a flat per-plate colour so the tectonic partition is
+legible at a glance. Each plate's hue comes from `fract(id · φ⁻¹)` (golden-ratio
+stride, so consecutive ids get well-separated hues) run through a cosine palette;
+the pick is the same nearest `plateId` sample, so plate regions stay crisp and the
+overlay costs a single uniform flip (no re-upload). Radial displacement and
+Lambert shading are kept, so the plates read on the 3D globe.
+
 Residency ping-pongs between the two sets (`residency.ts`, `KeyframeBlender`): a
 fractional scrub inside one bracket only moves the `blend` uniform (no upload, so
 the scrub stays tactile), and crossing a keyframe boundary re-uploads **only the
