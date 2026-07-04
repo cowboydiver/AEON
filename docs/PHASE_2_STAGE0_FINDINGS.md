@@ -364,6 +364,8 @@ confetti, no freeze.
   trend. The band invariant (defined at N=16) passes to 4.5 Gyr; the
   acceptance-grid dip is the top follow-up candidate — either further
   creation retune or a resolution-aware maturation term.
+  **RESOLVED by the creation retune below**: all seeds/grids now hold the
+  band (N=128 mins 11.5/10.7, N=64 mins 12.9–17.6).
 - **Deep-time continents are ragged clusters, not clean cratons.** The
   churn of ~200 reorganizations reworks continental shapes; conservation +
   accretionary creation keep them cluster-coherent, but "bold clean Pangaea
@@ -374,3 +376,58 @@ confetti, no freeze.
 - Herringbone margin shredding (§0b) is unchanged in kind; arc memory
   visibly softens the stripe contrast (partial arcs no longer snap to
   abyssal depth between advection events).
+
+## Creation retune (#59 follow-up): resolution-consistent arc creation
+
+The first residual above measured out to a single root cause: **arc
+creation was written in per-cell terms while the physics is
+per-margin-length**, so its efficiency fell with grid resolution in two
+independent ways, and the deep-time continental budget equilibrium fell
+with it (N=16 healthy, N=128 starved below the floor). Two scalings, one
+pivot (`ARC_CREATION_REFERENCE_GRID_N` = 32; both are `max(1, ·)` because
+at or below the reference grid growth saturates against the maturation/
+ARC_MAX ceilings and the belt is already one cell — coarse grids keep the
+measured-healthy #59 tuning):
+
+1. **Arc growth rate ∝ N** (`max(1, N/32)`, plus base 1e-3 → 1.25e-3
+   m/yr): the flux is per unit margin length, concentrated on a
+   one-cell-wide boundary line whose width — and a migrating margin's
+   dwell time on it — shrinks ∝ 1/N. This alone recovered N=128 land
+   min 6.6% → 9.5–10.0%, and a further +25% base rate moved it ~0.1
+   point: the per-cell climb stopped being the limiter.
+2. **Accretionary belt width ∝ N** (`max(1, round(N/32))` cells, ~300 km
+   fixed physical width, real accreted-terrane scale): maturation was
+   gated on 4-neighbor adjacency to continent, a frontier always one cell
+   wide, so matured *area* per unit time went as frontier cells × cell
+   area ∝ N·1/N² = 1/N. The belt is a multi-source BFS mask over the
+   immutable pre-topography crust field (order-independent, O(cells)).
+
+`KERNEL_BEHAVIOR_VERSION` 2 → 3; N=128 field goldens and (for the base-
+rate bump) N=32 codec byte goldens regenerated deliberately.
+
+### Measured (same metrics script; "#59" = pre-retune column above)
+
+| metric | grid | seed 42 #59 | seed 42 retune | seed 1 #59 | seed 1 retune | seed 1337 #59 | seed 1337 retune |
+|---|---|---|---|---|---|---|---|
+| land min over 4.5 Gyr | N=64 | 10.4% | **12.9%** | 10.1% | **17.6%** | 8.7% | **13.9%** |
+| land min over 4.5 Gyr | N=128 | 6.6% | **11.5%** | — | — | 9.5%* | **10.7%** |
+| dispersed keyframes | N=64 | 68.3% | 66.3% | 67.4% | 67.8% | 70.5% | 72.1% |
+| dispersed keyframes | N=128 | 70.1% | 72.5% | — | — | — | 80.3% |
+| last tectonic event | N=64 | 4483 Myr | 4465 | 4477 | 4473 | 4474 | 4474 |
+
+*seed 1337 N=128 was first measured during this retune (rate-scaling-only
+round), not in the original pass. Land maxes stay 30.6–33.2% everywhere —
+nowhere near the 60% ceiling. Continental crustType equilibrium lifted
+from 10.8–15.5% to 13.5–20.1% of the sphere. Dispersal and event liveness
+are unchanged within seed noise — the retune bought land without buying
+back the monopoly.
+
+**Flipbooks** (N=128 seed 42, elevation + plateId + crustType): first
+~1.5 Gyr shows large coherent drifting continents with an opening
+ridge-crossed ocean; deep time remains drifting ragged continental
+clusters plus unmatured island-arc chains standing above the datum — the
+same character as the pre-retune elevation flipbook, i.e. the #60
+shape-coherence residual. crustType frames show cluster-shaped
+continental masses with ragged interiors (not dissolved freckle-trails);
+a like-for-like crustType comparison against the rate-scaling-only commit
+confirms the belt did not change the deep-time character.
