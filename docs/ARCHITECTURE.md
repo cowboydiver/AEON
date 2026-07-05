@@ -271,8 +271,9 @@ sphere), passes through the old 8× brake at `RIFT_SIZE_RATE_REF_FRACTION` (0.55
 and keeps climbing. It scales both halves of the old brake: the draw probability
 uses `min(8, ramp)` (saturating at the brake magnitude above 0.55, so nothing
 rifts faster than the measured-good #59 rate), and the maturity age gate is
-`RIFT_MIN_AGE_YEARS / ramp` (full below the knee, shrinking toward ~2 Myr near
-whole-sphere — the old hard age waiver made continuous). This removes the
+`RIFT_MIN_AGE_YEARS / ramp` (full below the knee, ≈19 Myr at 0.55, shrinking to a
+~2.7 Myr floor near whole-sphere — the old hard age waiver made continuous). This
+removes the
 discontinuity at 0.55 and the MIN_PLATES coupling (the old brake existed only to
 compensate for the lowered suture floor). Suturing keeps assembling
 supercontinents, and one plate used to own ~100% of cells from ~1.2 Gyr on

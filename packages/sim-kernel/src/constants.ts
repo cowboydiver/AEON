@@ -403,9 +403,11 @@ export const RIFT_FRAGMENT_MAX_FRACTION = 0.4;
  * brake magnitude above 0.55, so the deep-time rift rate there is exactly the
  * measured-good #59 brake and nothing rifts faster than it; (2) the maturity
  * gate RIFT_MIN_AGE_YEARS is DIVIDED by the (uncapped) ramp — full below the
- * knee, ~1/8 of it at 0.55, and shrinking toward zero as a plate approaches
- * whole-sphere (~2 Myr at 0.95), the smooth replacement for the old hard age
- * waiver so a monopoly keeps shedding. Nothing here references MIN_PLATES:
+ * knee, ~1/8 of it (≈19 Myr) at 0.55, and shrinking toward a ~2.7 Myr floor as
+ * a plate approaches whole-sphere (≈3.1 Myr at area 0.95, 2.68 Myr at area 1.0;
+ * the ramp is bounded so the gate never nears zero), the smooth replacement for
+ * the old hard age waiver so a monopoly keeps shedding. Nothing here references
+ * MIN_PLATES:
  * retuning the suture floor no longer forces retuning the monopoly brake.
  *
  * KNEE = 0.3 (the value suggested on the issue) was measured against the #59
