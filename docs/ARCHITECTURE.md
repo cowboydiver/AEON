@@ -98,6 +98,7 @@ from it. All fields are `Float32Array` per cell.
 | `plateId`       | index      | 0 … numPlates−1  | Owning plate, index into `PlanetState.plates`. Small integers stored in float32 (exact up to 2^24) |
 | `crustType`     | flag       | {0, 1}           | 0 = oceanic (subductable), 1 = continental (buoyant, never subducts) |
 | `boundaryStress`| m/yr       | ≈ ±0.1, 0 interior | Signed normal closing speed at boundary cells: + convergent, − divergent, ≈0 transform. Derived, recomputed every step |
+| `sutureYears`   | yr         | 0 … sim age (0 = never) | Sim time when a continent-continent suture last welded this cell (#60). Crust property: advects with plate motion; fresh ocean and fresh arc crust carry 0. Appended last: the codec wire fieldId is the FIELD_NAMES index |
 
 ### Plates (Phase 1)
 
@@ -149,9 +150,9 @@ walk (accepted spike-#10 limitation).
 At an advection event, each cell gathers claims: a moved plate p claims cell
 i iff p owned i's backward-rotated source cell (interiors are exact by
 construction); an unmoved plate claims exactly its current cells. Crust
-properties — `elevation`, `crustAge`, `crustType` (`ADVECTED_FIELDS`) —
-travel from the winning claim's source cell; values are copied, never
-interpolated. Overlap resolution is provisional until #16 (moved beats
+properties — `elevation`, `crustAge`, `crustType`, `sutureYears`
+(`ADVECTED_FIELDS`) — travel from the winning claim's source cell; values
+are copied, never interpolated. Overlap resolution is provisional until #16 (moved beats
 static, then lower plate index). Unclaimed cells are divergent gaps,
 repaired by deterministic majority-of-assigned-neighbors passes and filled
 as provisional young ocean (crustAge 0, oceanic, ridge depth −2500 m) — #15
@@ -299,6 +300,25 @@ forever (seed 1 sat there from ~0.25 Gyr and bled continental crust to
 starvation); with the size-dependent rift pressure guaranteeing a post-suture
 monopoly re-fragments, collisions can be allowed to complete. Dead plates keep
 their table slot.
+**Suture-line memory (#60):** suturing stamps the continent-continent weld
+cells (both sides of the closed ocean's scar, a 2-cell belt) with the merge
+time in `sutureYears`, an advected crust property — the weld record travels
+with the merged continent however far it drifts. **Recording-only by
+measurement:** the rift carve deliberately does not read it. Seven
+carve-weighting variants (crust-age stiffness absolute and plate-relative, a
+continental quota, weld walls with flank seeding under permanent / 800 Myr /
+200 Myr / spent-on-rift memory, and craton rim tolls at two strengths) were
+prototyped against #60's goal of compact, persistent deep-time continents,
+and every one made continents *less* coherent (mean largest continental
+component 0.11 → 0.04–0.08 of continental area) or broke the #59/#61
+dispersal metrics (dispersed keyframes 0.72–0.74 → as low as 0.51) — the
+raggedness driver is the per-boundary process layer (arc freckling,
+quantized-advection herringbone, collision debris), not carve geometry, so
+steering rift lines into continental interiors only manufactures more
+boundary length through continent. The full variant table, failure
+mechanisms and follow-up direction are in `PHASE_2_STAGE0_FINDINGS.md`
+("#60"). Because nothing reads the field, every pre-existing field's bytes
+are bit-identical to the pre-#60 kernel in every run.
 Contact bookkeeping lives in `PlanetState.wilson.contactSince` (pair-keyed
 start times, rebuilt each step — never iterated by key order). The rift
 decision draw is `hash3(seed', plate, timeQuantum)` rather than the issue's

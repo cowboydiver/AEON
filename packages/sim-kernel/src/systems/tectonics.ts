@@ -14,7 +14,8 @@
  *   - an unmoved plate claims exactly its current cells.
  * Resolution (#13 provisional, replaced by density rules in #16): moved
  * claims beat static claims, then lower plate index. Crust properties
- * (elevation, crustAge, crustType) travel with the winning claim's source.
+ * (elevation, crustAge, crustType, sutureYears) travel with the winning
+ * claim's source.
  * Unclaimed cells are divergent gaps, repaired deterministically by
  * majority-of-assigned-neighbors and filled as provisional young ocean crust
  * (#15 turns this into real ridge bathymetry).
@@ -53,7 +54,7 @@ function advectionQuantum(seed: number, plate: number, eventCount: number, theta
 }
 
 /** Crust fields transported with plate motion (see ARCHITECTURE.md). */
-const ADVECTED_FIELDS = ['elevation', 'crustAge', 'crustType'] as const;
+const ADVECTED_FIELDS = ['elevation', 'crustAge', 'crustType', 'sutureYears'] as const;
 
 export const tectonicsSystem: System = {
   name: 'tectonics',
@@ -174,11 +175,13 @@ function advect(
     elevation: new Float32Array(count),
     crustAge: new Float32Array(count),
     crustType: new Float32Array(count),
+    sutureYears: new Float32Array(count),
   };
   const old = {
     elevation: state.fields.elevation,
     crustAge: state.fields.crustAge,
     crustType: state.fields.crustType,
+    sutureYears: state.fields.sutureYears,
   };
 
   // Claims + resolution. Overlaps (multiple claimants) are convergence: the
@@ -197,6 +200,7 @@ function advect(
     owner: number;
     elevation: number;
     crustAge: number;
+    sutureYears: number;
   }
   const pushes: Push[] = [];
   /**
@@ -334,7 +338,13 @@ function advect(
         dir[2] - centers[winSrc * 3 + 2]!,
       );
       if (best !== -1) {
-        pushes.push({ target: best, owner, elevation: old.elevation[i]!, crustAge: old.crustAge[i]! });
+        pushes.push({
+          target: best,
+          owner,
+          elevation: old.elevation[i]!,
+          crustAge: old.crustAge[i]!,
+          sutureYears: old.sutureYears[i]!,
+        });
       }
     }
   }
@@ -373,6 +383,7 @@ function advect(
           owner: p,
           elevation: old.elevation[src]!,
           crustAge: old.crustAge[src]!,
+          sutureYears: old.sutureYears[src]!,
         });
       }
     }
@@ -393,11 +404,15 @@ function advect(
         newFields.elevation[t]! + COLLISION_THICKENING_FACTOR * Math.max(0, push.elevation),
       );
       newFields.crustAge[t] = Math.max(newFields.crustAge[t]!, push.crustAge);
+      // Weld memory survives shortening: the newer of the two suture stamps
+      // wins (0 = never sutured, so max is also the presence-preserving pick).
+      newFields.sutureYears[t] = Math.max(newFields.sutureYears[t]!, push.sutureYears);
     } else {
       if (newFields.plateId[t] === -1) newFields.plateId[t] = push.owner;
       newFields.crustType[t] = 1;
       newFields.elevation[t] = push.elevation;
       newFields.crustAge[t] = push.crustAge;
+      newFields.sutureYears[t] = push.sutureYears;
     }
   }
 
@@ -440,6 +455,7 @@ function advect(
       newFields.elevation[i] = OCEAN_RIDGE_DEPTH_M;
       newFields.crustAge[i] = 0;
       newFields.crustType[i] = 0;
+      newFields.sutureYears[i] = 0; // fresh ocean carries no weld memory
     }
   }
 

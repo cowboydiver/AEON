@@ -431,3 +431,69 @@ shape-coherence residual. crustType frames show cluster-shaped
 continental masses with ragged interiors (not dissolved freckle-trails);
 a like-for-like crustType comparison against the rate-scaling-only commit
 confirms the belt did not change the deep-time character.
+
+## #60 suture-line memory — carve-weighting results (negative, measured)
+
+**What shipped:** the `sutureYears` field (advected crust property; suturing
+stamps the 2-cell continent-continent weld belt with the merge time; fresh
+ocean and fresh arc crust carry 0) plus tests, and **no carve behavior
+change** — every pre-existing field's bytes are bit-identical to the #61
+kernel in every run (verified: 4.5 Gyr dispersal/land/event trajectories for
+seeds {1, 42, 1337} × {N=64} and seed 42 × N=128 reproduce the baseline
+exactly). `KERNEL_BEHAVIOR_VERSION` 4 → 5 for the schema/golden change.
+
+**What was tried and measured (and reverted):** seven rift-carve weightings
+aimed at #60's acceptance ("compact continents with persistent cores, no
+dispersal regression"). Metrics: same script as the #59/#61 passes plus
+continental-shape coherence — connected components of `crustType`, the
+largest component's share of continental area, both averaged over keyframes
+past 1 Gyr. N=64, three golden seeds, 4.5 Gyr; representative numbers are
+seed-42 / seed-1 / seed-1337.
+
+| carve variant | dispersed keyframes | largest cont. component (share of cont. area) | cont. components | cont. crust (sphere frac.) |
+|---|---|---|---|---|
+| **baseline (#61, age-blind)** | **.73 / .72 / .74** | **.110 / .113 / .109** | **799 / 866 / 855** | .230 / .215 / .234 |
+| absolute age stiffness + suture-discount corridors, suture-cell seeding | .75 / .62 / .78 | .075 / .100 / .083 | 895 / 940 / 908 | .201 / .221 / .214 |
+| + continental quota (two-phase carve), weld walls, flank seeding | .67 / .51 / .89 | .073 / .080 / .056 | 1258 / 1121 / 1292 | .314 / .341 / .308 |
+| plate-relative age stiffness + young-tier seeding + walls | .61 / .56 / .80 | .062 / .083 / .050 | 1211 / 1077 / 1256 | .354 / .347 / .338 |
+| weld walls + flank seeding only (no age term); also with 800 Myr decay | .71 / .63 / .70 | .081 / .066 / .078 | 1135 / 1163 / 1166 | .336 / .334 / .351 |
+| 200 Myr fresh-weld window; also + spent-on-rift weld clearing | .72 / .68 / .65 | .042 / .059 / .042 | 1292 / 1230 / 1235 | .237 / .247 / .247 |
+| craton rim toll (cost on age-stiffness contrast between edge cells), 2N | .68 / .57 / .65 | .121 / .108 / .114 | 1213 / 1224 / 1192 | .340 / .359 / .340 |
+
+Every variant loses on coherence (largest component collapses toward
+.04–.08), on dispersal (as low as .51 vs the .72–.74 baseline), or both.
+The rim toll is the interesting near-miss: it grows the largest block ~55%
+in *absolute* terms (.025 → .039–.041 of the sphere) and is the only
+variant that protects cores — but it does so by hoarding them on the
+parent plate (fragments leave continent-poor, the parent stays huge and
+sutures everything), which is exactly the dispersal regression, and the
+margin-hugging subduction it induces inflates continental crust into lace
+(land ~30% of speckle; flipbooks look worse than baseline).
+
+**Failure mechanisms (each isolated by an ablation):**
+
+1. *Repulsive continent pricing* (any per-cell stiffness, absolute or
+   relative — the relative datum degenerates anyway, because a deep-time
+   plate always carries a just-matured arc cell, so "youngest continental
+   age" ≈ 0): the carve grabs ocean and tears off marginal continental
+   shreds. Forcing a continental quota to compensate disperses crust onto
+   every fragment instead.
+2. *Weld walls + flank seeding* put the new plate boundary through the
+   continent interior (that is what "reopen along the suture" means
+   geometrically) — and this kernel's per-boundary processes (quantized
+   advection herringbone, #16 collision consumption, arc freckling) destroy
+   far more coherence along that interior line than the carve shape saves.
+   Permanent memory also saturates: ~110 sutures per 4.5 Gyr weld-partition
+   the whole continent. Decay windows and spent-weld clearing fix the
+   saturation and the crust inflation but not the interior-boundary damage.
+3. *Rim tolls* avoid interior boundaries but create the core-hoarding
+   parent above.
+
+**Conclusion / follow-up:** #60's goal is real but its lever is wrong. The
+ragged-archipelago character is manufactured at *plate boundaries* after
+reorganization, not by where the carve cuts; compact deep-time continents
+need the boundary-process layer to preserve shape (bulldozer debris,
+micro-continent fates, arc-freckle compactness, herringbone rework) before
+any weld-guided carve can pay off. The weld record now exists — advected,
+tested, and free — for that future pass, and as a renderable "assembly
+scars" layer.

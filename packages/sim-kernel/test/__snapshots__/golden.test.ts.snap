@@ -11,6 +11,7 @@ exports[`golden field hashes > seed 1: initial state and after 10 steps 1`] = `
     "iceFraction": "b0549dc5",
     "plateId": "d25f1e72",
     "precipitation": "aa963de5",
+    "sutureYears": "b0549dc5",
     "temperature": "ee3246fe",
     "timeYears": 10000000,
   },
@@ -23,6 +24,7 @@ exports[`golden field hashes > seed 1: initial state and after 10 steps 1`] = `
     "iceFraction": "b0549dc5",
     "plateId": "15a8f862",
     "precipitation": "aa963de5",
+    "sutureYears": "b0549dc5",
     "temperature": "9adb4901",
   },
 }
@@ -39,6 +41,7 @@ exports[`golden field hashes > seed 42: initial state and after 10 steps 1`] = `
     "iceFraction": "b0549dc5",
     "plateId": "7c0be045",
     "precipitation": "aa963de5",
+    "sutureYears": "b0549dc5",
     "temperature": "2f6ff0df",
     "timeYears": 10000000,
   },
@@ -51,6 +54,7 @@ exports[`golden field hashes > seed 42: initial state and after 10 steps 1`] = `
     "iceFraction": "b0549dc5",
     "plateId": "93938d05",
     "precipitation": "aa963de5",
+    "sutureYears": "b0549dc5",
     "temperature": "ebe55872",
   },
 }
@@ -67,6 +71,7 @@ exports[`golden field hashes > seed 1337: initial state and after 10 steps 1`] =
     "iceFraction": "b0549dc5",
     "plateId": "71f7e8eb",
     "precipitation": "aa963de5",
+    "sutureYears": "b0549dc5",
     "temperature": "a54e6f2c",
     "timeYears": 10000000,
   },
@@ -79,6 +84,7 @@ exports[`golden field hashes > seed 1337: initial state and after 10 steps 1`] =
     "iceFraction": "b0549dc5",
     "plateId": "44207345",
     "precipitation": "aa963de5",
+    "sutureYears": "b0549dc5",
     "temperature": "cce78f95",
   },
 }

@@ -42,6 +42,24 @@
  * separated, they could only shear about the shared pole and re-suture, so
  * deep time was supercontinent-locked.)
  *
+ * SUTURE-LINE MEMORY (#60) — suturing stamps the continent-continent weld
+ * cells (both sides of the closed ocean's scar, a 2-cell belt) with the
+ * merge time in `sutureYears`, an advected crust property: the planet keeps
+ * a permanent, drifting record of where its continents were assembled.
+ * Deliberately RECORDING-ONLY: the rift carve does not read it. Seven
+ * carve-weighting variants (age stiffness absolute and plate-relative, a
+ * continental quota, weld walls with flank seeding under permanent /
+ * 800 Myr / 200 Myr / spent-on-rift memory, and craton rim tolls at two
+ * strengths) were prototyped and measured against the #59/#61 dispersal
+ * metrics and 4.5 Gyr flipbooks, and every one of them made deep-time
+ * continents LESS coherent or broke dispersal — the raggedness driver is
+ * the per-boundary process layer (arc freckling, quantized-advection
+ * herringbone, collision debris), not carve geometry, so steering rift
+ * lines into continental interiors only manufactures more boundary length
+ * through continent. Full variant table and failure mechanisms:
+ * docs/PHASE_2_STAGE0_FINDINGS.md, "#60" section. The field ships so a
+ * future boundary-process pass (or the renderer) can use the weld record.
+ *
  * Both directions emit events (plateSuture / plateRift) and respect the
  * MIN_PLATES / MAX_PLATES live-count bounds. At most one suture and one
  * rift fire per step (deterministic first-eligible order), which keeps each
@@ -275,6 +293,31 @@ function suture(
       ? [a, b]
       : [b, a];
 
+  // Suture-line memory (#60): before the boundary disappears into the merged
+  // plate's interior, stamp the weld — every continental cell of either plate
+  // with a continental 4-neighbor across the a/b boundary (a 2-cell-wide
+  // belt, both sides of the closed ocean's scar) — with the merge time.
+  // sutureYears advects with the crust (ADVECTED_FIELDS), so the weld line
+  // travels with the merged continent however far it drifts. Recording-only
+  // for now — see the header for the measured reasons the carve doesn't read
+  // it.
+  const nbTable = neighborTable(state.params.gridN);
+  const sutureYears = state.fields.sutureYears.slice();
+  const oldPlateId = state.fields.plateId;
+  const { crustType } = state.fields;
+  for (let i = 0; i < oldPlateId.length; i++) {
+    const pid = oldPlateId[i];
+    if ((pid !== a && pid !== b) || crustType[i] !== 1) continue;
+    const other = pid === a ? b : a;
+    for (let k = 0; k < 4; k++) {
+      const nb = nbTable[i * 4 + k]!;
+      if (oldPlateId[nb] === other && crustType[nb] === 1) {
+        sutureYears[i] = state.timeYears;
+        break;
+      }
+    }
+  }
+
   const plateId = state.fields.plateId.slice();
   for (let i = 0; i < plateId.length; i++) {
     if (plateId[i] === loser) plateId[i] = winner;
@@ -326,7 +369,7 @@ function suture(
   return {
     state: {
       ...state,
-      fields: { ...state.fields, plateId },
+      fields: { ...state.fields, plateId, sutureYears },
       plates,
       events: [...state.events, event],
       wilson: { contactSince },

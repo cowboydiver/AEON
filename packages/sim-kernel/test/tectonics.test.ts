@@ -112,6 +112,65 @@ describe('tectonics advection', () => {
     expect(end.fields.elevation[blobCenter]).not.toBe(1234);
   });
 
+  it('transports suture memory with the crust and gives fresh ocean none (#60)', () => {
+    // Mirror of the elevation-blob test for the sutureYears crust property:
+    // a stamped weld patch must ride its plate (it localizes future rifts on
+    // the weld wherever the continent drifts), and divergent-gap ocean must
+    // never carry a stamp. Pole [1,0,0] (not the blob test's [0,0,1]): plate
+    // 0 rotating off-axis opens real divergent gaps, so the fresh-ocean
+    // assertion below is not vacuous.
+    const pole: [number, number, number] = [1, 0, 0];
+    const omega = 8e-9;
+    let state = twoPlateState(N, { pole, omega }, { pole: [0, 1, 0], omega: 0 });
+
+    const blobCenterDir = normalize3([0.3, 0.3, 0.9]);
+    const blobCenter = directionToIndex(blobCenterDir, N);
+    const blob = new Set<number>([blobCenter]);
+    for (let r = 0; r < 2; r++) {
+      for (const c of [...blob]) for (const nb of neighbors(c, N)) blob.add(nb);
+    }
+    const sutureYears = state.fields.sutureYears.slice();
+    for (const c of blob) sutureYears[c] = 1.5e9;
+    state = { ...state, fields: { ...state.fields, sutureYears } };
+
+    const steps = 100;
+    const end = runSystems(state, steps);
+
+    const applied = omega * steps * state.params.stepYears - end.plates[0]!.accumulatedRadians;
+    const predicted = directionToIndex(rotateAroundAxis(blobCenterDir, pole, applied), N);
+    // The stamp arrived within resampling tolerance of the predicted spot
+    // (same graph-distance-2 bound as the elevation blob) and left its
+    // origin: weld memory is crust, not geography.
+    let found = false;
+    const seen = new Set<number>([predicted]);
+    let ring = [predicted];
+    for (let depth = 0; depth <= 2 && !found; depth++) {
+      for (const c of ring) if (end.fields.sutureYears[c] === 1.5e9) found = true;
+      const nextRing: number[] = [];
+      for (const c of ring) {
+        for (const nb of neighbors(c, N)) {
+          if (!seen.has(nb)) {
+            seen.add(nb);
+            nextRing.push(nb);
+          }
+        }
+      }
+      ring = nextRing;
+    }
+    expect(found).toBe(true);
+    expect(end.fields.sutureYears[blobCenter]).not.toBe(1.5e9);
+    // Divergent gaps opened behind the rotating plate were filled as fresh
+    // ocean: oceanic crust never carries weld memory.
+    let ocean = 0;
+    for (let i = 0; i < end.fields.crustType.length; i++) {
+      if (end.fields.crustType[i] === 0) {
+        ocean++;
+        expect(end.fields.sutureYears[i]).toBe(0);
+      }
+    }
+    expect(ocean).toBeGreaterThan(0);
+  });
+
   it('fills divergent gaps with young ocean crust on the age-depth curve', () => {
     // Plate 0 rotates about +X: its boundary retreats somewhere, opening gaps.
     let state = twoPlateState(N, { pole: [1, 0, 0], omega: 8e-9 }, { pole: [0, 1, 0], omega: 0 });
