@@ -5,6 +5,9 @@ import {
   RIFT_FRAGMENT_MAX_FRACTION,
   RIFT_FRAGMENT_MIN_FRACTION,
   RIFT_MIN_AGE_YEARS,
+  RIFT_SIZE_RATE_KNEE,
+  RIFT_SIZE_RATE_REF_FRACTION,
+  RIFT_SIZE_RATE_REF_MULTIPLE,
   RIFT_SUTURE_COOLDOWN_YEARS,
   SUTURE_AFTER_YEARS,
 } from '../src/constants';
@@ -14,7 +17,7 @@ import { cellCenterDirection, cellCount, neighbors, type Vec3 } from '../src/gri
 import { hash2, hashString } from '../src/hash';
 import { createPlanetParams, type PlanetState } from '../src/state';
 import { tectonicsSystem } from '../src/systems/tectonics';
-import { riftPlate, wilsonSystem } from '../src/systems/wilson';
+import { riftPlate, riftSizeRamp, wilsonSystem } from '../src/systems/wilson';
 import { dot3, normalize3 } from '../src/vec';
 import { makePlate, runSystems, twoPlateState } from './helpers';
 
@@ -114,10 +117,17 @@ describe('suturing (#18)', () => {
 
   it('respects the MIN_PLATES floor', () => {
     // Exactly MIN_PLATES cell-owning plates: the collision may not suture (a
-    // merge would leave a single-plate world). 50 steps keeps the window
-    // clear of the #59 oversize rift that fires once convergent ownership
-    // transfer pushes one hemisphere past the threshold (~90 steps in).
-    const state = runSystems(collisionWorld(0), 50, WILSON_PIPELINE);
+    // merge would leave a single-plate world). The window sits past
+    // SUTURE_AFTER_YEARS (so a suture WOULD fire if the floor allowed it) but
+    // inside the shortest size-relaxed rift gate at this size
+    // (RIFT_MIN_AGE_YEARS / ramp at the 0.55 reference, #61 — the ~hemisphere
+    // plates barely grow in this window), so no rift adds a third plate and this
+    // stays a pure floor check.
+    const shortestRiftGate = RIFT_MIN_AGE_YEARS / riftSizeRamp(RIFT_SIZE_RATE_REF_FRACTION);
+    const base = collisionWorld(0);
+    const steps = Math.floor((SUTURE_AFTER_YEARS + shortestRiftGate) / 2 / base.params.stepYears);
+    expect(steps * base.params.stepYears).toBeGreaterThan(SUTURE_AFTER_YEARS);
+    const state = runSystems(base, steps, WILSON_PIPELINE);
     expect(state.events.filter((e) => e.kind === EVENT_KINDS.plateSuture)).toEqual([]);
     // Both plates still alive and still colliding.
     expect(state.plates[0]!.alive).toBe(true);
@@ -247,31 +257,61 @@ describe('rifting (#18, fragment kinematics #59)', () => {
   });
 });
 
-describe('oversize rift pressure (#59)', () => {
-  it('waives the rift age gate for a sphere-monopoly plate under the pipeline', () => {
+describe('size-dependent rift rate (#61)', () => {
+  it('ramps continuously from 1 at the knee to the reference multiple at 0.55, then climbs', () => {
+    // Small plates feel no size pressure: the ramp is exactly 1 at and below
+    // the knee (so the normal Wilson draw and the golden window are unchanged).
+    expect(riftSizeRamp(0)).toBe(1);
+    expect(riftSizeRamp(RIFT_SIZE_RATE_KNEE - 0.05)).toBe(1);
+    expect(riftSizeRamp(RIFT_SIZE_RATE_KNEE)).toBe(1);
+    // Anchored to reproduce the old brake exactly at the old 0.55 threshold, and
+    // it keeps climbing above it (a near-whole-sphere plate) — the caller caps
+    // the probability at the brake magnitude but divides the maturity gate by
+    // this uncapped value, so the gate keeps shrinking toward zero past 0.55.
+    expect(riftSizeRamp(RIFT_SIZE_RATE_REF_FRACTION)).toBeCloseTo(RIFT_SIZE_RATE_REF_MULTIPLE, 10);
+    expect(riftSizeRamp(1)).toBeGreaterThan(RIFT_SIZE_RATE_REF_MULTIPLE);
+    // Monotonic and continuous — the whole point of #61 vs the old brake, which
+    // jumped by (REF_MULTIPLE − 1) = 7× at a single point (0.55). Dense sweep:
+    // never decreases, and its largest 1%-area step stays a small fraction of
+    // that old cliff (steepest near whole-sphere, ~1.6 per step).
+    let prev = riftSizeRamp(0);
+    let maxJump = 0;
+    for (let a = 0.01; a <= 1.0001; a += 0.01) {
+      const v = riftSizeRamp(a);
+      expect(v).toBeGreaterThanOrEqual(prev - 1e-9);
+      maxJump = Math.max(maxJump, v - prev);
+      prev = v;
+    }
+    expect(maxJump).toBeLessThan(RIFT_SIZE_RATE_REF_MULTIPLE - 1);
+  });
+
+  it('a sphere-monopoly plate still sheds a fragment within a few tens of Myr despite age 0', () => {
     // A freshly-created whole-sphere plate (age 0 — e.g. it just absorbed the
-    // last other plate) must NOT have to wait out RIFT_MIN_AGE_YEARS: the
-    // monopoly brake keeps drawing at boosted probability, so it sheds a
-    // fragment within a few tens of Myr.
+    // last other plate) must NOT wait out RIFT_MIN_AGE_YEARS: at ~whole-sphere
+    // the ramp divides the maturity gate down to a few Myr (the old waiver, now
+    // continuous), so it sheds within the window.
     const base = wholeSpherePlate();
     const state: PlanetState = {
       ...base,
       plates: [{ ...base.plates[0]!, createdAtYears: base.timeYears }],
     };
-    const steps = 100; // 100 Myr at the default step — well under the 150 Myr age gate
+    const steps = 100; // 100 Myr at the default step — well under the 150 Myr base age gate
     expect(steps * state.params.stepYears).toBeLessThan(RIFT_MIN_AGE_YEARS);
     const after = runSystems(state, steps, WILSON_PIPELINE);
     expect(after.events.filter((e) => e.kind === EVENT_KINDS.plateRift).length).toBeGreaterThan(0);
   });
 
-  it('keeps the age gate for a plate at or below a hemisphere', () => {
-    // Control: two ~50% plates, both age 0. Neither is oversized, so the age
-    // gate holds and no rift fires. 50 steps: convergent advection slowly
-    // grows one hemisphere (ownership transfer), and it crosses the 55%
-    // oversize threshold near step ~90 for this seed — the window must end
-    // well before that so this stays a pure age-gate check.
+  it('still respects a (relaxed) maturity gate — a large plate does not rift while too young', () => {
+    // Two ~50% plates, age 0. The ramp relaxes their maturity gate but does not
+    // waive it: they must age past RIFT_MIN_AGE_YEARS / ramp(area) before any
+    // rift can fire. Run strictly inside that window — bound the area from above
+    // by the reference fraction, where the gate is shortest — and assert it
+    // holds. (Under the old brake these hemispheres were on the full 150 Myr
+    // gate; #61 relaxes it with size, so the window is now much shorter.)
     const state = collisionWorld(0);
-    const after = runSystems(state, 50, WILSON_PIPELINE);
+    const shortestGate = RIFT_MIN_AGE_YEARS / riftSizeRamp(RIFT_SIZE_RATE_REF_FRACTION);
+    const steps = Math.floor((0.8 * shortestGate) / state.params.stepYears);
+    const after = runSystems(state, steps, WILSON_PIPELINE);
     expect(after.events.filter((e) => e.kind === EVENT_KINDS.plateRift)).toEqual([]);
   });
 });

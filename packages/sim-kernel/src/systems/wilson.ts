@@ -22,10 +22,16 @@
  * decision draw is `hash3(seed', plate, timeQuantum)` — deterministic and
  * independent of any other system's PRNG consumption (documented deviation
  * from the issue's rng.fork sketch: a fork taken inside a pure system would
- * restart its stream every step). An OVERSIZED plate (area above
- * RIFT_OVERSIZE_AREA_FRACTION) skips the age gate and draws at a boosted
- * probability — the monopoly brake that keeps one plate from owning the
- * sphere for geological ages (#59). The rift carves a contiguous continental
+ * restart its stream every step). Rift likelihood rises SMOOTHLY with plate
+ * size (#61, replacing #59's threshold brake): one size ramp (1 below
+ * RIFT_SIZE_RATE_KNEE, the old 8× brake at RIFT_SIZE_RATE_REF_FRACTION = 0.55)
+ * both relaxes the maturity age gate (RIFT_MIN_AGE_YEARS / ramp, shrinking
+ * toward zero as a plate approaches whole-sphere — the old age-gate waiver made
+ * continuous) and boosts the draw probability (capped at the 8× brake magnitude
+ * above 0.55, so nothing rifts faster than the measured-good brake). This lets a
+ * near-whole-sphere monopoly keep shedding fragments without the old
+ * discontinuous 0.55 threshold or its MIN_PLATES coupling. The rift carves a
+ * contiguous continental
  * FRAGMENT (a hash-drawn RIFT_FRAGMENT_MIN/MAX_FRACTION of the plate, grown
  * by jittered Dijkstra from a continental seed cell) and gives it an Euler
  * pole perpendicular to its own centroid, so the fragment TRANSLATES across
@@ -59,9 +65,11 @@ import {
   RIFT_MIN_AGE_YEARS,
   RIFT_MIN_AREA_FRACTION,
   RIFT_MIN_CONTINENTAL_AREA_FRACTION,
-  RIFT_OVERSIZE_AREA_FRACTION,
-  RIFT_OVERSIZE_PROBABILITY_FACTOR,
   RIFT_PROBABILITY_PER_MYR,
+  RIFT_SIZE_RATE_EXPONENT,
+  RIFT_SIZE_RATE_KNEE,
+  RIFT_SIZE_RATE_REF_FRACTION,
+  RIFT_SIZE_RATE_REF_MULTIPLE,
   RIFT_SUTURE_COOLDOWN_YEARS,
   SUTURE_AFTER_YEARS,
   SUTURE_MIN_CONTACT_CELLS,
@@ -201,14 +209,19 @@ function applyWilson(state: PlanetState, dtYears: number): PlanetState {
       const plate = next.plates[p]!;
       const s = stats[p];
       if (!plate.alive || !s || s.cells === 0) continue;
-      // Oversized plates (#59) skip the age gate and draw boosted: a plate
-      // that owns most of the sphere must keep shedding fragments, or the
-      // world re-locks into the whole-sphere monopoly.
-      const oversized = s.cells / count > RIFT_OVERSIZE_AREA_FRACTION;
-      if (!oversized && state.timeYears - plate.createdAtYears < RIFT_MIN_AGE_YEARS) continue;
       if (s.cells / count < RIFT_MIN_AREA_FRACTION) continue;
       if (s.continental / count < RIFT_MIN_CONTINENTAL_AREA_FRACTION) continue;
-      const pDraw = oversized ? pRift * RIFT_OVERSIZE_PROBABILITY_FACTOR : pRift;
+      // Continuous size-dependent rift pressure (#61), replacing the #59
+      // discontinuous 0.55 brake and its MIN_PLATES coupling. One size ramp
+      // scales the decision: it relaxes the maturity gate (RIFT_MIN_AGE_YEARS /
+      // ramp — full below the knee, shrinking toward zero as a plate approaches
+      // whole-sphere, the old age-gate waiver made continuous) and boosts the
+      // draw probability (capped at the brake magnitude, so the deep-time rate
+      // above 0.55 matches #59 and nothing rifts faster than the measured-good
+      // brake).
+      const ramp = riftSizeRamp(s.cells / count);
+      if (state.timeYears - plate.createdAtYears < RIFT_MIN_AGE_YEARS / ramp) continue;
+      const pDraw = pRift * Math.min(RIFT_SIZE_RATE_REF_MULTIPLE, ramp);
       if (hash3(riftSeed, p, timeQuantum, 0) / 4294967296 >= pDraw) continue;
       const rifted = riftPlate(next, p, riftSeed);
       reorganized = reorganized || rifted !== next;
@@ -228,6 +241,26 @@ function applyWilson(state: PlanetState, dtYears: number): PlanetState {
   }
 
   return next;
+}
+
+/**
+ * Continuous size-dependent rift-rate ramp (#61), replacing the #59 threshold
+ * brake. Returns 1 for any plate at or below RIFT_SIZE_RATE_KNEE, rises smoothly
+ * (power RIFT_SIZE_RATE_EXPONENT) through RIFT_SIZE_RATE_REF_MULTIPLE at
+ * RIFT_SIZE_RATE_REF_FRACTION — the former oversize threshold/factor — and keeps
+ * climbing above it. Monotonic and continuous in areaFraction: no plate's rift
+ * rate jumps as it grows. The caller reads it two ways, both smoothing a half of
+ * the old brake: the draw probability uses min(REF_MULTIPLE, ramp), which
+ * saturates at the brake magnitude above 0.55 (so nothing rifts faster than the
+ * measured-good brake); the maturity gate divides RIFT_MIN_AGE_YEARS by the
+ * uncapped ramp, which keeps shrinking toward zero for a near-whole-sphere plate
+ * (the old age-gate waiver, now continuous). Exported for the contract test.
+ */
+export function riftSizeRamp(areaFraction: number): number {
+  const t =
+    (areaFraction - RIFT_SIZE_RATE_KNEE) / (RIFT_SIZE_RATE_REF_FRACTION - RIFT_SIZE_RATE_KNEE);
+  if (t <= 0) return 1;
+  return 1 + (RIFT_SIZE_RATE_REF_MULTIPLE - 1) * Math.pow(t, RIFT_SIZE_RATE_EXPONENT);
 }
 
 /** Merge the smaller of plates a, b into the larger; kill the loser's slot. */
