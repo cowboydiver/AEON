@@ -128,6 +128,15 @@ describe('suturing (#18)', () => {
     const steps = Math.floor((SUTURE_AFTER_YEARS + shortestRiftGate) / 2 / base.params.stepYears);
     expect(steps * base.params.stepYears).toBeGreaterThan(SUTURE_AFTER_YEARS);
     const state = runSystems(base, steps, WILSON_PIPELINE);
+    // Make the silent coupling to tectonics tuning explicit: no plate grew into
+    // the size-relaxed rift gate during the window (gate = MIN_AGE / ramp is
+    // monotone-decreasing in area, so its final value bounds the whole window),
+    // so no rift could add a third plate that would then let the collision
+    // suture. If advection is ever retuned faster this fails loudly here, not
+    // confusingly at the suture/alive checks below.
+    expect(RIFT_MIN_AGE_YEARS / riftSizeRamp(maxPlateAreaFraction(state))).toBeGreaterThan(
+      steps * base.params.stepYears,
+    );
     expect(state.events.filter((e) => e.kind === EVENT_KINDS.plateSuture)).toEqual([]);
     // Both plates still alive and still colliding.
     expect(state.plates[0]!.alive).toBe(true);
@@ -267,13 +276,16 @@ describe('size-dependent rift rate (#61)', () => {
     // Anchored to reproduce the old brake exactly at the old 0.55 threshold, and
     // it keeps climbing above it (a near-whole-sphere plate) — the caller caps
     // the probability at the brake magnitude but divides the maturity gate by
-    // this uncapped value, so the gate keeps shrinking toward zero past 0.55.
+    // this uncapped value, so the gate keeps shrinking (toward a ~2.7 Myr floor)
+    // past 0.55.
     expect(riftSizeRamp(RIFT_SIZE_RATE_REF_FRACTION)).toBeCloseTo(RIFT_SIZE_RATE_REF_MULTIPLE, 10);
     expect(riftSizeRamp(1)).toBeGreaterThan(RIFT_SIZE_RATE_REF_MULTIPLE);
     // Monotonic and continuous — the whole point of #61 vs the old brake, which
     // jumped by (REF_MULTIPLE − 1) = 7× at a single point (0.55). Dense sweep:
-    // never decreases, and its largest 1%-area step stays a small fraction of
-    // that old cliff (steepest near whole-sphere, ~1.6 per step).
+    // never decreases, and its largest 1%-area step (≈1.56, steepest near
+    // whole-sphere) stays well under 2 — a bound tight enough that reintroducing
+    // even a partial cliff (any single step ≥ 2×) fails here, unlike a bound of
+    // 7 which only catches a full-magnitude cliff.
     let prev = riftSizeRamp(0);
     let maxJump = 0;
     for (let a = 0.01; a <= 1.0001; a += 0.01) {
@@ -282,7 +294,7 @@ describe('size-dependent rift rate (#61)', () => {
       maxJump = Math.max(maxJump, v - prev);
       prev = v;
     }
-    expect(maxJump).toBeLessThan(RIFT_SIZE_RATE_REF_MULTIPLE - 1);
+    expect(maxJump).toBeLessThan(2);
   });
 
   it('a sphere-monopoly plate still sheds a fragment within a few tens of Myr despite age 0', () => {
@@ -311,7 +323,18 @@ describe('size-dependent rift rate (#61)', () => {
     const state = collisionWorld(0);
     const shortestGate = RIFT_MIN_AGE_YEARS / riftSizeRamp(RIFT_SIZE_RATE_REF_FRACTION);
     const steps = Math.floor((0.8 * shortestGate) / state.params.stepYears);
+    // Lower-bound guard (as the MIN_PLATES-floor test has): a coarser stepYears
+    // could floor `steps` to 0, making the no-rift assertion pass vacuously.
+    expect(steps * state.params.stepYears).toBeGreaterThan(shortestGate / 2);
     const after = runSystems(state, steps, WILSON_PIPELINE);
+    // Make the coupling to tectonics tuning explicit: assert the plates never
+    // grew into the size-relaxed gate during the window (gate = MIN_AGE / ramp
+    // is monotone-decreasing in area, so its final value bounds the window), so
+    // the "no rift" below is because the gate held — not because the plates
+    // happened to stay small. Fails loudly here if advection is retuned faster.
+    expect(RIFT_MIN_AGE_YEARS / riftSizeRamp(maxPlateAreaFraction(after))).toBeGreaterThan(
+      steps * state.params.stepYears,
+    );
     expect(after.events.filter((e) => e.kind === EVENT_KINDS.plateRift)).toEqual([]);
   });
 });
@@ -353,6 +376,13 @@ function countCells(state: PlanetState, plate: number): number {
   let n = 0;
   for (const p of state.fields.plateId) if (p === plate) n++;
   return n;
+}
+
+/** Largest single-plate area as a fraction of the sphere. */
+function maxPlateAreaFraction(state: PlanetState): number {
+  const counts = new Map<number, number>();
+  for (const p of state.fields.plateId) counts.set(p, (counts.get(p) ?? 0) + 1);
+  return Math.max(...counts.values()) / state.fields.plateId.length;
 }
 
 /** Sum of unit cell-center directions over the plate's cells (not normalized). */
