@@ -106,7 +106,19 @@ PR #59 review) ·
 [**#61**](https://github.com/cowboydiver/AEON/issues/61) continuous
 size-dependent rift rate to replace the oversize-plate brake (kernel, goldens;
 **filed** 2026-07-04 from the PR #59 review — same monopoly-breaking pressure
-without the 55%-area cliff or the MIN_PLATES coupling).
+without the 55%-area cliff or the MIN_PLATES coupling; **implemented**
+2026-07-05 as a single `riftSizeRamp` in `wilson.ts` — probability capped at the
+old 8× brake, maturity gate = `RIFT_MIN_AGE_YEARS / ramp`. The 10-step goldens
+are byte-identical, so `KERNEL_BEHAVIOR_VERSION` bumped 3→4 only for deep-time
+cache invalidation. Measured against a re-run #59 baseline: beats the
+dispersed-window fraction at N=64 for all three golden seeds (72–74% vs 66–72%)
+and matches or beats at 5 of 6 seed×grid points, the exception being seed 1337
+at N=128 (80.3% → ~72%). The deep-time dispersal metric is chaotically sensitive
+to any sub-0.55 rifting — inherent to removing the discontinuity — so #59 is not
+reproduced number-for-number; the world stays fully dispersed everywhere
+(≥ ~63% dispersed keyframes, every Gyr bucket alive, monopoly windows ≤ ~100 Myr,
+land in [12%, 33%]). The #20 invariant (monopoly < 400 Myr, land [10%, 60%] at
+N=16) passes).
 
 Dependency sketch: [#57] → #22; Spike A → #22; Spike B → #25;
 #22 → {#23, #24, #25, #27}; #23 → #26; #25 → #26; #24 needs #22, #23;

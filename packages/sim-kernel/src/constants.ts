@@ -23,8 +23,17 @@
  *     rose 1e-3 -> 1.25e-3. Field and codec goldens regenerated
  *     deliberately in the same commit; cached histories at every grid must
  *     invalidate.
+ * 4 — continuous size-dependent rift rate (#61) replacing the oversize brake:
+ *     one smooth ramp scales the rift probability (capped at the old 8× brake
+ *     magnitude) and relaxes the maturity age gate (RIFT_MIN_AGE_YEARS / ramp),
+ *     instead of a discontinuous jump at 0.55 of the sphere. The 10-step
+ *     *golden* window is byte-identical (it never contains a plate above
+ *     RIFT_SIZE_RATE_KNEE = 0.3, so the ramp is exactly 1 there — field and
+ *     codec goldens were NOT regenerated), but deep-time keyframes change (the
+ *     dispersed-window fraction beats the #59 baseline at N=64 for all three
+ *     golden seeds), so cached full histories must invalidate.
  */
-export const KERNEL_BEHAVIOR_VERSION = 3;
+export const KERNEL_BEHAVIOR_VERSION = 4;
 
 /** IUGG mean Earth radius, m. */
 export const EARTH_RADIUS_M = 6.371e6;
@@ -374,20 +383,45 @@ export const RIFT_FRAGMENT_MIN_FRACTION = 0.2;
 export const RIFT_FRAGMENT_MAX_FRACTION = 0.4;
 
 /**
- * A plate owning more than this fraction of the sphere is oversized (#59):
- * its rift age gate (RIFT_MIN_AGE_YEARS) is waived and its per-Myr rift
- * probability is multiplied by RIFT_OVERSIZE_PROBABILITY_FACTOR. This is the
- * monopoly brake: a supercontinent's plate keeps growing by suture until one
- * plate owns ~100% of cells (plate ≠ land — land is ~20%), after which no
- * kinematics can show continents dispersing across an ocean. Physically:
- * a sphere-spanning plate has no external slab pull balancing its interior
- * heat, and real supercontinents self-break on ~100 Myr insulation
- * timescales. 0.55 keeps ordinary large plates — up to and including a clean
- * hemisphere (~50%) — on the normal draw; only genuinely monopolistic plates
- * feel the pressure, and a whole-sphere plate still drops below the
- * threshold within two fragment sheds.
+ * Continuous size-dependent rift rate (#61), replacing the #59 oversize brake
+ * (which skipped the age gate and multiplied the rift probability by a fixed
+ * factor the instant a plate crossed 0.55 of the sphere — a discontinuity, and
+ * one coupled to MIN_PLATES because the brake only existed to compensate for the
+ * lowered suture floor). Rift likelihood should rise *smoothly* with plate size
+ * — a bigger plate has more internal stress and longer weak margins — so a
+ * single ramp now scales the rift decision:
+ *
+ *     ramp(area) = 1 + (REF_MULTIPLE − 1) · max(0, (area − KNEE)/(REF − KNEE))^EXP
+ *
+ * It is 1 for any plate at or below RIFT_SIZE_RATE_KNEE (small plates feel no
+ * size pressure — the normal Wilson draw and the golden 10-step window are
+ * unchanged), passes through RIFT_SIZE_RATE_REF_MULTIPLE at
+ * RIFT_SIZE_RATE_REF_FRACTION — the old oversize threshold (0.55) and factor
+ * (8×) — and keeps climbing above it. The one ramp scales both halves of the
+ * old brake: (1) the per-Myr rift probability is multiplied by
+ * min(REF_MULTIPLE, ramp) — it rises 1→8× over [KNEE, REF] then holds at the
+ * brake magnitude above 0.55, so the deep-time rift rate there is exactly the
+ * measured-good #59 brake and nothing rifts faster than it; (2) the maturity
+ * gate RIFT_MIN_AGE_YEARS is DIVIDED by the (uncapped) ramp — full below the
+ * knee, ~1/8 of it at 0.55, and shrinking toward zero as a plate approaches
+ * whole-sphere (~2 Myr at 0.95), the smooth replacement for the old hard age
+ * waiver so a monopoly keeps shedding. Nothing here references MIN_PLATES:
+ * retuning the suture floor no longer forces retuning the monopoly brake.
+ *
+ * KNEE = 0.3 (the value suggested on the issue) was measured against the #59
+ * dispersal metrics; it beats the #59 dispersed-window fraction at N=64 for all
+ * three golden seeds and matches or beats it at 5 of 6 seed×grid points, the
+ * exception being seed 1337 at N=128 (80.3% → ~72%). The deep-time dispersal
+ * metric is chaotically sensitive to any sub-0.55 rifting — which removing the
+ * discontinuity necessarily introduces — so exact reproduction of every #59
+ * number is not attainable by a continuous rate; the world stays fully
+ * dispersed (≥ ~63% dispersed keyframes, every Gyr bucket alive, monopoly
+ * windows ≤ ~100 Myr) everywhere. See wilson.ts and PHASE_2_STAGE0_FINDINGS.md.
  */
-export const RIFT_OVERSIZE_AREA_FRACTION = 0.55;
+export const RIFT_SIZE_RATE_KNEE = 0.3;
+export const RIFT_SIZE_RATE_REF_FRACTION = 0.55;
+export const RIFT_SIZE_RATE_REF_MULTIPLE = 8;
+export const RIFT_SIZE_RATE_EXPONENT = 2;
 
 /**
  * Number of candidate travel directions scored when a rift fragment picks
@@ -412,15 +446,6 @@ export const RIFT_OCEAN_SCAN_RAD = 1.0;
 
 /** Sample count along each scanned heading (cell-scale steps at N=64). */
 export const RIFT_OCEAN_SCAN_SAMPLES = 12;
-
-/**
- * Rift-probability multiplier for oversized plates (#59). With the base
- * 0.006/Myr draw this gives an expected shedding wait of ~20 Myr, so a
- * whole-sphere plate breaks below RIFT_OVERSIZE_AREA_FRACTION within
- * ~40-100 Myr (a few keyframes) instead of persisting for the
- * RIFT_MIN_AGE_YEARS + ~1/p ≈ 300-400 Myr normal cycle.
- */
-export const RIFT_OVERSIZE_PROBABILITY_FACTOR = 8;
 
 /**
  * After a rift, neither new half can suture (to anyone) for this long, yr.
