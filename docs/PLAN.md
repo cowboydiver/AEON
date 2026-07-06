@@ -68,13 +68,18 @@ Dependency sketch: #9 → #12; #10 → #13; #11 and #17 anytime; #13 → #14 →
 
 ## Phase 2 — Timeline scrubbing · [milestone](https://github.com/cowboydiver/AEON/milestone/2) · overview [#4](https://github.com/cowboydiver/AEON/issues/4)
 
-**Status: re-planned, awaiting sign-off** — spec `docs/PHASE_2_SPEC.md`, Stage 0
+**Status: implemented and accepted** — spec `docs/PHASE_2_SPEC.md`, Stage 0
 de-risking measurements in `docs/PHASE_2_STAGE0_FINDINGS.md` (evidence under
-`docs/phase2-evidence/stage0/`). **Open go/no-go at sign-off:** the 4.5 Gyr runs
-show 2 of 3 acceptance seeds go tectonically dead by ~1.5 Gyr (a confirmed
-`riftPlate` antipodal-pole bug freezes any whole-sphere plate) and seed 1337
-sinks below the 10% land floor. See the spec §0 for the sequencing decision
-(recommendation: fix the small rift bug first via new kernel issue #57).
+`docs/phase2-evidence/stage0/`), acceptance report **`PHASE_2_REPORT.md`**
+(#29; e2e evidence `apps/web/e2e/phase2-acceptance.spec.ts`, artifacts under
+`apps/web/e2e/artifacts/`). The §0 go/no-go resolved as **choice A**: the #57
+rift fix landed first, then the #59/#61 deep-time dispersal pass, then the
+timeline stack #22–#27. **#28 (adaptive keyframe density) skipped per the
+spec's default** — #27's numbers show fixed 10 Myr intervals fit the 0.5 GB
+budget with headroom at N=128 (decision recorded in the report). **#60**
+shipped as recording-only suture memory (`sutureYears`) with a measured
+negative result on every carve-weighting variant — see the note below and
+`PHASE_2_STAGE0_FINDINGS.md` "#60".
 
 Issues (each gets full motivation, approach, files, acceptance, and size on the
 issue itself in the Stage 1 tracker sync — deferred until the §0 decision fixes
@@ -102,7 +107,14 @@ optional follow-up) ·
 suture-line memory (kernel, goldens; **filed** 2026-07-04 — deep-time continents
 should keep coherent shapes; the residual left by the PR #59 dispersal pass;
 also scoped to absorb the foundering connected-component threshold from the
-PR #59 review) ·
+PR #59 review; **resolved** 2026-07-06 as recording-only: the advected
+`sutureYears` weld record shipped with `KERNEL_BEHAVIOR_VERSION` 4→5 and all
+pre-existing field bytes bit-identical, while seven measured carve-weighting
+variants each degraded continental coherence (largest continental component
+0.11 → 0.04–0.08 of continental area) and/or the #59/#61 dispersal metrics
+(0.72–0.74 → as low as 0.51) — the raggedness driver is the per-boundary
+process layer, not carve geometry; variant table and follow-up direction in
+`PHASE_2_STAGE0_FINDINGS.md` "#60") ·
 [**#61**](https://github.com/cowboydiver/AEON/issues/61) continuous
 size-dependent rift rate to replace the oversize-plate brake (kernel, goldens;
 **filed** 2026-07-04 from the PR #59 review — same monopoly-breaking pressure

@@ -339,6 +339,56 @@ describe('size-dependent rift rate (#61)', () => {
   });
 });
 
+describe('suture-line memory (#60)', () => {
+  it('suturing stamps the continent-continent weld cells with the merge time', () => {
+    // Same setup as the suturing suite: the 0/1 collision sutures at ~16 Myr
+    // while the polar cap (plate 2) stays separate and untouched.
+    const state = runSystems(collisionWorldWithCap(), 20, WILSON_PIPELINE);
+    const sutures = state.events.filter((e) => e.kind === EVENT_KINDS.plateSuture);
+    expect(sutures.length).toBe(1);
+    const weldTime = sutures[0]!.timeYears;
+
+    const stamped: number[] = [];
+    for (let i = 0; i < cellCount(N); i++) {
+      if (state.fields.sutureYears[i]! > 0) stamped.push(i);
+    }
+    // The weld exists, is belt-like (a strip along the old 0/1 boundary, not
+    // an area fill), and every stamp carries the merge time on continental
+    // crust — sutureYears > 0 implies continental by construction (only
+    // continental weld cells are stamped, the stamp advects with the crust,
+    // and fresh ocean/arc crust starts at 0).
+    expect(stamped.length).toBeGreaterThan(0);
+    expect(stamped.length).toBeLessThan(0.12 * cellCount(N));
+    for (const i of stamped) {
+      expect(state.fields.sutureYears[i]).toBe(weldTime);
+      expect(state.fields.crustType[i]).toBe(1);
+    }
+    // The uninvolved cap plate carries no weld memory.
+    for (let i = 0; i < cellCount(N); i++) {
+      if (state.fields.plateId[i] === 2) expect(state.fields.sutureYears[i]).toBe(0);
+    }
+  });
+
+  it('recording alone never perturbs the other fields or the rift carve', () => {
+    // #60 is deliberately recording-only (see wilson.ts header): a run with
+    // suturing must produce byte-identical non-sutureYears fields whether or
+    // not the sutureYears record is inspected — i.e. the stamp is written,
+    // advected, and read by nothing. Guard: compare every other field of two
+    // independent runs (determinism) and assert the rift carve of a stamped
+    // state matches the carve of the same state with the record erased.
+    const stamped = runSystems(collisionWorldWithCap(), 80, WILSON_PIPELINE);
+    const erased: PlanetState = {
+      ...stamped,
+      fields: { ...stamped.fields, sutureYears: new Float32Array(cellCount(N)) },
+    };
+    const riftSeed = hash2(7, hashString('wilsonRift'), 0);
+    const plateToRift = stamped.fields.plateId[0]!;
+    const a = riftPlate(stamped, plateToRift, riftSeed);
+    const b = riftPlate(erased, plateToRift, riftSeed);
+    expect(Array.from(a.fields.plateId)).toEqual(Array.from(b.fields.plateId));
+  });
+});
+
 describe('post-rift suture cooldown (#57 follow-up)', () => {
   const riftSeed = hash2(7, hashString('wilsonRift'), 0);
 

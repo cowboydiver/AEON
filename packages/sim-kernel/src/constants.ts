@@ -32,8 +32,19 @@
  *     codec goldens were NOT regenerated), but deep-time keyframes change (the
  *     dispersed-window fraction beats the #59 baseline at N=64 for all three
  *     golden seeds), so cached full histories must invalidate.
+ * 5 — suture-line memory (#60): a new advected sutureYears field records
+ *     continent-continent weld lines at every suture. Recording-only — the
+ *     rift carve deliberately does not read it (every measured carve
+ *     weighting made deep-time continents less coherent or broke dispersal;
+ *     see wilson.ts and the #60 section of PHASE_2_STAGE0_FINDINGS.md), so
+ *     every pre-existing field's bytes are bit-identical at every step of
+ *     every run. The field-golden snapshot gains the sutureYears entries and
+ *     the PlanetState schema grew, which is a deliberate golden regeneration
+ *     and owes this bump by the rule above; the stored keyframe subset
+ *     (codec) is untouched, so the bump costs one benign cache miss and can
+ *     never serve stale bytes.
  */
-export const KERNEL_BEHAVIOR_VERSION = 4;
+export const KERNEL_BEHAVIOR_VERSION = 5;
 
 /** IUGG mean Earth radius, m. */
 export const EARTH_RADIUS_M = 6.371e6;

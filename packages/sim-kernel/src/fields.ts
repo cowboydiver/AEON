@@ -26,6 +26,13 @@ export const FIELDS = {
     description:
       'Signed normal closing speed at plate-boundary cells: + convergent, - divergent, ~0 transform. Exactly 0 in plate interiors; recomputed every step',
   },
+  // Appended last deliberately: the codec's wire fieldId is FIELD_NAMES.indexOf,
+  // so inserting earlier would renumber stored fields and break codec goldens.
+  sutureYears: {
+    unit: 'yr',
+    description:
+      'Sim time at which a continent-continent suture last welded this cell (0 = never). Crust property: advects with plate motion; fresh ocean and fresh arc crust carry 0',
+  },
 } as const;
 
 export type FieldName = keyof typeof FIELDS;
