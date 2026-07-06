@@ -33,6 +33,11 @@ export const FIELDS = {
     description:
       'Sim time at which a continent-continent suture last welded this cell (0 = never). Crust property: advects with plate motion; fresh ocean and fresh arc crust carry 0',
   },
+  sedimentM: {
+    unit: 'm',
+    description:
+      'Sediment thickness on oceanic crust exported from the continents by erosion (#65); the age-depth relaxation target adds it on top. Crust property: advects with plate motion; always 0 on continental crust and fresh ocean. Appended last (codec wire-id constraint, as above)',
+  },
 } as const;
 
 export type FieldName = keyof typeof FIELDS;
