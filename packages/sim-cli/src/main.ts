@@ -134,17 +134,29 @@ function reportEvents(keyframe: Keyframe): void {
 function report(keyframe: Keyframe): void {
   if (!printedHeader) {
     console.log(
-      ['time'.padStart(12), 'land%'.padStart(7), 'min elev'.padStart(10), 'mean elev'.padStart(10), 'max elev'.padStart(10), 'checksums (fnv1a32 per field)'].join('  '),
+      ['time'.padStart(12), 'land%'.padStart(7), 'min elev'.padStart(10), 'mean elev'.padStart(10), 'max elev'.padStart(10), 'cont elev'.padStart(10), 'checksums (fnv1a32 per field)'].join('  '),
     );
     printedHeader = true;
   }
   const elevation = keyframe.fields.elevation;
+  const crustType = keyframe.fields.crustType;
   const { min, max, mean } = fieldStats(elevation);
   // >= 0: cells exactly at the datum are land (matches globals.landFraction,
   // which counts noise >= the sea-level quantile — those cells get 0 m).
   let land = 0;
   for (const e of elevation) if (e >= 0) land++;
   const landPct = ((land / elevation.length) * 100).toFixed(1);
+  // Mean elevation over continental crust (#65's acceptance metric: it must
+  // not ratchet monotonically upward over deep time).
+  let contSum = 0;
+  let contCount = 0;
+  for (let i = 0; i < elevation.length; i++) {
+    if (crustType[i] === 1) {
+      contSum += elevation[i]!;
+      contCount++;
+    }
+  }
+  const contMean = contCount > 0 ? contSum / contCount : 0;
   const checksums = FIELD_NAMES.map((n) => `${n}:${checksumHex(keyframe.fields[n])}`).join(' ');
   console.log(
     [
@@ -153,6 +165,7 @@ function report(keyframe: Keyframe): void {
       min.toFixed(0).padStart(10),
       mean.toFixed(0).padStart(10),
       max.toFixed(0).padStart(10),
+      contMean.toFixed(0).padStart(10),
       checksums,
     ].join('  '),
   );
