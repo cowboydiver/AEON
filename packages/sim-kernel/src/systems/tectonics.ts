@@ -54,7 +54,7 @@ function advectionQuantum(seed: number, plate: number, eventCount: number, theta
 }
 
 /** Crust fields transported with plate motion (see ARCHITECTURE.md). */
-const ADVECTED_FIELDS = ['elevation', 'crustAge', 'crustType', 'sutureYears'] as const;
+const ADVECTED_FIELDS = ['elevation', 'crustAge', 'crustType', 'sutureYears', 'sedimentM'] as const;
 
 export const tectonicsSystem: System = {
   name: 'tectonics',
@@ -99,6 +99,10 @@ function applyTectonics(state: PlanetState, dtYears: number): PlanetState {
 
   // Thermal subsidence (#15): oceanic elevation relaxes toward the
   // age-depth curve (isostasy) — ridge crest young, abyssal plain old.
+  // Sediment exported from the continents (#65) rides on top: the target is
+  // curve + sedimentM, so filled shelves stand above bare crust of the same
+  // age (deposition is capped at SEDIMENT_SHELF_CEILING_M in erosion.ts, and
+  // the curve only deepens with age, so the target never exceeds it).
   // Active convergent margins are exempt (#16): trenches pin below the
   // curve, arcs accumulate above it. The relaxation is rate-bounded (#59)
   // rather than a hard-set so inactive arc/trench relief has memory: it
@@ -106,11 +110,12 @@ function applyTectonics(state: PlanetState, dtYears: number): PlanetState {
   // moves off the cell (see OCEAN_RELIEF_RELAX_M_PER_YR).
   const elevation = next.fields.elevation.slice();
   const crustType = next.fields.crustType.slice();
+  const sedimentM = next.fields.sedimentM.slice();
   const age = next.fields.crustAge;
   const relax = OCEAN_RELIEF_RELAX_M_PER_YR * dtYears;
   for (let i = 0; i < elevation.length; i++) {
     if (crustType[i] === 0 && boundaryStress[i]! <= ACTIVE_MARGIN_STRESS_M_PER_YR) {
-      const target = oceanicDepthForAge(age[i]!);
+      const target = oceanicDepthForAge(age[i]!) + sedimentM[i]!;
       const e = elevation[i]!;
       elevation[i] = e > target ? Math.max(target, e - relax) : Math.min(target, e + relax);
     }
@@ -146,13 +151,23 @@ function applyTectonics(state: PlanetState, dtYears: number): PlanetState {
     }
   }
 
+  // sedimentM is oceanic cover only (#65): crust that just became continental
+  // (arc maturation above, bulldozer re-root in advect) consumes its sediment
+  // — accreted into the margin wedge, it leaves the ledger the same way
+  // subducted sediment does. Erosion deposits only on oceanic cells and
+  // continental crust never reverts to oceanic, so this sweep is the single
+  // place the invariant "sedimentM = 0 on continental crust" is enforced.
+  for (let i = 0; i < crustType.length; i++) {
+    if (crustType[i] === 1) sedimentM[i] = 0;
+  }
+
   let land = 0;
   for (const e of elevation) if (e >= 0) land++;
 
   return {
     ...next,
     globals: { ...next.globals, landFraction: land / elevation.length },
-    fields: { ...next.fields, boundaryStress, elevation, crustType },
+    fields: { ...next.fields, boundaryStress, elevation, crustType, sedimentM },
   };
 }
 
@@ -176,12 +191,14 @@ function advect(
     crustAge: new Float32Array(count),
     crustType: new Float32Array(count),
     sutureYears: new Float32Array(count),
+    sedimentM: new Float32Array(count),
   };
   const old = {
     elevation: state.fields.elevation,
     crustAge: state.fields.crustAge,
     crustType: state.fields.crustType,
     sutureYears: state.fields.sutureYears,
+    sedimentM: state.fields.sedimentM,
   };
 
   // Claims + resolution. Overlaps (multiple claimants) are convergence: the
@@ -456,6 +473,7 @@ function advect(
       newFields.crustAge[i] = 0;
       newFields.crustType[i] = 0;
       newFields.sutureYears[i] = 0; // fresh ocean carries no weld memory
+      newFields.sedimentM[i] = 0; // ...and no sediment cover
     }
   }
 

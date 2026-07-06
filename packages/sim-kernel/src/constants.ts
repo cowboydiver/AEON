@@ -43,8 +43,21 @@
  *     and owes this bump by the rule above; the stored keyframe subset
  *     (codec) is untouched, so the bump costs one benign cache miss and can
  *     never serve stale bytes.
+ * 6 — erosion gets a sink (#65). Two mechanisms: (1) coastal sediment export —
+ *     a continental cell's elevation above sea level crossing a
+ *     continental→submerged-oceanic pair now LEAVES the continental budget
+ *     and accumulates in the new sedimentM field, which the oceanic age-depth
+ *     relaxation target adds on top (shelves fill toward
+ *     SEDIMENT_SHELF_CEILING_M); (2) orogenic root decay — continental
+ *     elevation above OROGENIC_ROOT_REFERENCE_M relaxes exponentially with
+ *     time constant OROGENIC_ROOT_DECAY_TAU_YEARS, so interior mountain belts
+ *     welded in by sutures finally retire instead of smearing into immortal
+ *     plateaus. Elevation (and temperature via the lapse term) changes within
+ *     the 10-step golden window; field and codec goldens regenerated
+ *     deliberately in the same commit. The codec's stored field subset is
+ *     unchanged (sedimentM is expressed through elevation).
  */
-export const KERNEL_BEHAVIOR_VERSION = 5;
+export const KERNEL_BEHAVIOR_VERSION = 6;
 
 /** IUGG mean Earth radius, m. */
 export const EARTH_RADIUS_M = 6.371e6;
@@ -522,6 +535,42 @@ export const EROSION_PRECIP_FACTOR_MAX = 2;
  * (land fraction fell to 7% in 800 Myr when first integrated).
  */
 export const EROSION_SUBSEA_FACTOR = 0.1;
+
+// --- Sediment export & orogenic root decay (#65) ------------------------------
+
+/**
+ * Ceiling the shelf sediment fill saturates at, m below datum. Coastal export
+ * deposits raise an oceanic cell's relaxation target (age-depth curve +
+ * sedimentM) toward this level and stop there — a filled shelf is shallow
+ * submerged platform, never new land. -200 m is continental-shelf depth
+ * (real shelf breaks sit at ~120-200 m). Same rationale as
+ * MICROCONTINENT_FOUNDER_ELEVATION_M but deliberately a separate constant:
+ * this is a fill ceiling for oceanic sediment, not a flotation clamp for
+ * continental crust — do not re-sync them.
+ */
+export const SEDIMENT_SHELF_CEILING_M = -200;
+
+/**
+ * Continental elevation above which orogenic root decay applies, m. Terrain
+ * standing higher than ~1 km is held up by a thickened crustal root
+ * (Airy isostasy); as the root re-equilibrates thermally the excess subsides.
+ * Ordinary cratonic elevation below the reference carries no excess root and
+ * must not decay — which also means the decay can never push land below sea
+ * level (it relaxes toward +1 km, not toward the datum).
+ */
+export const OROGENIC_ROOT_REFERENCE_M = 1000;
+
+/**
+ * e-folding time of orogenic root decay, yr. Post-orogenic topography decays
+ * from alpine to low relief over a few hundred Myr as the crustal root
+ * re-equilibrates (the Caledonides/Appalachians are ~1 km relief after
+ * 300-450 Myr, down from Himalayan heights). 300 Myr takes a welded-in 9 km
+ * belt to ~2.5 km absolute in 500 Myr and ~1.3 km in 1 Gyr —
+ * diffusion (#19) removes more on top — matching the #65 acceptance band,
+ * while active margins stay high because orogeny injects at
+ * OROGENY_RATE_M_PER_YR ≈ 20× the decay rate even at the 9 km cap.
+ */
+export const OROGENIC_ROOT_DECAY_TAU_YEARS = 300e6;
 
 /** Default simulation step, years. Chosen so 10 steps fit one keyframe interval. */
 export const DEFAULT_STEP_YEARS = 1e6;

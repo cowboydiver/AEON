@@ -99,6 +99,7 @@ from it. All fields are `Float32Array` per cell.
 | `crustType`     | flag       | {0, 1}           | 0 = oceanic (subductable), 1 = continental (buoyant, never subducts) |
 | `boundaryStress`| m/yr       | ≈ ±0.1, 0 interior | Signed normal closing speed at boundary cells: + convergent, − divergent, ≈0 transform. Derived, recomputed every step |
 | `sutureYears`   | yr         | 0 … sim age (0 = never) | Sim time when a continent-continent suture last welded this cell (#60). Crust property: advects with plate motion; fresh ocean and fresh arc crust carry 0. Appended last: the codec wire fieldId is the FIELD_NAMES index |
+| `sedimentM`     | m          | 0 … shelf fill   | Sediment on oceanic crust exported from the continents by erosion (#65); the age-depth relaxation target adds it on top, saturating at `SEDIMENT_SHELF_CEILING_M` (−200 m). Crust property: advects with plate motion; always 0 on continental crust and fresh ocean (crust that matures/re-roots to continental consumes it). Appended last (codec wire-id constraint) |
 
 ### Plates (Phase 1)
 
@@ -150,7 +151,7 @@ walk (accepted spike-#10 limitation).
 At an advection event, each cell gathers claims: a moved plate p claims cell
 i iff p owned i's backward-rotated source cell (interiors are exact by
 construction); an unmoved plate claims exactly its current cells. Crust
-properties — `elevation`, `crustAge`, `crustType`, `sutureYears`
+properties — `elevation`, `crustAge`, `crustType`, `sutureYears`, `sedimentM`
 (`ADVECTED_FIELDS`) — travel from the winning claim's source cell; values
 are copied, never interpolated. Overlap resolution is provisional until #16 (moved beats
 static, then lower plate index). Unclaimed cells are divergent gaps,
@@ -167,7 +168,10 @@ carries its aged value; divergent gap fill writes 0 afterwards). Oceanic
 elevation (`crustType = 0`) then *relaxes toward* a pure function of age —
 half-space cooling (`bathymetry.ts`): ridge crest at −2500 m deepening as
 0.35 m·√age(yr) to the abyssal floor at −6000 m (Parsons & Sclater 1977
-values). The relaxation is rate-bounded (#59,
+values) — plus the cell's `sedimentM` (#65): shelves filled by coastal
+export stand above bare crust of the same age (the deposit cap in erosion
+keeps the target at or below −200 m, so a filled shelf is shallow platform,
+never land). The relaxation is rate-bounded (#59,
 `OCEAN_RELIEF_RELAX_M_PER_YR` = 200 m/Myr — above the steady subsidence
 increment, so settled seafloor tracks the curve to float32 precision within
 a few steps, and the youngest crust lags it by ≤150 m for ~3 Myr): inactive
@@ -327,15 +331,40 @@ its stream every step, so a position/time hash is the deterministic
 equivalent (documented deviation). Euler-pole wander was considered and not
 implemented.
 
-### Erosion & climate proxy (#19)
+### Erosion & climate proxy (#19, #65)
 
-`erosion` (after wilson): conservative Jacobi diffusion of elevation over
-the 4-neighbor graph, continental-crust pairs only, flux ∝ height difference
-(slope) × mean-pair precipitation (clamped 0.05–2× at 1000 kg/m²/yr
-reference) × base-level damping (×0.1 when either endpoint is submerged —
-without it coastal diffusion submerges land planet-wide). Pairwise
-antisymmetric fluxes conserve continental volume exactly; oceanic elevation
-is isostatic (#15) and untouched. `climateProxy` (last): refreshes
+`erosion` (after wilson): Jacobi diffusion of elevation over the 4-neighbor
+graph, continental-crust pairs only, flux ∝ height difference (slope) ×
+mean-pair precipitation (clamped 0.05–2× at 1000 kg/m²/yr reference) ×
+base-level damping (×0.1 when either endpoint is submerged — without it
+coastal diffusion submerges land planet-wide). Pairwise antisymmetric fluxes
+make the diffusion pure redistribution; oceanic *elevation* is isostatic
+(#15) and never written. **#65 added the two sinks that let old mountains
+die** (pure conservation ratcheted continental hypsometry monotonically
+upward — orogeny kept injecting and nothing ever left):
+
+- **Coastal sediment export:** a continental cell above the datum next to a
+  *submerged oceanic* cell exports flux ∝ its height above sea level
+  (base level — not the full drop to the ocean floor) at the normal erosion
+  rate. The volume leaves the continental budget and accumulates in the
+  oceanic neighbor's `sedimentM`, which the #15 relaxation target adds on
+  top; deposition is capped so the target never exceeds
+  `SEDIMENT_SHELF_CEILING_M` (−200 m) — full shelves stop accepting. The
+  flux vanishes at 0 m, so export alone can never sink a coastline. The
+  conservation invariant is now Σ(continental elevation) + Σ(`sedimentM`);
+  sediment leaves that ledger only by subduction or by accretion into
+  maturing/re-rooting continental crust.
+- **Orogenic root decay:** continental elevation above
+  `OROGENIC_ROOT_REFERENCE_M` (1 km) relaxes toward it exponentially with
+  `OROGENIC_ROOT_DECAY_TAU_YEARS` (300 Myr) — isostatic re-equilibration of
+  the over-thickened root (Caledonides/Appalachians-style aging).
+  Deliberately non-conservative (root loss is subsidence, not transport)
+  and inactive at or below the reference, so it can never submerge land.
+  Active-margin belts stay high — orogeny out-injects the decay ~20× even
+  at the 9 km cap — while belts welded into interiors by sutures retire to
+  low relief within ~0.5–1 Gyr instead of persisting as immortal plateaus.
+
+`climateProxy` (last): refreshes
 `temperature` each step from current elevation (latitude + lapse formula
 shared with the init pass) and owns the static latitude-band `precipitation`
 proxy (ITCZ peak, subtropical dry belts, mid-latitude storm tracks, dry
