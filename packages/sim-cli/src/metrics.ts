@@ -122,7 +122,11 @@ export function summarizeMetrics(
     if (m.landFrac > landMax) landMax = m.landFrac;
   }
 
-  // Longest consecutive monopoly window, reported in sim time.
+  // Longest consecutive monopoly window, reported in sim time. Convention:
+  // the window spans first-to-last monopoly KEYFRAME, so a single monopoly
+  // keyframe reports 0 Myr even though the true window could extend up to
+  // one keyframe interval either side — matching how the findings tables
+  // were computed. Don't "fix" this without re-baselining those tables.
   let monopolyStart = -1;
   let longestMonopolyYears = 0;
   for (let i = 0; i < n; i++) {
@@ -135,7 +139,9 @@ export function summarizeMetrics(
     }
   }
 
-  // Per-Gyr dispersal buckets.
+  // Per-Gyr dispersal buckets. Buckets clamp at index 8: a run past 9 Gyr
+  // aggregates everything beyond into the last printed bucket (runs are
+  // 4.5 Gyr in practice; the clamp only bounds the output width).
   const bucketTotals: number[] = [];
   const bucketDispersed: number[] = [];
   for (const m of series) {
@@ -147,10 +153,6 @@ export function summarizeMetrics(
   // Shape metrics past the settling window.
   const late = series.filter((m) => m.timeYears >= SHAPE_METRICS_AFTER_YEARS);
   const mean = (xs: number[]): number => xs.reduce((a, b) => a + b, 0) / Math.max(1, xs.length);
-  const meanComponents = mean(late.map((m) => m.contComponents));
-  const meanLargest = mean(late.map((m) => m.largestCompFrac));
-  const meanEdge = mean(late.map((m) => m.edgeToArea));
-  const meanCont = mean(late.map((m) => m.contFrac));
   const final = series[n - 1]!;
 
   lines.push(
@@ -167,13 +169,21 @@ export function summarizeMetrics(
         ? `; last tectonic event ${(lastEventYears / 1e6).toFixed(0)} Myr`
         : ''),
   );
-  lines.push(
-    `metrics: shape past ${SHAPE_METRICS_AFTER_YEARS / 1e9} Gyr (${late.length} keyframes):` +
-      ` cont components ${meanComponents.toFixed(0)}` +
-      `, largest comp ${meanLargest.toFixed(3)} of cont area` +
-      `, edge/area ${meanEdge.toFixed(3)}` +
-      `, cont crust ${meanCont.toFixed(3)} of sphere`,
-  );
+  // A run shorter than the settling window has no shape sample at all —
+  // print n/a rather than zeros that read like a catastrophic measurement.
+  if (late.length === 0) {
+    lines.push(
+      `metrics: shape past ${SHAPE_METRICS_AFTER_YEARS / 1e9} Gyr: n/a (run too short — 0 keyframes past the settling window)`,
+    );
+  } else {
+    lines.push(
+      `metrics: shape past ${SHAPE_METRICS_AFTER_YEARS / 1e9} Gyr (${late.length} keyframes):` +
+        ` cont components ${mean(late.map((m) => m.contComponents)).toFixed(0)}` +
+        `, largest comp ${mean(late.map((m) => m.largestCompFrac)).toFixed(3)} of cont area` +
+        `, edge/area ${mean(late.map((m) => m.edgeToArea)).toFixed(3)}` +
+        `, cont crust ${mean(late.map((m) => m.contFrac)).toFixed(3)} of sphere`,
+    );
+  }
   lines.push(
     `metrics: final frame: cont components ${final.contComponents}` +
       `, largest comp ${final.largestCompFrac.toFixed(3)}` +

@@ -232,11 +232,14 @@ function applyTectonics(state: PlanetState, dtYears: number): PlanetState {
   }
 
   // sedimentM is oceanic cover only (#65): crust that just became continental
-  // (arc maturation above, bulldozer re-root in advect) consumes its sediment
-  // — accreted into the margin wedge, it leaves the ledger the same way
-  // subducted sediment does. Erosion deposits only on oceanic cells and
-  // continental crust never reverts to oceanic, so this sweep is the single
-  // place the invariant "sedimentM = 0 on continental crust" is enforced.
+  // (arc maturation above, bulldozer re-root in advect, consolidation hole
+  // fill) consumes its sediment — accreted into the margin wedge, it leaves
+  // the ledger the same way subducted sediment does. Erosion deposits only
+  // on oceanic cells, so this sweep is the single place the invariant
+  // "sedimentM = 0 on continental crust" is enforced. The one continental →
+  // oceanic path (a consolidation-flipped island, #67) re-enters the ocean
+  // ledger carrying the 0 this sweep gave it while it was continental, so
+  // the invariant survives the flip in both directions.
   for (let i = 0; i < crustType.length; i++) {
     if (crustType[i] === 1) sedimentM[i] = 0;
   }

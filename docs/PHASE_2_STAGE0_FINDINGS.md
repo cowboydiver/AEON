@@ -529,7 +529,7 @@ Candidates (each implemented, toggled, and measured independently):
 | baseline (#66 kernel) | .93/.93/.94 | .102/.097/.080 | 770/805/895 | 1.88/1.88/2.02 | 12.7/12.4/11.3 | .173/.179/.171 |
 | C1+C2+C3 | .83/.86/.84 | .264/.221/.257 | 115/136/116 | 0.98/1.12/1.07 | 13.0/13.6/10.9 | .166/.152/.141 |
 | C1+C2 (no consolidation) | .95/.83/.92 | .093/.090/.108 | 696/597/674 | 1.84/1.78/1.78 | 11.8/12.9/12.9 | .175/.164/.180 |
-| C3 only | .84/.82/.94 | .279/.248/.230 | 91/106/119 | 0.80/0.85/0.87 | 15.4/14.7/15.7 | .187/.176/.209 |
+| C3 only | .83/.90/.95 | .248/.309/.218 | 103/88/106 | 0.87/0.75/0.89 | 14.0/15.0/15.0 | .176/.185/.181 |
 | **C2+C3 (shipped)** | **.91/.87/.90** | **.265/.306/.219** | **119/97/107** | **0.83/0.80/0.86** | **19.1/16.7/14.4** | **.228/.206/.183** |
 | C2 only | .81/.92/.89 | .109/.084/.079 | 731/866/814 | 1.85/1.99/1.84 | 11.7/12.2/13.8 | .175/.174/.197 |
 | C2+C3, hole gate 4 (vs 3) | .92/.85/.90 | .213/.167/.213 | 312/290/240 | 1.22/1.21/1.12 | 16.6/13.0/15.2 | .194/.186/.191 |
@@ -537,7 +537,7 @@ Candidates (each implemented, toggled, and measured independently):
 **What the ablations attribute:**
 
 1. **Consolidation (C3) is the coherence lever.** Alone it takes the
-   largest component from ~0.10 to 0.23–0.28 and cuts components ~8×. The
+   largest component from ~0.10 to 0.22–0.31 and cuts components ~8×. The
    mechanism: the lace's raggedness lives in the one-cell holes and stripe
    scars *inside* the mass; healing a hole doesn't just add a cell, it
    welds the components around it into one. Pairing each heal against a
@@ -547,13 +547,21 @@ Candidates (each implemented, toggled, and measured independently):
    the right one: at ≥4 the pass cannot eat stripe lines and coherence
    halves (the hole-gate-4 row).
 2. **Bulldozer fates (C2) are the budget lever, and only pay WITH C3.**
-   Alone, shape stays at baseline (largest comp .079–.109). Combined with
-   consolidation, land minima rise 12–19% → 14.4–19.1% and continental
-   crust equilibrium rises to .18–.23 of the sphere (above baseline):
-   attached re-roots both stop manufacturing islands (freeing consolidation
-   capacity for real holes) and stop feeding the founder clamp, and compact
-   masses expose less margin length to collision consumption — coherence
-   compounds into budget.
+   Alone, shape stays at baseline (largest comp .079–.109). On top of
+   consolidation, shape is unchanged within noise but land minima gain
+   +5.1/+1.7/−0.6 points (to 19.1/16.7/14.4) and continental crust gains
+   +.052/+.021/+.002 of the sphere (to .228/.206/.183) — a real budget
+   gain on two of three seeds, a wash on 1337: attached re-roots both stop
+   manufacturing islands (freeing consolidation capacity for real holes)
+   and stop feeding the founder clamp, and compact masses expose less
+   margin length to collision consumption — coherence compounds into
+   budget. *Measurement correction:* the C3-only row above was re-measured
+   with the pre-#67 bulldozer restored verbatim, after the first ablation
+   run turned out to have left most of the attachment preference enabled
+   (a broken toggle — `false && a || b || c || d` disables only the first
+   disjunct). The correction moved that row's land minima from
+   15.4/14.7/15.7 to 14.0/15.0/15.0 and its largest component from
+   .279/.248/.230 to .248/.309/.218; every conclusion stands.
 3. **Maturation gating (C1) is a measured negative — rejected** (the same
    discipline as #60's carve weightings). It removed detached-freckle
    deposition as designed, but under consolidation those freckles are not a
@@ -591,6 +599,12 @@ flipbook shows a persistent artifact attributable to it.
 Shipped: `KERNEL_BEHAVIOR_VERSION` 7 → 8, field + codec goldens
 regenerated deliberately in the same commit. New invariant tests: paired
 flip conserves continental cell count and inherits neighbor properties;
-unpaired islands stay (foundered); unpaired holes stay open. The #59
+unpaired islands stay (foundered); unpaired holes stay open; and a
+blocked-mover fixture pins the C2 attachment preference itself (displaced
+crust re-roots on attached ocean over better-aligned unattached ocean —
+the static-displaced case cannot discriminate, because the displaced cell
+ends the event continental and auto-attaches every candidate). The #59
 bulldozer conservation suite (salient leak bounded, escape conserves)
-passes unchanged over the C2 rework.
+passes unchanged over the C2 rework. The metrics harness itself grew a
+unit suite (components BFS, monopoly-window convention, per-Gyr buckets,
+short-run n/a) — the acceptance numbers flow through it.
