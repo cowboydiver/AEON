@@ -12,6 +12,7 @@ import {
   type Keyframe,
   type SimEvent,
 } from 'sim-kernel';
+import { computeKeyframeMetrics, summarizeMetrics, type KeyframeMetrics } from './metrics';
 import { fieldStats, renderFieldPng } from './render';
 
 const HELP = `sim-cli — headless planet simulation harness
@@ -24,6 +25,10 @@ Options:
   --keyframe-interval <years> keyframe spacing (default 10e6)
   --grid-n <int>              cells per cube-face edge (default 128)
   --report                    print a stats table per keyframe
+  --metrics                   print the shape/dispersal summary (the #60/#67
+                              measurement harness: continental components,
+                              largest-component fraction, edge/area,
+                              dispersed-keyframe fraction, monopoly window)
   --dump <fields>             comma-separated fields to dump as PNGs (e.g. elevation,temperature)
   --dump-every <k>            only dump every k-th keyframe (plus the final one);
                               default 1 = every keyframe. Use for long-run flipbooks.
@@ -42,6 +47,7 @@ const { values } = parseArgs({
     'keyframe-interval': { type: 'string' },
     'grid-n': { type: 'string' },
     report: { type: 'boolean', default: false },
+    metrics: { type: 'boolean', default: false },
     dump: { type: 'string' },
     'dump-every': { type: 'string' },
     out: { type: 'string', default: 'tmp' },
@@ -225,9 +231,11 @@ function reportTempo(events: readonly SimEvent[], simulatedYears: number): void 
 
 let keyframeIndex = 0;
 let finalEvents: SimEvent[] = [];
+const metricsSeries: KeyframeMetrics[] = [];
 run(params, untilYears, (keyframe) => {
   checkFinite(keyframe);
   if (values.report) report(keyframe);
+  if (values.metrics) metricsSeries.push(computeKeyframeMetrics(keyframe, params.gridN));
   // Every keyframe passes the tripwire above; --dump-every only thins the
   // PNG series. The final keyframe is always dumped so flipbooks end at the
   // end state.
@@ -237,3 +245,9 @@ run(params, untilYears, (keyframe) => {
   finalEvents = keyframe.events;
 });
 if (values.report) reportTempo(finalEvents, untilYears);
+if (values.metrics) {
+  const reorgs = finalEvents.filter(
+    (e) => e.kind === EVENT_KINDS.plateRift || e.kind === EVENT_KINDS.plateSuture,
+  );
+  console.log(summarizeMetrics(metricsSeries, reorgs.at(-1)?.timeYears));
+}

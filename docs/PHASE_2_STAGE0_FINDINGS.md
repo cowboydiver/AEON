@@ -497,3 +497,114 @@ micro-continent fates, arc-freckle compactness, herringbone rework) before
 any weld-guided carve can pay off. The weld record now exists — advected,
 tested, and free — for that future pass, and as a renderable "assembly
 scars" layer.
+
+## #67 boundary-process coherence pass — results (consolidation + bulldozer fates ship; maturation gating rejected)
+
+The #60 conclusion said compact deep-time continents need the
+boundary-process layer to preserve shape before any carve weighting can pay
+off. #67 attacked the three implicated mechanisms directly. Measurement:
+the #60 harness, now a durable `pnpm sim -- --metrics` mode (per-keyframe
+continental connected components, largest-component fraction of continental
+area, continent edge-to-area ratio, max-plate dispersal; summary aggregates
+past 1 Gyr). N=64, seeds {42, 1, 1337}, 4.5 Gyr; numbers are seed-42 /
+seed-1 / seed-1337, shape metrics averaged over keyframes past 1 Gyr.
+
+Candidates (each implemented, toggled, and measured independently):
+
+- **C1 — attachment-gated arc maturation**: keep the #59 accretionary belt
+  but require the maturing arc cell to be 4-connected to pre-topography
+  continent through cells already at maturation elevation (accretion onto a
+  face of the continent, never across open water).
+- **C2 — compactness-seeking bulldozer**: displaced continental crust picks
+  its landing cell at apply time against the resolved post-advection crust
+  map, preferring same-plate oceanic ground *attached* to continental crust
+  (forward, then any) over unattached ocean, over thickening.
+- **C3 — margin consolidation**: pair-flip stray one-cell continental
+  islands (0 continental 4-neighbors) against enclosed ocean holes (≥3
+  continental 4-neighbors), ascending cell order, min(#islands, #holes)
+  pairs — continental cell count exactly conserved.
+
+| variant | dispersed keyframes | largest cont. component | cont. components | edge/area | land min % | cont. crust (sphere frac.) |
+|---|---|---|---|---|---|---|
+| baseline (#66 kernel) | .93/.93/.94 | .102/.097/.080 | 770/805/895 | 1.88/1.88/2.02 | 12.7/12.4/11.3 | .173/.179/.171 |
+| C1+C2+C3 | .83/.86/.84 | .264/.221/.257 | 115/136/116 | 0.98/1.12/1.07 | 13.0/13.6/10.9 | .166/.152/.141 |
+| C1+C2 (no consolidation) | .95/.83/.92 | .093/.090/.108 | 696/597/674 | 1.84/1.78/1.78 | 11.8/12.9/12.9 | .175/.164/.180 |
+| C3 only | .83/.90/.95 | .248/.309/.218 | 103/88/106 | 0.87/0.75/0.89 | 14.0/15.0/15.0 | .176/.185/.181 |
+| **C2+C3 (shipped)** | **.91/.87/.90** | **.265/.306/.219** | **119/97/107** | **0.83/0.80/0.86** | **19.1/16.7/14.4** | **.228/.206/.183** |
+| C2 only | .81/.92/.89 | .109/.084/.079 | 731/866/814 | 1.85/1.99/1.84 | 11.7/12.2/13.8 | .175/.174/.197 |
+| C2+C3, hole gate 4 (vs 3) | .92/.85/.90 | .213/.167/.213 | 312/290/240 | 1.22/1.21/1.12 | 16.6/13.0/15.2 | .194/.186/.191 |
+
+**What the ablations attribute:**
+
+1. **Consolidation (C3) is the coherence lever.** Alone it takes the
+   largest component from ~0.10 to 0.22–0.31 and cuts components ~8×. The
+   mechanism: the lace's raggedness lives in the one-cell holes and stripe
+   scars *inside* the mass; healing a hole doesn't just add a cell, it
+   welds the components around it into one. Pairing each heal against a
+   stray fleck keeps the crustal ledger exact — the pass moves stranded
+   area from a form the planet can never read as continent into the
+   enclaves the boundary processes tore open. The ≥3-neighbor hole gate is
+   the right one: at ≥4 the pass cannot eat stripe lines and coherence
+   halves (the hole-gate-4 row).
+2. **Bulldozer fates (C2) are the budget lever, and only pay WITH C3.**
+   Alone, shape stays at baseline (largest comp .079–.109). On top of
+   consolidation, shape is unchanged within noise but land minima gain
+   +5.1/+1.7/−0.6 points (to 19.1/16.7/14.4) and continental crust gains
+   +.052/+.021/+.002 of the sphere (to .228/.206/.183) — a real budget
+   gain on two of three seeds, a wash on 1337: attached re-roots both stop
+   manufacturing islands (freeing consolidation capacity for real holes)
+   and stop feeding the founder clamp, and compact masses expose less
+   margin length to collision consumption — coherence compounds into
+   budget. *Measurement correction:* the C3-only row above was re-measured
+   with the pre-#67 bulldozer restored verbatim, after the first ablation
+   run turned out to have left most of the attachment preference enabled
+   (a broken toggle — `false && a || b || c || d` disables only the first
+   disjunct). The correction moved that row's land minima from
+   15.4/14.7/15.7 to 14.0/15.0/15.0 and its largest component from
+   .279/.248/.230 to .248/.309/.218; every conclusion stands.
+3. **Maturation gating (C1) is a measured negative — rejected** (the same
+   discipline as #60's carve weightings). It removed detached-freckle
+   deposition as designed, but under consolidation those freckles are not a
+   shape leak — they are creation-budget flux that consolidation relocates
+   into enclave holes. Gating them starved creation: in C1+C2+C3, land
+   minima fell 2–4 points vs C2+C3 (seed 1337 to 10.9%, grazing the #20
+   floor), continental crust fell to .141–.166, and the largest component
+   stayed within noise. The belt-only #59 gate ships unchanged (applied in
+   one pass after the margin loop — an ordering-hygiene change only).
+
+**Acceptance vs the issue:** largest component ≥ 2× the 0.11 baseline on
+all three seeds — met (.219–.306, 2.2–3.2×). Dispersal holds — met
+(.87–.91 vs the ~63% bound; within noise of the #66 baseline's .93, worst
+per-Gyr bucket 0.73, longest >85% monopoly window 190 Myr at N=64).
+Land band holds everywhere and *improves* (min 14.4–19.1 at N=64, 16.5 at
+N=128 seed 42, 20.1–21.5 at N=16; max ≤41%). Cross-grid: N=128 seed 42
+gives largest comp .245, edge/area .726, dispersed 92.5% — the coherence
+win is resolution-stable. Flipbooks (crustType/elevation, seeds 42/1/1337):
+deep-time frames read as a handful of bold continental masses with
+internal mountain belts and shelf fringes — no confetti, no lace. Seed 1
+stays the most ragged of the three but is qualitatively transformed.
+
+**#54 finding 1 (herringbone) — closed as mitigated, residual re-scoped.**
+The stripe *scars* (parallel one-cell ocean lines through continent) are
+now healed by consolidation within steps of forming, and the #59 arc
+memory already softened stripe contrast on the creation side; deep-time
+frames no longer read as striped. What remains of #54-1 is the underlying
+quantized-advection oscillation itself (margins still flicker at
+advection-quantum spacing — visible as transient coastline shimmer between
+keyframes, not as persistent terrain). Fixing THAT means sub-cell advection
+or gap-fill/re-maturation hysteresis in the advection kernel — out of
+scope here and not currently earning its risk: no shipped metric or
+flipbook shows a persistent artifact attributable to it.
+
+Shipped: `KERNEL_BEHAVIOR_VERSION` 7 → 8, field + codec goldens
+regenerated deliberately in the same commit. New invariant tests: paired
+flip conserves continental cell count and inherits neighbor properties;
+unpaired islands stay (foundered); unpaired holes stay open; and a
+blocked-mover fixture pins the C2 attachment preference itself (displaced
+crust re-roots on attached ocean over better-aligned unattached ocean —
+the static-displaced case cannot discriminate, because the displaced cell
+ends the event continental and auto-attaches every candidate). The #59
+bulldozer conservation suite (salient leak bounded, escape conserves)
+passes unchanged over the C2 rework. The metrics harness itself grew a
+unit suite (components BFS, monopoly-window convention, per-Gyr buckets,
+short-run n/a) — the acceptance numbers flow through it.

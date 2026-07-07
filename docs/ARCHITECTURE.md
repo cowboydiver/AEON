@@ -193,12 +193,18 @@ the overriding side (per `overrides()`) keeps the surface and the losing
 side's **oceanic** crust is consumed — an ownership transfer, never a hole.
 **Continental crust does not subduct (#59, direction (b)):** a displaced
 continental cell's content is *bulldozed* one cell deeper into its own
-plate along the convergence direction — onto a same-plate oceanic cell it
-re-roots there (area conserved; onto forward ocean first, else any ocean —
-lateral extrusion, the Indochina-style escape), onto continental ground the
-collision shortens and thickens (half the displaced positive relief piles
-on, capped at 9 km). The symmetric case (a *moving* continental source
-whose content won at no target) piles onto the cell behind it. The only
+plate along the convergence direction. The landing cell is picked at apply
+time against the resolved **post-advection** crust map (#67), and the pick
+is compactness-seeking: same-plate oceanic ground *attached* to continental
+crust first (forward, then anywhere), then unattached ocean (forward, then
+anywhere — lateral extrusion, the Indochina-style escape), then continental
+ground, where the collision shortens and thickens (half the displaced
+positive relief piles on, capped at 9 km). A detached re-root is a one-cell
+micro-continent the founder clamp then sinks — conserving area as confetti
+is conserving it in a form the planet can never read as a continent, the
+measured "collision debris" shape leak of #67. The symmetric case (a
+*moving* continental source whose content won at no target) piles onto the
+cell behind it. The only
 genuine continental consumption left is a salient's last sliver with no
 same-plate neighbor — the exception that keeps the pass one-shot instead of
 a shortening solver. Without this, every continent–continent margin
@@ -226,11 +232,31 @@ continent margins. At deep-time equilibrium
 most continental crust has been recycled through this term, so continents
 take the *shape* of the creation process — ungated maturation freckled
 along herringbone advection trails dissolved them into lace by ~3 Gyr.
+Maturation is applied in one pass after the margin loop (#67), so no margin
+cell's collision/polarity branch observes a same-step maturation; a
+stricter attachment-gated variant (mature only when 4-connected to the
+continent through cells at maturation elevation) was measured in #67 and
+rejected — it starved creation (land minima fell 2–4 points) for no shape
+gain once margin consolidation existed.
 **Isolated continental slivers founder (#59):** a continental cell with no
 continental 4-neighbor is pinned below sea level
 (`MICROCONTINENT_FOUNDER_ELEVATION_M` = −200 m, Zealandia-style — it keeps
 its crustal identity and can re-accrete, but stranded collision debris no
 longer stands as immortal one-cell peaks speckling the deep-time ocean).
+**Margin consolidation (#67):** each tectonics step ends by pair-flipping
+stray one-cell continental islands (zero continental 4-neighbors — the same
+debris the founder clamp sinks) against enclosed ocean holes (≥3
+continental 4-neighbors: gap-fill scars and advection tears inside
+continents), both sides in ascending cell order, `min(#islands, #holes)`
+pairs, so continental cell count is exactly conserved. The island reverts
+to seafloor at its age-depth floor; the hole fills as continental basin
+floor inheriting its lowest continental neighbor's elevation, oldest
+neighbor's age, and the neighbors' weld memory. Unpaired islands stay
+foundered; unpaired holes stay open water. This is the measured #67 lever
+that welds deep-time lace back into bold continents: largest continental
+component 0.08–0.10 → 0.22–0.31 of continental area at N=64/4.5 Gyr while
+land minima *rose* (compact masses expose less margin to collision
+consumption).
 Oceanic cells on active convergent margins (stress > 0.005 m/yr) are exempt
 from subsidence relaxation; when a margin deactivates they rejoin it and
 decay to the age-depth curve over a few Myr (#59 arc memory — a half-built

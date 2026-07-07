@@ -69,8 +69,27 @@
  *     draw or merge differs there — field and codec goldens were NOT
  *     regenerated), but every deep-time keyframe past the first rift draw
  *     changes, so cached full histories must invalidate.
+ * 8 — boundary-process coherence pass (#67), attacking the mechanisms that
+ *     shredded deep-time continents into lace. Two shipped mechanisms:
+ *     (1) margin consolidation — stray one-cell continental islands are
+ *     pair-flipped against enclosed ocean holes (>= 3 continental
+ *     neighbors), ascending cell order, conserving continental cell count
+ *     exactly; (2) the continental-conservation bulldozer picks its landing
+ *     cell at APPLY time against the resolved post-advection crust map,
+ *     preferring oceanic ground attached to continental mass. Also arc
+ *     maturation is applied in one pass after the margin loop (same-step
+ *     ordering hygiene; same belt gate). Measured at N=64 over 4.5 Gyr,
+ *     seeds {1, 42, 1337}: largest continental component 0.08-0.10 ->
+ *     0.22-0.31 of continental area, components ~800 -> ~100, edge/area
+ *     ~1.9 -> ~0.8, with land minima RISING to 14.4-19.1% and dispersal
+ *     within noise of the #66 baseline (see PHASE_2_STAGE0_FINDINGS.md
+ *     "#67"). A stricter attachment-gated maturation variant was measured
+ *     and rejected (land cost, no shape gain). Consolidation and the push
+ *     rework both act within the 10-step golden window; field and codec
+ *     goldens regenerated deliberately in the same commit; cached histories
+ *     must invalidate.
  */
-export const KERNEL_BEHAVIOR_VERSION = 7;
+export const KERNEL_BEHAVIOR_VERSION = 8;
 
 /** IUGG mean Earth radius, m. */
 export const EARTH_RADIUS_M = 6.371e6;
@@ -336,6 +355,19 @@ export const COLLISION_THICKENING_FACTOR = 0.5;
  * (-500 m, an accretion gate, not a flotation level) — do not re-sync them.
  */
 export const MICROCONTINENT_FOUNDER_ELEVATION_M = -200;
+
+/**
+ * Minimum continental 4-neighbors for an oceanic cell to count as an
+ * enclosed "hole" in the margin-consolidation pass (#67). Consolidation
+ * pair-flips stray one-cell continental islands (zero continental
+ * neighbors — the debris the founder clamp sinks) against such holes
+ * (gap-fill scars and advection tears inside continents), in ascending cell
+ * order, conserving continental cell count exactly. 3 rather than 4 so the
+ * pass can eat into herringbone stripe lines (a stripe cell flanked on
+ * three sides heals; a plain coastal bay, with two continental neighbors,
+ * never flips) — the knob measured in the #67 pass.
+ */
+export const MARGIN_CONSOLIDATION_HOLE_MIN_NEIGHBORS = 3;
 
 // --- Wilson cycles (#18) -----------------------------------------------------
 
