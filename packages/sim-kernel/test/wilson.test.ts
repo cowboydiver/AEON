@@ -76,15 +76,34 @@ function collisionWorldWithCap(): PlanetState {
 
 const WILSON_PIPELINE = [tectonicsSystem, wilsonSystem];
 
+/**
+ * Prime a collision state so the a-b pair may legally suture on the FIRST
+ * wilson pass: advance the clock to T0 and backdate the pair's contact clock
+ * a full SUTURE_AFTER_YEARS. Every plate is stamped age-0 at T0, so within
+ * the few-step windows these tests run no rift gate can open — the suture
+ * path is exercised in isolation. (#66 made this fixture necessary: the
+ * suture clock is now 60 Myr, LONGER than a hemisphere-scale plate's
+ * ramp-relaxed rift gate, so the old recipe — run enough natural steps for
+ * the contact clock to mature — cannot finish before a rift may fire.)
+ */
+const PRIME_T0 = 100e6;
+function primeForSuture(state: PlanetState, a: number, b: number): PlanetState {
+  return {
+    ...state,
+    timeYears: PRIME_T0,
+    plates: state.plates.map((p) => ({ ...p, createdAtYears: PRIME_T0 })),
+    wilson: { contactSince: { [`${a}-${b}`]: PRIME_T0 - SUTURE_AFTER_YEARS } },
+  };
+}
+
 describe('suturing (#18)', () => {
   it('merges two continents after sustained collision and stops their motion', () => {
     // The polar cap keeps three cell-owning plates, so the live count sits
-    // above the MIN_PLATES floor and the 0/1 collision may suture. 20 steps:
-    // past the ~16 Myr suture, but before the merged plate — now a
-    // near-sphere-spanning monopoly — sheds its first fragment under the #59
-    // oversize pressure, which would re-introduce boundaries and stress.
-    let state = collisionWorldWithCap();
-    state = runSystems(state, 20, WILSON_PIPELINE);
+    // above the MIN_PLATES floor and the 0/1 collision may suture. Contact
+    // is primed to mature on the first pass; 3 steps keep every plate's age
+    // below every rift gate, so the merge is the only reorganization.
+    let state = primeForSuture(collisionWorldWithCap(), 0, 1);
+    state = runSystems(state, 3, WILSON_PIPELINE);
 
     const sutures = state.events.filter((e) => e.kind === EVENT_KINDS.plateSuture);
     expect(sutures.length).toBe(1);
@@ -93,10 +112,13 @@ describe('suturing (#18)', () => {
     expect([0, 1]).toContain(into);
 
     // Loser is dead; every cell belongs to the winner or the untouched cap;
-    // suture time respects the sustained-contact requirement.
+    // suture time respects the sustained-contact requirement (a full
+    // SUTURE_AFTER_YEARS since the primed contact start, never earlier).
     expect(state.plates[absorbed!]!.alive).toBe(false);
     for (const p of state.fields.plateId) expect([into, 2]).toContain(p);
-    expect(sutures[0]!.timeYears).toBeGreaterThanOrEqual(SUTURE_AFTER_YEARS);
+    expect(sutures[0]!.timeYears - (PRIME_T0 - SUTURE_AFTER_YEARS)).toBeGreaterThanOrEqual(
+      SUTURE_AFTER_YEARS,
+    );
 
     // Relative motion across the old 0/1 boundary is gone: it is interior
     // now, and interior cells carry exactly zero stress. Only cells touching
@@ -116,27 +138,15 @@ describe('suturing (#18)', () => {
   });
 
   it('respects the MIN_PLATES floor', () => {
-    // Exactly MIN_PLATES cell-owning plates: the collision may not suture (a
-    // merge would leave a single-plate world). The window sits past
-    // SUTURE_AFTER_YEARS (so a suture WOULD fire if the floor allowed it) but
-    // inside the shortest size-relaxed rift gate at this size
-    // (RIFT_MIN_AGE_YEARS / ramp at the 0.55 reference, #61 — the ~hemisphere
-    // plates barely grow in this window), so no rift adds a third plate and this
-    // stays a pure floor check.
-    const shortestRiftGate = RIFT_MIN_AGE_YEARS / riftSizeRamp(RIFT_SIZE_RATE_REF_FRACTION);
-    const base = collisionWorld(0);
-    const steps = Math.floor((SUTURE_AFTER_YEARS + shortestRiftGate) / 2 / base.params.stepYears);
-    expect(steps * base.params.stepYears).toBeGreaterThan(SUTURE_AFTER_YEARS);
-    const state = runSystems(base, steps, WILSON_PIPELINE);
-    // Make the silent coupling to tectonics tuning explicit: no plate grew into
-    // the size-relaxed rift gate during the window (gate = MIN_AGE / ramp is
-    // monotone-decreasing in area, so its final value bounds the whole window),
-    // so no rift could add a third plate that would then let the collision
-    // suture. If advection is ever retuned faster this fails loudly here, not
-    // confusingly at the suture/alive checks below.
-    expect(RIFT_MIN_AGE_YEARS / riftSizeRamp(maxPlateAreaFraction(state))).toBeGreaterThan(
-      steps * base.params.stepYears,
-    );
+    // Exactly MIN_PLATES cell-owning plates, with the 0-1 contact clock
+    // primed to maturity: every suture requirement is met by construction on
+    // the first pass, so the floor is the ONLY thing that can (and must)
+    // veto the merge — a suture may never leave a single-plate world. The
+    // capped variant of the same priming (the merge test above) is the
+    // positive control that proves the primed contact does suture when the
+    // live count sits above the floor. 3 steps keep every plate age below
+    // every rift gate, so no rift can add a third plate mid-test.
+    const state = runSystems(primeForSuture(collisionWorld(0), 0, 1), 3, WILSON_PIPELINE);
     expect(state.events.filter((e) => e.kind === EVENT_KINDS.plateSuture)).toEqual([]);
     // Both plates still alive and still colliding.
     expect(state.plates[0]!.alive).toBe(true);
@@ -280,28 +290,31 @@ describe('size-dependent rift rate (#61)', () => {
     // past 0.55.
     expect(riftSizeRamp(RIFT_SIZE_RATE_REF_FRACTION)).toBeCloseTo(RIFT_SIZE_RATE_REF_MULTIPLE, 10);
     expect(riftSizeRamp(1)).toBeGreaterThan(RIFT_SIZE_RATE_REF_MULTIPLE);
-    // Monotonic and continuous — the whole point of #61 vs the old brake, which
-    // jumped by (REF_MULTIPLE − 1) = 7× at a single point (0.55). Dense sweep:
-    // never decreases, and its largest 1%-area step (≈1.56, steepest near
-    // whole-sphere) stays well under 2 — a bound tight enough that reintroducing
-    // even a partial cliff (any single step ≥ 2×) fails here, unlike a bound of
-    // 7 which only catches a full-magnitude cliff.
+    // Monotonic and continuous — the whole point of #61 vs the old brake,
+    // which MULTIPLIED the rate by REF_MULTIPLE at a single point (0.55).
+    // Dense sweep: never decreases, and no 1%-area step multiplies the ramp
+    // by 2× or more. A multiplicative bound (not the old absolute maxJump)
+    // is what "no cliff" means for a rate scaler, and it survives
+    // REF_MULTIPLE retunes (#66 raised it 8 → 16, which legitimately
+    // steepens the absolute slope near whole-sphere) while still failing
+    // loudly on any reintroduced threshold jump.
     let prev = riftSizeRamp(0);
-    let maxJump = 0;
+    let maxRatio = 1;
     for (let a = 0.01; a <= 1.0001; a += 0.01) {
       const v = riftSizeRamp(a);
       expect(v).toBeGreaterThanOrEqual(prev - 1e-9);
-      maxJump = Math.max(maxJump, v - prev);
+      maxRatio = Math.max(maxRatio, v / prev);
       prev = v;
     }
-    expect(maxJump).toBeLessThan(2);
+    expect(maxRatio).toBeLessThan(2);
   });
 
-  it('a sphere-monopoly plate still sheds a fragment within a few tens of Myr despite age 0', () => {
+  it('a sphere-monopoly plate still sheds a fragment within ~100 Myr despite age 0', () => {
     // A freshly-created whole-sphere plate (age 0 — e.g. it just absorbed the
     // last other plate) must NOT wait out RIFT_MIN_AGE_YEARS: at ~whole-sphere
     // the ramp divides the maturity gate down to a few Myr (the old waiver, now
-    // continuous), so it sheds within the window.
+    // continuous), so it sheds within the window — the monopoly safety net the
+    // #66 clock retune deliberately kept fast while slowing everything else.
     const base = wholeSpherePlate();
     const state: PlanetState = {
       ...base,
@@ -341,9 +354,10 @@ describe('size-dependent rift rate (#61)', () => {
 
 describe('suture-line memory (#60)', () => {
   it('suturing stamps the continent-continent weld cells with the merge time', () => {
-    // Same setup as the suturing suite: the 0/1 collision sutures at ~16 Myr
-    // while the polar cap (plate 2) stays separate and untouched.
-    const state = runSystems(collisionWorldWithCap(), 20, WILSON_PIPELINE);
+    // Same primed setup as the suturing suite: the 0/1 collision sutures on
+    // the first pass while the polar cap (plate 2) stays separate and
+    // untouched.
+    const state = runSystems(primeForSuture(collisionWorldWithCap(), 0, 1), 3, WILSON_PIPELINE);
     const sutures = state.events.filter((e) => e.kind === EVENT_KINDS.plateSuture);
     expect(sutures.length).toBe(1);
     const weldTime = sutures[0]!.timeYears;
@@ -376,7 +390,10 @@ describe('suture-line memory (#60)', () => {
     // advected, and read by nothing. Guard: compare every other field of two
     // independent runs (determinism) and assert the rift carve of a stamped
     // state matches the carve of the same state with the record erased.
-    const stamped = runSystems(collisionWorldWithCap(), 80, WILSON_PIPELINE);
+    // The primed fixture guarantees a suture actually stamped the record
+    // (#66: an unprimed run no longer sutures inside any short window); the
+    // remaining steps advect it before the carve comparison.
+    const stamped = runSystems(primeForSuture(collisionWorldWithCap(), 0, 1), 20, WILSON_PIPELINE);
     const erased: PlanetState = {
       ...stamped,
       fields: { ...stamped.fields, sutureYears: new Float32Array(cellCount(N)) },
@@ -404,21 +421,43 @@ describe('post-rift suture cooldown (#57 follow-up)', () => {
   });
 
   it('bars a rifted half from re-suturing until the cooldown lifts', () => {
-    // A colliding pair sutures within one SUTURE_AFTER_YEARS (~15 Myr) — see
-    // the suturing suite. Rift plate 0 first: three plates own cells (above
-    // the floor), but 0 and the fragment carry the lock, so that same
-    // convergent contact must produce no suture for the whole lock window: a
-    // rifted margin is passive, not ready to re-collide. Run length is
-    // derived from the constant (well inside the lock, past SUTURE_AFTER) so
-    // the test tracks any retuning of RIFT_SUTURE_COOLDOWN_YEARS.
+    // Rift plate 0, then hand the parent-fragment pair a contact clock that
+    // is already a full SUTURE_AFTER_YEARS old: every suture requirement is
+    // met by construction, so ONLY the lock can veto the merge — and it
+    // must, at any time inside RIFT_SUTURE_COOLDOWN_YEARS. The same primed
+    // state moved past the lock is the positive control: the identical
+    // contact now sutures. (#66 note: the old form of this test ran natural
+    // steps for 0.6× the cooldown, which the 4× clock stretched past the
+    // unlocked hemisphere plate's rift gate — the primed form pins every
+    // plate's age to 0 so the lock is the only variable.)
     const rifted = riftPlate(collisionWorld(0), 0, riftSeed);
-    const withinLock = Math.floor((0.6 * RIFT_SUTURE_COOLDOWN_YEARS) / rifted.params.stepYears);
-    expect(withinLock * rifted.params.stepYears).toBeGreaterThan(SUTURE_AFTER_YEARS);
-    const aliveBefore = rifted.plates.filter((p) => p.alive).length;
-    const within = runSystems(rifted, withinLock, WILSON_PIPELINE);
+    const fragment = rifted.plates.length - 1;
+    const pairKey = `0-${fragment}`;
+    const lockUntil = rifted.plates[0]!.sutureLockUntilYears;
+    const prime = (t: number): PlanetState => ({
+      ...rifted,
+      timeYears: t,
+      plates: rifted.plates.map((p) => ({ ...p, createdAtYears: t })),
+      wilson: { contactSince: { [pairKey]: t - SUTURE_AFTER_YEARS } },
+    });
+
+    // Deep inside the lock: no suture, live count unchanged, and the pair's
+    // contact bookkeeping is dropped entirely (a locked pair accumulates
+    // nothing — when the lock lifts it must start a FRESH SUTURE_AFTER_YEARS).
+    const within = runSystems(prime(0.5 * RIFT_SUTURE_COOLDOWN_YEARS), 3, WILSON_PIPELINE);
     expect(within.events.filter((e) => e.kind === EVENT_KINDS.plateSuture)).toEqual([]);
-    // No continent absorbed: the live-plate count is unchanged.
-    expect(within.plates.filter((p) => p.alive).length).toBe(aliveBefore);
+    expect(within.plates.filter((p) => p.alive).length).toBe(
+      rifted.plates.filter((p) => p.alive).length,
+    );
+    expect(within.wilson.contactSince[pairKey]).toBeUndefined();
+
+    // Just past the lock: the identical primed contact sutures immediately.
+    const after = runSystems(prime(lockUntil + rifted.params.stepYears), 3, WILSON_PIPELINE);
+    const sutures = after.events.filter((e) => e.kind === EVENT_KINDS.plateSuture);
+    expect(sutures.length).toBe(1);
+    const { absorbed, into } = sutures[0]!.data!;
+    expect([0, fragment]).toContain(absorbed);
+    expect([0, fragment]).toContain(into);
   });
 });
 

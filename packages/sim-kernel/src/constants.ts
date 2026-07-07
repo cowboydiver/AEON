@@ -56,8 +56,21 @@
  *     the 10-step golden window; field and codec goldens regenerated
  *     deliberately in the same commit. The codec's stored field subset is
  *     unchanged (sedimentM is expressed through elevation).
+ * 7 — Wilson-cycle clock retune toward Earth-like periods (#66): the whole
+ *     trigger clock scales 4× slower together (RIFT_PROBABILITY_PER_MYR
+ *     0.006→0.0015, SUTURE_AFTER_YEARS 15→60 Myr, RIFT_SUTURE_COOLDOWN_YEARS
+ *     30→120 Myr, RIFT_MIN_AGE_YEARS 150→600 Myr) while the oversize safety
+ *     net keeps its measured-good #59 ABSOLUTE rate by scaling
+ *     RIFT_SIZE_RATE_REF_MULTIPLE 8→16 (see its comment for why 16, not 32).
+ *     Mean interval between reorganizations involving the same plate rises
+ *     ~45 → ~140 Myr at N=64 (measured; the sim-cli tempo line tracks it).
+ *     As with bump 4, the 10-step golden window is byte-identical (no plate
+ *     sits above the knee and no contact can mature inside 10 Myr, so no
+ *     draw or merge differs there — field and codec goldens were NOT
+ *     regenerated), but every deep-time keyframe past the first rift draw
+ *     changes, so cached full histories must invalidate.
  */
-export const KERNEL_BEHAVIOR_VERSION = 6;
+export const KERNEL_BEHAVIOR_VERSION = 7;
 
 /** IUGG mean Earth radius, m. */
 export const EARTH_RADIUS_M = 6.371e6;
@@ -345,15 +358,33 @@ export const MAX_PLATES = 16;
 /**
  * Continuous continent-continent convergent contact required before the two
  * plates suture into one, yr. Real collision-to-suture times are a few tens
- * of Myr (India-Asia order).
+ * of Myr (India-Asia has been converging ~55 Myr and is still suturing).
+ * 15 -> 60 Myr in the #66 Wilson-clock retune: the whole trigger clock
+ * (this, RIFT_PROBABILITY_PER_MYR, RIFT_SUTURE_COOLDOWN_YEARS,
+ * RIFT_MIN_AGE_YEARS) scaled 4x slower together so reorganizations play out
+ * over multi-hundred-Myr episodes instead of tens of Myr — several per
+ * 10 Myr render keyframe read as flicker. Measured at N=64 over 4.5 Gyr
+ * (seeds 1/42/1337): mean interval between reorganizations involving the
+ * same plate ~45 -> ~140 Myr, land minimum >= 11.3% (the longer
+ * continent-continent grind before each merge stays above the #20 10%
+ * floor).
  */
-export const SUTURE_AFTER_YEARS = 15e6;
+export const SUTURE_AFTER_YEARS = 60e6;
 
 /** Minimum simultaneous cont-cont convergent boundary cells to count as contact. */
 export const SUTURE_MIN_CONTACT_CELLS = 3;
 
-/** A plate must be at least this old since creation/last rift to rift, yr. */
-export const RIFT_MIN_AGE_YEARS = 150e6;
+/**
+ * A plate must be at least this old since creation/last rift to rift, yr.
+ * 150 -> 600 Myr in the #66 clock retune (4x, with the rest of the trigger
+ * clock): this is the maturity floor for ORDINARY plates — the size ramp
+ * divides it away for oversize ones (600/16 = 37.5 Myr at 0.55 of the
+ * sphere, ~5 Myr near whole-sphere), so the monopoly safety net keeps its
+ * promptness. Scaling it with SUTURE_AFTER_YEARS also keeps the two gates'
+ * ordering stable (hemisphere-scale rift gate vs suture clock), which the
+ * wilson test windows are derived from.
+ */
+export const RIFT_MIN_AGE_YEARS = 600e6;
 
 /** A plate must own at least this fraction of the sphere to rift. */
 export const RIFT_MIN_AREA_FRACTION = 0.08;
@@ -384,12 +415,16 @@ export const RIFT_MIN_CONTINENTAL_AREA_FRACTION = 0.02;
 export const RIFT_DRAW_QUANTUM_YEARS = 1e4;
 
 /**
- * Rift probability per eligible plate per Myr. Gives an expected wait of
- * ~150-250 Myr once a plate is large, old and continent-carrying —
- * supercontinents linger, then break (real Wilson cycle periods are
- * 300-500 Myr). Raised from 0.004 in the #21 acceptance tuning.
+ * Rift probability per eligible plate per Myr. 0.006 -> 0.0015 in the #66
+ * clock retune (the 4x scaling's anchor): an ordinary (sub-knee) eligible
+ * plate now waits ~670 Myr in expectation, and the measured mean interval
+ * between reorganizations involving the same plate is ~140 Myr at N=64
+ * (many plates are draw-eligible at once, and the size ramp shortens the
+ * wait for large ones) — inside the ~100-300 Myr Earth-like Wilson band the
+ * issue targets, vs ~45 Myr before. The old 0.006 was tuned to pass the
+ * #57/#59 dispersal metrics, not to match a believable tempo.
  */
-export const RIFT_PROBABILITY_PER_MYR = 0.006;
+export const RIFT_PROBABILITY_PER_MYR = 0.0015;
 
 /**
  * Fraction of the rifting plate's cells carved off as the new fragment,
@@ -420,33 +455,39 @@ export const RIFT_FRAGMENT_MAX_FRACTION = 0.4;
  * It is 1 for any plate at or below RIFT_SIZE_RATE_KNEE (small plates feel no
  * size pressure — the normal Wilson draw and the golden 10-step window are
  * unchanged), passes through RIFT_SIZE_RATE_REF_MULTIPLE at
- * RIFT_SIZE_RATE_REF_FRACTION — the old oversize threshold (0.55) and factor
- * (8×) — and keeps climbing above it. The one ramp scales both halves of the
- * old brake: (1) the per-Myr rift probability is multiplied by
- * min(REF_MULTIPLE, ramp) — it rises 1→8× over [KNEE, REF] then holds at the
- * brake magnitude above 0.55, so the deep-time rift rate there is exactly the
- * measured-good #59 brake and nothing rifts faster than it; (2) the maturity
- * gate RIFT_MIN_AGE_YEARS is DIVIDED by the (uncapped) ramp — full below the
- * knee, ~1/8 of it (≈19 Myr) at 0.55, and shrinking toward a ~2.7 Myr floor as
- * a plate approaches whole-sphere (≈3.1 Myr at area 0.95, 2.68 Myr at area 1.0;
- * the ramp is bounded so the gate never nears zero), the smooth replacement for
- * the old hard age waiver so a monopoly keeps shedding. Nothing here references
- * MIN_PLATES:
- * retuning the suture floor no longer forces retuning the monopoly brake.
+ * RIFT_SIZE_RATE_REF_FRACTION — the old #59 oversize threshold (0.55) — and
+ * keeps climbing above it. The one ramp scales both halves of the old brake:
+ * (1) the per-Myr rift probability is multiplied by min(REF_MULTIPLE, ramp) —
+ * it rises over [KNEE, REF] then holds above 0.55, so nothing rifts faster
+ * than the reference oversize rate; (2) the maturity gate RIFT_MIN_AGE_YEARS
+ * is DIVIDED by the (uncapped) ramp — full below the knee, ~37.5 Myr at 0.55,
+ * shrinking toward a ~5 Myr floor as a plate approaches whole-sphere (the
+ * ramp is bounded so the gate never nears zero), the smooth replacement for
+ * the old hard age waiver so a monopoly keeps shedding. Nothing here
+ * references MIN_PLATES: retuning the suture floor no longer forces retuning
+ * the monopoly brake.
  *
  * KNEE = 0.3 (the value suggested on the issue) was measured against the #59
- * dispersal metrics; it beats the #59 dispersed-window fraction at N=64 for all
- * three golden seeds and matches or beats it at 5 of 6 seed×grid points, the
- * exception being seed 1337 at N=128 (80.3% → ~72%). The deep-time dispersal
- * metric is chaotically sensitive to any sub-0.55 rifting — which removing the
- * discontinuity necessarily introduces — so exact reproduction of every #59
- * number is not attainable by a continuous rate; the world stays fully
- * dispersed (≥ ~63% dispersed keyframes, every Gyr bucket alive, monopoly
- * windows ≤ ~100 Myr) everywhere. See wilson.ts and PHASE_2_STAGE0_FINDINGS.md.
+ * dispersal metrics; see PHASE_2_STAGE0_FINDINGS.md for the #61 pass.
+ *
+ * REF_MULTIPLE 8 -> 16 in the #66 clock retune, and it is the retune's one
+ * non-proportional knob. Scaling the base rate 4x down with the cap held at
+ * 8 also slows the OVERSIZE rift rate 4x — and that safety net measurably
+ * fails: the issue assumed "a slower base rate still lets a near-monopoly
+ * plate rift promptly", but at N=64/4.5 Gyr the dispersed-keyframe fraction
+ * collapsed on seed 42 (76% baseline -> 61% at 3x, 51% at 4x; the response
+ * is bimodal — 12x gives 49%, 16x gives 93%, there is no usable middle).
+ * REF_MULTIPLE = 16 sets the oversize ABSOLUTE rate to half the #59 brake
+ * (0.0015·16 = 0.024/Myr vs 0.006·8 = 0.048/Myr) — the slowest oversize
+ * clock that passes dispersal on all three golden seeds (93.1-93.6%
+ * dispersed, every Gyr bucket >= 0.8, worst >85% monopoly window 60 Myr at
+ * N=64; 32x = full #59 rate saturates dispersal at 96-99% and assemblies
+ * all but vanish). Ordinary sub-knee plates still feel the full 4x
+ * slowdown; the ramp just reaches the (halved) reference sooner.
  */
 export const RIFT_SIZE_RATE_KNEE = 0.3;
 export const RIFT_SIZE_RATE_REF_FRACTION = 0.55;
-export const RIFT_SIZE_RATE_REF_MULTIPLE = 8;
+export const RIFT_SIZE_RATE_REF_MULTIPLE = 16;
 export const RIFT_SIZE_RATE_EXPONENT = 2;
 
 /**
@@ -486,15 +527,17 @@ export const RIFT_OCEAN_SCAN_SAMPLES = 12;
  * share an in-plane rotation pole, so ~half their new boundary is convergent;
  * while it can't suture, that arc grinds continent-on-continent (the #16
  * advection consumes the subducting continental cell), which suturing exists to
- * halt. Longer locks therefore bleed land: at 100 Myr seed 1337 fell to ~8%
- * land by 2 Gyr (below the #20 10% floor) and seed 42 to ~17%; at 30 Myr all
- * golden seeds hold their baseline ~28-33% land with no bleed, while still
- * ~tripling the dispersed-window length (~16 -> ~45 Myr, several 10-Myr
- * keyframes). Fuller "continents sail apart" drift is blocked by that grinding
- * and by whole-sphere rift kinematics, not by this constant — see
- * PHASE_2_STAGE0_FINDINGS.md.
+ * halt. Longer locks therefore bleed land, and 100 Myr was outright fatal in
+ * the pre-#59 era (seed 1337 fell to ~8% land by 2 Gyr, below the #20 10%
+ * floor) — but #59's ocean-seeking rift headings removed the dominant share
+ * of that grinding, and the #66 retune re-measured the lock at 4x: at
+ * 120 Myr all three golden seeds hold land minima of 11.3-14% over the full
+ * 4.5 Gyr at N=64 (maxima ~31%), safely above the floor. 30 -> 120 Myr as
+ * part of the #66 4x clock scaling: a passive margin now stays passive for
+ * a geologically plausible stretch, and a breakup is followed by real drift
+ * before any re-collision can weld.
  */
-export const RIFT_SUTURE_COOLDOWN_YEARS = 30e6;
+export const RIFT_SUTURE_COOLDOWN_YEARS = 120e6;
 
 // --- Climate proxy & erosion (#19) ------------------------------------------
 

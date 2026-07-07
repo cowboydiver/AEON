@@ -24,11 +24,13 @@
  * from the issue's rng.fork sketch: a fork taken inside a pure system would
  * restart its stream every step). Rift likelihood rises SMOOTHLY with plate
  * size (#61, replacing #59's threshold brake): one size ramp (1 below
- * RIFT_SIZE_RATE_KNEE, the old 8× brake at RIFT_SIZE_RATE_REF_FRACTION = 0.55)
+ * RIFT_SIZE_RATE_KNEE, RIFT_SIZE_RATE_REF_MULTIPLE at
+ * RIFT_SIZE_RATE_REF_FRACTION = 0.55, the old #59 threshold)
  * both relaxes the maturity age gate (RIFT_MIN_AGE_YEARS / ramp, shrinking
  * toward zero as a plate approaches whole-sphere — the old age-gate waiver made
- * continuous) and boosts the draw probability (capped at the 8× brake magnitude
- * above 0.55, so nothing rifts faster than the measured-good brake). This lets a
+ * continuous) and boosts the draw probability (capped at REF_MULTIPLE, so
+ * nothing rifts faster than the reference oversize rate — retuned against the
+ * dispersal metrics in #66, see the constant's comment). This lets a
  * near-whole-sphere monopoly keep shedding fragments without the old
  * discontinuous 0.55 threshold or its MIN_PLATES coupling. The rift carves a
  * contiguous continental
@@ -234,9 +236,9 @@ function applyWilson(state: PlanetState, dtYears: number): PlanetState {
       // scales the decision: it relaxes the maturity gate (RIFT_MIN_AGE_YEARS /
       // ramp — full below the knee, shrinking toward zero as a plate approaches
       // whole-sphere, the old age-gate waiver made continuous) and boosts the
-      // draw probability (capped at the brake magnitude, so the deep-time rate
-      // above 0.55 matches #59 and nothing rifts faster than the measured-good
-      // brake).
+      // draw probability (capped at REF_MULTIPLE, so nothing rifts faster than
+      // the reference oversize rate — the monopoly safety net whose absolute
+      // magnitude was re-measured in the #66 clock retune).
       const ramp = riftSizeRamp(s.cells / count);
       if (state.timeYears - plate.createdAtYears < RIFT_MIN_AGE_YEARS / ramp) continue;
       const pDraw = pRift * Math.min(RIFT_SIZE_RATE_REF_MULTIPLE, ramp);
@@ -269,8 +271,8 @@ function applyWilson(state: PlanetState, dtYears: number): PlanetState {
  * climbing above it. Monotonic and continuous in areaFraction: no plate's rift
  * rate jumps as it grows. The caller reads it two ways, both smoothing a half of
  * the old brake: the draw probability uses min(REF_MULTIPLE, ramp), which
- * saturates at the brake magnitude above 0.55 (so nothing rifts faster than the
- * measured-good brake); the maturity gate divides RIFT_MIN_AGE_YEARS by the
+ * saturates at the reference oversize rate above 0.55 (so nothing rifts faster
+ * than it); the maturity gate divides RIFT_MIN_AGE_YEARS by the
  * uncapped ramp, which keeps shrinking toward zero for a near-whole-sphere plate
  * (the old age-gate waiver, now continuous). Exported for the contract test.
  */

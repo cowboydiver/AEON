@@ -52,15 +52,21 @@ describe('codec container (#22)', () => {
       const half = quantStep(name) / 2;
       const orig = state.fields[name];
       const out = decoded.fields[name]!;
-      let maxErr = 0;
+      let maxExcess = -Infinity;
       for (let i = 0; i < count; i++) {
         // Values inside the range must round-trip to within half a step; the
         // sim never leaves the ranges (checked separately), so no clamping here.
         expect(orig[i]!).toBeGreaterThanOrEqual(q.min);
         expect(orig[i]!).toBeLessThanOrEqual(q.max);
-        maxErr = Math.max(maxErr, Math.abs(orig[i]! - out[i]!));
+        // The decoder stores the dequantized double in a Float32Array, which
+        // adds up to |value|·2^-24 of rounding on top of the half-step bound —
+        // measurable for ~1500 m elevations, so the bound must be per-cell.
+        const err = Math.abs(orig[i]! - out[i]!) - Math.abs(out[i]!) * 2 ** -24;
+        maxExcess = Math.max(maxExcess, err);
       }
-      expect(maxErr, `${name} max round-trip error`).toBeLessThanOrEqual(half + 1e-6);
+      expect(maxExcess, `${name} max round-trip error beyond f32 rounding`).toBeLessThanOrEqual(
+        half + 1e-6,
+      );
     }
   });
 
