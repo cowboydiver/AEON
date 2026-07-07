@@ -68,7 +68,10 @@ const PEAK = vec3(0.95, 0.95, 0.95);
 
 const TAU = 6.283185307179586;
 // Golden-ratio conjugate: fract(id · φ⁻¹) spreads consecutive plate ids across
-// [0, 1) so neighbouring plates get well-separated hues.
+// [0, 1) so neighbouring plates get well-separated hues. Keyed to the RAW
+// plate id, never a live-count palette index — the kernel never renumbers or
+// reclaims plate slots, so a surviving plate keeps its colour across
+// reorganizations (#66); only a genuinely new rift fragment gets a fresh hue.
 const PLATE_HUE_STRIDE = 0.6180339887498949;
 
 export function createPlanetMaterial(

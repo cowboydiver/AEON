@@ -3,12 +3,14 @@ import { join, resolve } from 'node:path';
 import { parseArgs } from 'node:util';
 import { PNG } from 'pngjs';
 import {
+  EVENT_KINDS,
   FIELD_NAMES,
   createPlanetParams,
   hashFloat32Array,
   run,
   type FieldName,
   type Keyframe,
+  type SimEvent,
 } from 'sim-kernel';
 import { fieldStats, renderFieldPng } from './render';
 
@@ -181,7 +183,48 @@ function dump(keyframe: Keyframe): void {
   }
 }
 
+/**
+ * Wilson-cycle tempo summary (#66): reorganizations (rifts + sutures) per
+ * 100 Myr, and the mean interval between successive reorganizations that
+ * involve the same plate — the tracked number for "does the clock feel
+ * Earth-like" (target ~100-300 Myr), instead of an eyeball call on the
+ * event log.
+ */
+function reportTempo(events: readonly SimEvent[], simulatedYears: number): void {
+  const reorgs = events.filter(
+    (e) => e.kind === EVENT_KINDS.plateRift || e.kind === EVENT_KINDS.plateSuture,
+  );
+  const rifts = reorgs.filter((e) => e.kind === EVENT_KINDS.plateRift).length;
+  const per100Myr = (reorgs.length / (simulatedYears / 1e6)) * 100;
+  // Interval between consecutive reorganizations touching the same plate:
+  // a rift involves {plate, newPlate}, a suture {absorbed, into}.
+  const lastSeen = new Map<number, number>();
+  let intervalSum = 0;
+  let intervalCount = 0;
+  for (const e of reorgs) {
+    const d = e.data!;
+    const involved =
+      e.kind === EVENT_KINDS.plateRift ? [d.plate!, d.newPlate!] : [d.absorbed!, d.into!];
+    for (const p of involved) {
+      const prev = lastSeen.get(p);
+      if (prev !== undefined) {
+        intervalSum += e.timeYears - prev;
+        intervalCount++;
+      }
+      lastSeen.set(p, e.timeYears);
+    }
+  }
+  const meanInterval =
+    intervalCount > 0 ? `${(intervalSum / intervalCount / 1e6).toFixed(0)} Myr` : 'n/a';
+  console.log(
+    `tempo: ${rifts} rifts + ${reorgs.length - rifts} sutures in ${(simulatedYears / 1e6).toFixed(0)} Myr` +
+      ` = ${per100Myr.toFixed(2)} reorganizations / 100 Myr` +
+      `; mean interval per plate involved: ${meanInterval}`,
+  );
+}
+
 let keyframeIndex = 0;
+let finalEvents: SimEvent[] = [];
 run(params, untilYears, (keyframe) => {
   checkFinite(keyframe);
   if (values.report) report(keyframe);
@@ -191,4 +234,6 @@ run(params, untilYears, (keyframe) => {
   const isFinal = keyframe.timeYears >= untilYears;
   if (dumpFields.length > 0 && (keyframeIndex % dumpEvery === 0 || isFinal)) dump(keyframe);
   keyframeIndex++;
+  finalEvents = keyframe.events;
 });
+if (values.report) reportTempo(finalEvents, untilYears);
