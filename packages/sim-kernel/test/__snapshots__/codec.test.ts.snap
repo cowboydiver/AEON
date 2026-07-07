@@ -3,20 +3,20 @@
 exports[`codec byte goldens (#22) > seed 1: encoded keyframe byte hash 1`] = `
 {
   "byteLength": 43100,
-  "hash": "0dff7280",
+  "hash": "0853c47e",
 }
 `;
 
 exports[`codec byte goldens (#22) > seed 42: encoded keyframe byte hash 1`] = `
 {
   "byteLength": 43100,
-  "hash": "0ea1a6ac",
+  "hash": "3d4f8a82",
 }
 `;
 
 exports[`codec byte goldens (#22) > seed 1337: encoded keyframe byte hash 1`] = `
 {
   "byteLength": 43100,
-  "hash": "eeefa7f5",
+  "hash": "7837796d",
 }
 `;

@@ -123,14 +123,13 @@ export function summarizeMetrics(
   }
 
   // Longest consecutive monopoly window, reported in sim time.
-  let monopolyRun = 0;
   let monopolyStart = -1;
   let longestMonopolyYears = 0;
   for (let i = 0; i < n; i++) {
     if (series[i]!.maxPlateFrac > MONOPOLY_MAX_PLATE_FRAC) {
       if (monopolyStart === -1) monopolyStart = i;
-      monopolyRun = series[i]!.timeYears - series[monopolyStart]!.timeYears;
-      if (monopolyRun > longestMonopolyYears) longestMonopolyYears = monopolyRun;
+      const run = series[i]!.timeYears - series[monopolyStart]!.timeYears;
+      if (run > longestMonopolyYears) longestMonopolyYears = run;
     } else {
       monopolyStart = -1;
     }

@@ -19,12 +19,20 @@
  * Unclaimed cells are divergent gaps, repaired deterministically by
  * majority-of-assigned-neighbors and filled as provisional young ocean crust
  * (#15 turns this into real ridge bathymetry).
+ *
+ * Displaced continental crust is bulldozed, not destroyed (#16/#59), landing
+ * by a compactness-seeking pick against the post-advection crust map (#67),
+ * and each step ends with a margin-consolidation pass (#67) that pair-flips
+ * stray one-cell continental flecks against enclosed ocean holes — the two
+ * shipped halves of the boundary-process coherence pass that stopped
+ * reorganization churn from shredding deep-time continents into lace.
  */
 
 import { oceanicDepthForAge } from '../bathymetry';
 import {
   ACTIVE_MARGIN_STRESS_M_PER_YR,
   COLLISION_THICKENING_FACTOR,
+  MARGIN_CONSOLIDATION_HOLE_MIN_NEIGHBORS,
   MICROCONTINENT_FOUNDER_ELEVATION_M,
   OCEAN_RELIEF_RELAX_M_PER_YR,
   OCEAN_RIDGE_DEPTH_M,
@@ -151,6 +159,78 @@ function applyTectonics(state: PlanetState, dtYears: number): PlanetState {
     }
   }
 
+  // Margin consolidation (#67): pair-flip stray one-cell continental flecks
+  // against enclosed one-cell ocean holes, by neighbor majority. Islands —
+  // continental cells with NO continental 4-neighbor (the same debris the
+  // founder clamp above sinks: shredded collision margins, herringbone
+  // rework scraps) — flip to oceanic crust at their age-depth floor. Holes —
+  // oceanic cells with >= MARGIN_CONSOLIDATION_HOLE_MIN_NEIGHBORS
+  // continental 4-neighbors (gap-fill scars and advection tears inside a
+  // continent) — flip to continental crust inheriting their neighbors'
+  // properties. Flips are PAIRED (k = min(#islands, #holes), both sides in
+  // ascending cell order) so continental cell count is exactly conserved:
+  // the pass is bookkeeping that moves stranded crustal area from a form
+  // the planet can never read as continent (foundered confetti) into the
+  // enclave basins the boundary processes tore open. Unpaired islands stay
+  // (foundered, Zealandia-style) and unpaired holes stay open water.
+  // Decisions are computed from the pre-pass crustType and applied
+  // together, so scan order cannot leak into the result.
+  let crustAgeOut = next.fields.crustAge;
+  let sutureYearsOut = next.fields.sutureYears;
+  {
+    const islands: number[] = [];
+    // Holes with the properties they inherit, snapshotted at decision time —
+    // a hole's continental neighbor may itself be an island this pass flips
+    // to ocean, so inheritance must read the pre-pass state, not the
+    // mutating working arrays.
+    const holes: { cell: number; elev: number; age: number; suture: number }[] = [];
+    const crustAgeIn = next.fields.crustAge;
+    const sutureYearsIn = next.fields.sutureYears;
+    for (let i = 0; i < crustType.length; i++) {
+      let contNb = 0;
+      for (let k = 0; k < 4; k++) if (crustType[nbTable[i * 4 + k]!] === 1) contNb++;
+      if (crustType[i] === 1 && contNb === 0) {
+        islands.push(i);
+      } else if (crustType[i] === 0 && contNb >= MARGIN_CONSOLIDATION_HOLE_MIN_NEIGHBORS) {
+        // A filled hole becomes continental basin floor: lowest continental
+        // neighbor's elevation (an enclave is low ground), oldest neighbor's
+        // age, and the neighbors' weld memory.
+        let elev = Infinity;
+        let age = 0;
+        let suture = 0;
+        for (let k = 0; k < 4; k++) {
+          const nb = nbTable[i * 4 + k]!;
+          if (crustType[nb] !== 1) continue;
+          if (elevation[nb]! < elev) elev = elevation[nb]!;
+          if (crustAgeIn[nb]! > age) age = crustAgeIn[nb]!;
+          if (sutureYearsIn[nb]! > suture) suture = sutureYearsIn[nb]!;
+        }
+        holes.push({ cell: i, elev, age, suture });
+      }
+    }
+    const flips = Math.min(islands.length, holes.length);
+    if (flips > 0) {
+      // crustAge/sutureYears are only copied when a flip actually writes
+      // them (most steps flip nothing).
+      crustAgeOut = crustAgeOut.slice();
+      sutureYearsOut = sutureYearsOut.slice();
+      for (let f = 0; f < flips; f++) {
+        const isl = islands[f]!;
+        const hole = holes[f]!;
+        // The island's cell reverts to seafloor at its age-depth floor
+        // (crust age travels with the cell, so an old fleck sinks toward
+        // abyssal depth; its sediment cover, if any, rides on top).
+        crustType[isl] = 0;
+        elevation[isl] = oceanicDepthForAge(crustAgeOut[isl]!) + sedimentM[isl]!;
+        sutureYearsOut[isl] = 0; // ocean carries no weld memory
+        crustType[hole.cell] = 1;
+        elevation[hole.cell] = hole.elev;
+        crustAgeOut[hole.cell] = hole.age;
+        sutureYearsOut[hole.cell] = hole.suture;
+      }
+    }
+  }
+
   // sedimentM is oceanic cover only (#65): crust that just became continental
   // (arc maturation above, bulldozer re-root in advect) consumes its sediment
   // — accreted into the margin wedge, it leaves the ledger the same way
@@ -167,7 +247,15 @@ function applyTectonics(state: PlanetState, dtYears: number): PlanetState {
   return {
     ...next,
     globals: { ...next.globals, landFraction: land / elevation.length },
-    fields: { ...next.fields, boundaryStress, elevation, crustType, sedimentM },
+    fields: {
+      ...next.fields,
+      boundaryStress,
+      elevation,
+      crustType,
+      sedimentM,
+      crustAge: crustAgeOut,
+      sutureYears: sutureYearsOut,
+    },
   };
 }
 
@@ -211,64 +299,19 @@ function advect(
   // deeper into its own plate (see the push pass below).
   const dir: Vec3 = [0, 0, 0];
   interface Push {
-    /** Cell the displaced continental content is shoved onto. */
-    target: number;
+    /** Displaced continental cell (the crust's original home). */
+    from: number;
     /** Plate that owned the displaced cell (the retreating side). */
     owner: number;
+    /** Local shortening direction the crust is shoved along. */
+    fx: number;
+    fy: number;
+    fz: number;
     elevation: number;
     crustAge: number;
     sutureYears: number;
   }
   const pushes: Push[] = [];
-  /**
-   * Pick where displaced continental crust at `from` goes, given the local
-   * shortening direction (fx,fy,fz): the same-plate (old partition)
-   * 4-neighbor that is (1) oceanic and forward, else (2) oceanic anywhere —
-   * lateral extrusion, the Indochina-style sideways escape that keeps the
-   * crustal area conserved — else (3) continental and forward, which the
-   * apply pass turns into thickening. -1 = no same-plate neighbor at all:
-   * the last sliver of a fully-overridden salient is genuinely consumed
-   * (the exception that keeps this a one-shot pass, not a shortening
-   * solver).
-   */
-  const pickPushTarget = (
-    from: number,
-    plate: number,
-    fx: number,
-    fy: number,
-    fz: number,
-  ): number => {
-    let bestOceanFwd = -1;
-    let bestOceanFwdDot = 0;
-    let bestOceanAny = -1;
-    let bestOceanAnyDot = -Infinity;
-    let bestContFwd = -1;
-    let bestContFwdDot = 0;
-    for (let k = 0; k < 4; k++) {
-      const nb = nbTable[from * 4 + k]!;
-      if (oldPlate[nb] !== plate) continue;
-      const d =
-        (centers[nb * 3]! - centers[from * 3]!) * fx +
-        (centers[nb * 3 + 1]! - centers[from * 3 + 1]!) * fy +
-        (centers[nb * 3 + 2]! - centers[from * 3 + 2]!) * fz;
-      if (old.crustType[nb] === 0) {
-        if (d > bestOceanFwdDot) {
-          bestOceanFwdDot = d;
-          bestOceanFwd = nb;
-        }
-        if (d > bestOceanAnyDot) {
-          bestOceanAnyDot = d;
-          bestOceanAny = nb;
-        }
-      } else if (d > bestContFwdDot) {
-        bestContFwdDot = d;
-        bestContFwd = nb;
-      }
-    }
-    if (bestOceanFwd !== -1) return bestOceanFwd;
-    if (bestOceanAny !== -1) return bestOceanAny;
-    return bestContFwd;
-  };
   // Source cells whose content survived at some target this event. The
   // quantized rotation map is not a bijection (one source can feed several
   // targets); a source counts as consumed only if it won NOWHERE, and is
@@ -347,22 +390,16 @@ function advect(
       old.crustType[i] === 1 &&
       old.crustType[winSrc] === 1
     ) {
-      const best = pickPushTarget(
-        i,
+      pushes.push({
+        from: i,
         owner,
-        dir[0] - centers[winSrc * 3]!,
-        dir[1] - centers[winSrc * 3 + 1]!,
-        dir[2] - centers[winSrc * 3 + 2]!,
-      );
-      if (best !== -1) {
-        pushes.push({
-          target: best,
-          owner,
-          elevation: old.elevation[i]!,
-          crustAge: old.crustAge[i]!,
-          sutureYears: old.sutureYears[i]!,
-        });
-      }
+        fx: dir[0] - centers[winSrc * 3]!,
+        fy: dir[1] - centers[winSrc * 3 + 1]!,
+        fz: dir[2] - centers[winSrc * 3 + 2]!,
+        elevation: old.elevation[i]!,
+        crustAge: old.crustAge[i]!,
+        sutureYears: old.sutureYears[i]!,
+      });
     }
   }
 
@@ -386,35 +423,98 @@ function advect(
       if (wonFrom[src]) continue; // survived somewhere; not consumed
       wonFrom[src] = 1; // handle each consumed source exactly once
       // Push back opposite to the motion (from target i toward src and past
-      // it), preferring oceanic ground — see pickPushTarget.
-      const best = pickPushTarget(
-        src,
-        p,
-        centers[src * 3]! - dir[0],
-        centers[src * 3 + 1]! - dir[1],
-        centers[src * 3 + 2]! - dir[2],
-      );
-      if (best !== -1) {
-        pushes.push({
-          target: best,
-          owner: p,
-          elevation: old.elevation[src]!,
-          crustAge: old.crustAge[src]!,
-          sutureYears: old.sutureYears[src]!,
-        });
-      }
+      // it), preferring oceanic ground — see the apply pass below.
+      pushes.push({
+        from: src,
+        owner: p,
+        fx: centers[src * 3]! - dir[0],
+        fy: centers[src * 3 + 1]! - dir[1],
+        fz: centers[src * 3 + 2]! - dir[2],
+        elevation: old.elevation[src]!,
+        crustAge: old.crustAge[src]!,
+        sutureYears: old.sutureYears[src]!,
+      });
     }
   }
 
   // Apply the bulldozed crust in the deterministic order it was collected
   // (ascending displaced-cell index; multiple pushes may land on one
-  // target). Onto oceanic or still-unclaimed cells the displaced column
-  // re-roots: the cell becomes continental with the displaced properties
-  // (area conserved). Onto continental cells the collision shortens and
-  // thickens: a fraction of the displaced positive relief piles on, capped
-  // at the orogeny ceiling.
+  // target). Each push picks its landing cell HERE, against the resolved
+  // post-advection crust map (newFields, including earlier pushes), not the
+  // pre-advection one (#67): the same-plate (old partition) 4-neighbor that
+  // is (1) oceanic/unclaimed, ATTACHED to post-advection continental crust,
+  // and forward, else (2) oceanic attached anywhere — accretion against a
+  // continental mass, compactness-seeking — else (3) oceanic forward, else
+  // (4) oceanic anywhere (lateral extrusion, the Indochina-style sideways
+  // escape that keeps the crustal area conserved), else (5) continental and
+  // forward, which thickens. Preferring attached ground matters because a
+  // detached re-root is a one-cell micro-continent the founder clamp then
+  // sinks — the measured "collision debris" shape leak (#67): conserving
+  // area as confetti is conserving it in a form the planet can never read
+  // as a continent. No candidate at all (-1) = the last sliver of a
+  // fully-overridden salient is genuinely consumed (the exception that
+  // keeps this a one-shot pass, not a shortening solver). Onto oceanic or
+  // still-unclaimed cells the displaced column re-roots: the cell becomes
+  // continental with the displaced properties (area conserved). Onto
+  // continental cells the collision shortens and thickens: a fraction of
+  // the displaced positive relief piles on, capped at the orogeny ceiling.
+  const isCont = (c: number): boolean => newFields.plateId[c] !== -1 && newFields.crustType[c] === 1;
+  const isAttached = (c: number): boolean =>
+    isCont(nbTable[c * 4]!) || isCont(nbTable[c * 4 + 1]!) || isCont(nbTable[c * 4 + 2]!) || isCont(nbTable[c * 4 + 3]!);
   for (const push of pushes) {
-    const t = push.target;
+    let bestOceanAttFwd = -1;
+    let bestOceanAttFwdDot = 0;
+    let bestOceanAttAny = -1;
+    let bestOceanAttAnyDot = -Infinity;
+    let bestOceanFwd = -1;
+    let bestOceanFwdDot = 0;
+    let bestOceanAny = -1;
+    let bestOceanAnyDot = -Infinity;
+    let bestContFwd = -1;
+    let bestContFwdDot = 0;
+    for (let k = 0; k < 4; k++) {
+      const nb = nbTable[push.from * 4 + k]!;
+      if (oldPlate[nb] !== push.owner) continue;
+      const d =
+        (centers[nb * 3]! - centers[push.from * 3]!) * push.fx +
+        (centers[nb * 3 + 1]! - centers[push.from * 3 + 1]!) * push.fy +
+        (centers[nb * 3 + 2]! - centers[push.from * 3 + 2]!) * push.fz;
+      if (isCont(nb)) {
+        if (d > bestContFwdDot) {
+          bestContFwdDot = d;
+          bestContFwd = nb;
+        }
+      } else if (isAttached(nb)) {
+        if (d > bestOceanAttFwdDot) {
+          bestOceanAttFwdDot = d;
+          bestOceanAttFwd = nb;
+        }
+        if (d > bestOceanAttAnyDot) {
+          bestOceanAttAnyDot = d;
+          bestOceanAttAny = nb;
+        }
+      } else {
+        if (d > bestOceanFwdDot) {
+          bestOceanFwdDot = d;
+          bestOceanFwd = nb;
+        }
+        if (d > bestOceanAnyDot) {
+          bestOceanAnyDot = d;
+          bestOceanAny = nb;
+        }
+      }
+    }
+    const t =
+      bestOceanAttFwd !== -1
+        ? bestOceanAttFwd
+        : bestOceanAttAny !== -1
+          ? bestOceanAttAny
+          : bestOceanFwd !== -1
+            ? bestOceanFwd
+            : bestOceanAny !== -1
+              ? bestOceanAny
+              : bestContFwd;
+    if (t === -1) continue;
     if (newFields.plateId[t] !== -1 && newFields.crustType[t] === 1) {
       newFields.elevation[t] = Math.min(
         OROGENY_MAX_ELEVATION_M,
