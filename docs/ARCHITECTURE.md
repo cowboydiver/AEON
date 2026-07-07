@@ -243,18 +243,24 @@ erosion (#19) ages them.
 ### Wilson cycles (#18)
 
 The `wilson` system (after tectonics in the pipeline) reorganizes plates so
-deep time tells a story. **Suturing:** plate pairs in continent–continent
+deep time tells a story. The whole trigger clock was retuned 4× slower in
+#66 toward Earth-like Wilson periods (the pre-#66 values passed the
+dispersal metrics but reorganized every ~20 Myr globally — faster than the
+10 Myr keyframe spacing, which read as flicker); the values below are the
+retuned ones, and the measured mean interval between reorganizations
+involving the same plate is ~140 Myr at N=64 (`pnpm sim --report` prints
+the tempo). **Suturing:** plate pairs in continent–continent
 convergent contact (≥3 boundary cells, both sides continental, stress
-positive) for a continuous 15 Myr merge — smaller absorbed into larger, the
+positive) for a continuous 60 Myr merge — smaller absorbed into larger, the
 combined plate takes the area-weighted mean angular-velocity vector, and
 relative motion across the suture stops. Without this, fixed plate speeds
 grind colliding continents away forever (integration runs lost 2/3 of
 continental area in 500 Myr). **Rifting (#59 fragment kinematics):** a
-plate that is old (≥150 Myr since creation/last rift), large (≥8% of the
+plate that is old (≥600 Myr since creation/last rift), large (≥8% of the
 sphere) and carrying a continent (continental area ≥2% **of the sphere** —
 plate-relative fraction was tried first and silently disabled rifting, and
 the earlier 5% gate dead-locked low-continent worlds) rifts with
-probability 0.006/Myr. The rift *carves off a contiguous continental
+probability 0.0015/Myr. The rift *carves off a contiguous continental
 fragment* — a hash-drawn 20–40% of the plate, grown by jittered Dijkstra
 from a continental seed cell — and gives it an Euler pole perpendicular to
 its own centroid, so the fragment **translates** across the sphere at
@@ -272,28 +278,32 @@ is why deep time stayed supercontinent-locked; see
 PHASE_2_STAGE0_FINDINGS.md.) **Size-dependent rift pressure (#61, replacing
 the #59 oversize brake):** rift likelihood rises smoothly with plate area — a
 single ramp (`riftSizeRamp`) that is 1 below `RIFT_SIZE_RATE_KNEE` (0.3 of the
-sphere), passes through the old 8× brake at `RIFT_SIZE_RATE_REF_FRACTION` (0.55),
+sphere), reaches `RIFT_SIZE_RATE_REF_MULTIPLE` (16) at
+`RIFT_SIZE_RATE_REF_FRACTION` (0.55, the old #59 brake threshold),
 and keeps climbing. It scales both halves of the old brake: the draw probability
-uses `min(8, ramp)` (saturating at the brake magnitude above 0.55, so nothing
-rifts faster than the measured-good #59 rate), and the maturity age gate is
-`RIFT_MIN_AGE_YEARS / ramp` (full below the knee, ≈19 Myr at 0.55, shrinking to a
-~2.7 Myr floor near whole-sphere — the old hard age waiver made continuous). This
+uses `min(16, ramp)` (saturating above 0.55, so nothing rifts faster than the
+reference oversize rate — half the #59 brake's absolute rate, the slowest that
+holds dispersal on all three golden seeds, re-measured in #66), and the
+maturity age gate is
+`RIFT_MIN_AGE_YEARS / ramp` (full below the knee, 37.5 Myr at 0.55, shrinking to
+a ~5 Myr floor near whole-sphere — the old hard age waiver made continuous). This
 removes the
 discontinuity at 0.55 and the MIN_PLATES coupling (the old brake existed only to
 compensate for the lowered suture floor). Suturing keeps assembling
 supercontinents, and one plate used to own ~100% of cells from ~1.2 Gyr on
-(plate ≠ land); under pressure a sphere-monopoly sheds fragments every few tens
-of Myr until it disperses, so the measured worst >85%-of-sphere monopoly window
-is ≤ ~100 Myr (was ~3 Gyr); an invariant test pins it <400 Myr. The
-dispersed-window fraction beats the #59 baseline at N=64 for all three golden
-seeds (72–74% vs 66–72%) and matches or beats it at 5 of 6 seed×grid points —
-the deep-time metric is chaotically sensitive to any sub-0.55 rifting (which
-removing the discontinuity necessarily introduces), so it is not reproduced
-number-for-number, but the world stays fully dispersed everywhere. **Post-rift suture lock:** a fresh rift margin is
+(plate ≠ land); under pressure a sphere-monopoly sheds fragments within ~100 Myr
+until it disperses, so the measured worst >85%-of-sphere monopoly window
+is ≤ 60 Myr at N=64 (was ~3 Gyr pre-#59); an invariant test pins it <400 Myr.
+The dispersed-window fraction after the #66 retune is 93–94% at N=64 on all
+three golden seeds with every Gyr bucket alive — the deep-time metric is
+chaotically sensitive to the oversize rate (between 12× and 16× it is bimodal:
+seed 42 collapses to ~49% at 12×), which is why the oversize safety net is the
+one knob the #66 clock scaling did not slow proportionally.
+**Post-rift suture lock:** a fresh rift margin is
 passive: a rift stamps both halves with `sutureLockUntilYears = now +
-RIFT_SUTURE_COOLDOWN_YEARS` (30 Myr) and a locked plate's contact is not
+RIFT_SUTURE_COOLDOWN_YEARS` (120 Myr) and a locked plate's contact is not
 recorded, so it can't re-suture until the lock lifts (then needs a fresh
-15 Myr). Both directions emit events (`plateSuture`/`plateRift`), and
+60 Myr). Both directions emit events (`plateSuture`/`plateRift`), and
 plates whose last cell is consumed by advection are retired each step with
 a `plateConsumed` event, so the live count the bounds gate on stays honest
 (zombie cell-less plates used to hold the suture floor "satisfied"
