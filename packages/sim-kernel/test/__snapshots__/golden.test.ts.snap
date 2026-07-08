@@ -13,7 +13,7 @@ exports[`golden field hashes > seed 1: initial state and after 10 steps 1`] = `
     "precipitation": "aa963de5",
     "sedimentM": "41d9f630",
     "sutureYears": "b0549dc5",
-    "temperature": "59089e71",
+    "temperature": "c0bd5c46",
     "timeYears": 10000000,
   },
   "initial": {
@@ -27,7 +27,7 @@ exports[`golden field hashes > seed 1: initial state and after 10 steps 1`] = `
     "precipitation": "aa963de5",
     "sedimentM": "b0549dc5",
     "sutureYears": "b0549dc5",
-    "temperature": "9adb4901",
+    "temperature": "edda30dc",
   },
 }
 `;
@@ -45,7 +45,7 @@ exports[`golden field hashes > seed 42: initial state and after 10 steps 1`] = `
     "precipitation": "aa963de5",
     "sedimentM": "9192848f",
     "sutureYears": "b0549dc5",
-    "temperature": "7794c592",
+    "temperature": "42191926",
     "timeYears": 10000000,
   },
   "initial": {
@@ -59,7 +59,7 @@ exports[`golden field hashes > seed 42: initial state and after 10 steps 1`] = `
     "precipitation": "aa963de5",
     "sedimentM": "b0549dc5",
     "sutureYears": "b0549dc5",
-    "temperature": "ebe55872",
+    "temperature": "05e4bd0a",
   },
 }
 `;
@@ -77,7 +77,7 @@ exports[`golden field hashes > seed 1337: initial state and after 10 steps 1`] =
     "precipitation": "aa963de5",
     "sedimentM": "c1c8ab38",
     "sutureYears": "b0549dc5",
-    "temperature": "7341fa8a",
+    "temperature": "9b48ca4e",
     "timeYears": 10000000,
   },
   "initial": {
@@ -91,7 +91,7 @@ exports[`golden field hashes > seed 1337: initial state and after 10 steps 1`] =
     "precipitation": "aa963de5",
     "sedimentM": "b0549dc5",
     "sutureYears": "b0549dc5",
-    "temperature": "cce78f95",
+    "temperature": "943c80bd",
   },
 }
 `;

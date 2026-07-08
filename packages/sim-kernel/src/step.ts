@@ -2,7 +2,7 @@ import { copyEvents, type SimEvent } from './events';
 import { FIELD_NAMES, type Fields } from './fields';
 import { createRng, type Rng } from './rng';
 import { createInitialState, type PlanetState, type PlanetParams } from './state';
-import { climateProxySystem } from './systems/climateProxy';
+import { energyBalanceSystem } from './systems/energyBalance';
 import { erosionSystem } from './systems/erosion';
 import { tectonicsSystem } from './systems/tectonics';
 import { wilsonSystem } from './systems/wilson';
@@ -30,14 +30,18 @@ export const identitySystem: System = {
 
 /**
  * Ordered system pipeline applied by every step: tectonics moves crust and
- * builds topography, erosion redistributes it, climateProxy refreshes the
- * diagnostic temperature against the final elevation.
+ * builds topography, wilson reorganizes plates, erosion redistributes relief,
+ * then energyBalance re-solves the zonal temperature (#30) against the final
+ * elevation and land mask. The Phase 3 climate block (winds → moisture → ice →
+ * seaLevel → carbon → biome) extends this after energyBalance as it lands; the
+ * latitude-band precipitation proxy still fills `precipitation` at init and
+ * feeds erosion until moisture transport (#32) retires it.
  */
 export const SYSTEMS: readonly System[] = [
   tectonicsSystem,
   wilsonSystem,
   erosionSystem,
-  climateProxySystem,
+  energyBalanceSystem,
 ];
 
 /** Advance the state by dtYears through the ordered system pipeline. */

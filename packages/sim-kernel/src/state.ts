@@ -5,6 +5,7 @@ import {
   EARTH_DAY_HOURS,
   EARTH_OBLIQUITY_DEG,
   EARTH_RADIUS_M,
+  INITIAL_CO2_PPM,
   SOLAR_LUMINOSITY_W,
 } from './constants';
 import type { SimEvent } from './events';
@@ -12,6 +13,7 @@ import { FIELD_NAMES, type Fields } from './fields';
 import { DEFAULT_GRID_N, cellCount } from './grid';
 import { applyInitialPlates, type PlateRecord } from './plates';
 import { applyPrecipitationProxy } from './systems/climateProxy';
+import { applyEnergyBalance } from './systems/energyBalance';
 import { applyInitialTerrain } from './systems/initialTerrain';
 
 /** Immutable per-run parameters. Same params + same seed => same history. */
@@ -23,18 +25,27 @@ export interface PlanetParams {
   keyframeIntervalYears: number;
   /** Number of plates in the initial partition (live count then evolves, #18). */
   numPlates: number;
-  /** Placeholder for later phases (energy balance). W. */
+  /** Stellar luminosity driving insolation (#30), W. */
   starLuminosity: number;
-  /** Placeholder for later phases (diurnal cycle). Hours. */
+  /** Placeholder for later phases (wind-band count, #31). Hours. */
   dayLengthHours: number;
-  /** Placeholder for later phases (seasons). Degrees. */
+  /** Axial tilt shaping the annual-mean latitudinal insolation profile (#30), degrees. */
   obliquityDeg: number;
+  /** Atmospheric CO₂ reservoir seed (#30 greenhouse; #34 evolves it), ppm. */
+  initialCo2Ppm: number;
 }
 
 /** Scalar whole-planet quantities, updated by systems as they run. */
 export interface Globals {
   /** Fraction of cells with elevation above the 0 m datum. */
   landFraction: number;
+  /** Atmospheric CO₂, ppm — the slow carbonate–silicate reservoir (#34); the
+   *  energy balance reads it as the greenhouse forcing. Constant at
+   *  `initialCo2Ppm` until #34 lands. */
+  co2: number;
+  /** Global cell-count-mean surface temperature, K — a diagnostic for the
+   *  report/HUD and the #34 snowball detector (#30). */
+  meanTemperatureK: number;
 }
 
 export interface PlanetState {
@@ -71,6 +82,7 @@ export function createPlanetParams(partial: Partial<PlanetParams> & { seed: numb
     starLuminosity: SOLAR_LUMINOSITY_W,
     dayLengthHours: EARTH_DAY_HOURS,
     obliquityDeg: EARTH_OBLIQUITY_DEG,
+    initialCo2Ppm: INITIAL_CO2_PPM,
     ...partial,
   };
 }
@@ -84,11 +96,15 @@ export function createInitialState(params: PlanetParams): PlanetState {
   const state: PlanetState = {
     timeYears: 0,
     params,
-    globals: { landFraction: 0 },
+    globals: { landFraction: 0, co2: params.initialCo2Ppm, meanTemperatureK: 0 },
     fields,
     plates: [],
     events: [],
     wilson: { contactSince: {} },
   };
-  return applyPrecipitationProxy(applyInitialPlates(applyInitialTerrain(state)));
+  // Terrain and plates first (they set the elevation/land mask the energy
+  // balance reads), then the precipitation proxy (erosion input until #32),
+  // then the energy balance so the t=0 keyframe already carries a physical
+  // temperature field and meanTemperatureK.
+  return applyEnergyBalance(applyPrecipitationProxy(applyInitialPlates(applyInitialTerrain(state))));
 }

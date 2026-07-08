@@ -153,6 +153,22 @@ describe('phase 1 invariants (#20)', () => {
         expect(max, `seed ${seed} step ${i}`).toBeLessThanOrEqual(9_000);
         expect(landFraction, `seed ${seed} step ${i}`).toBeGreaterThan(0.1);
         expect(landFraction, `seed ${seed} step ${i}`).toBeLessThan(0.6);
+        // Climate bounds (#30): the zonal energy balance must keep temperature
+        // in physical range and inside the codec's [180, 320] K window over the
+        // whole timeline, and the mean-temperature diagnostic must stay sane.
+        // co2 is constant here (the #34 reservoir is not wired yet) but must
+        // stay finite. Extends the §5 multi-Gyr climate-stability check.
+        let tmin = Infinity;
+        let tmax = -Infinity;
+        for (const t of s.fields.temperature) {
+          tmin = Math.min(tmin, t);
+          tmax = Math.max(tmax, t);
+        }
+        expect(tmin, `seed ${seed} step ${i}: temperature floor`).toBeGreaterThanOrEqual(180);
+        expect(tmax, `seed ${seed} step ${i}: temperature ceiling`).toBeLessThanOrEqual(320);
+        expect(s.globals.meanTemperatureK, `seed ${seed} step ${i}: mean T`).toBeGreaterThan(230);
+        expect(s.globals.meanTemperatureK, `seed ${seed} step ${i}: mean T`).toBeLessThan(320);
+        expect(Number.isFinite(s.globals.co2), `seed ${seed} step ${i}: co2 finite`).toBe(true);
         // Max single-plate area fraction — the monopoly detector.
         const perPlate = new Array<number>(s.plates.length).fill(0);
         for (const p of s.fields.plateId) perPlate[p]!++;

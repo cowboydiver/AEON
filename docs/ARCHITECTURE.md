@@ -91,8 +91,8 @@ from it. All fields are `Float32Array` per cell.
 | --------------- | ---------- | ---------------- | ---------------------------------------------- |
 | `elevation`     | m          | ≈ −6000 … +4500  | Height relative to the 0 m datum (sea level)   |
 | `crustAge`      | yr         | 0 … sim age (+2 Gyr shield offset) | Age of crust: 0 at spreading centers, +dt per step everywhere. Initial ocean gets a depth-consistent age; initial continents start at 2 Gyr |
-| `temperature`   | K          | ≈ 215 … 305      | Mean surface air temperature (latitude + lapse placeholder) |
-| `precipitation` | kg/m²/yr   | ≈ 100 … 1800     | Annual precipitation: static latitude-band proxy until Phase 3 |
+| `temperature`   | K          | ≈ 205 … 305      | Mean surface air temperature from the Phase 3 zonal energy balance (#30): zonal EBM profile − lapse·elevation + bounded land continentality |
+| `precipitation` | kg/m²/yr   | ≈ 100 … 1800     | Annual precipitation: static latitude-band proxy until moisture transport (#32) |
 | `iceFraction`   | 0–1        | 0                | Ice cover fraction (zeros until cryosphere)    |
 | `biome`         | index      | 0                | Biome class (zeros until biomes)               |
 | `plateId`       | index      | 0 … numPlates−1  | Owning plate, index into `PlanetState.plates`. Small integers stored in float32 (exact up to 2^24) |
@@ -367,7 +367,7 @@ its stream every step, so a position/time hash is the deterministic
 equivalent (documented deviation). Euler-pole wander was considered and not
 implemented.
 
-### Erosion & climate proxy (#19, #65)
+### Erosion, precipitation proxy & energy balance (#19, #65, #30)
 
 `erosion` (after wilson): Jacobi diffusion of elevation over the 4-neighbor
 graph, continental-crust pairs only, flux ∝ height difference (slope) ×
@@ -400,11 +400,45 @@ upward — orogeny kept injecting and nothing ever left):
   at the 9 km cap — while belts welded into interiors by sutures retire to
   low relief within ~0.5–1 Gyr instead of persisting as immortal plateaus.
 
-`climateProxy` (last): refreshes
-`temperature` each step from current elevation (latitude + lapse formula
-shared with the init pass) and owns the static latitude-band `precipitation`
-proxy (ITCZ peak, subtropical dry belts, mid-latitude storm tracks, dry
-poles) — **replaced wholesale by Phase 3 moisture transport**.
+`climateProxy` no longer runs in the step pipeline: it now owns only the
+static latitude-band `precipitation` proxy (ITCZ peak, subtropical dry belts,
+mid-latitude storm tracks, dry poles), filled once at state creation and read
+by erosion until Phase 3 moisture transport (#32) replaces it. Its temperature
+placeholder is gone — temperature is the energy balance's now.
+
+`energyBalance` (last, #30): the Phase 3 climate hub. A Budyko–Sellers **zonal
+energy-balance model** solved on `ENERGY_BALANCE_BANDS` (90) equal-area
+latitude bands (uniform in sin φ). Per band: absorbed shortwave =
+annual-mean insolation × co-albedo, where insolation is
+`starLuminosity / (4π·d²)` shaped by the obliquity-dependent annual-mean
+latitudinal profile (a fixed function of `obliquityDeg`, memoized per run — no
+seasonal cycle, §7.2) and albedo is the cell-count mean of per-cell planetary
+albedo (ocean/land keyed off the sea-level datum, blended toward `ALBEDO_ICE`
+by `iceFraction` — the **#33 ice-albedo hook**, reading zeros until #33). This
+is balanced against a **linear OLR** closure `A + B·(T − 273.15)` whose
+intercept drops by `CO2_FORCING·ln(co2 / CO2_REFERENCE_PPM)` — the **#34
+greenhouse hook**, reading `globals.co2` (constant `initialCo2Ppm` until #34) —
+and against North-style meridional diffusion `D·d/dx[(1−x²)·dT/dx]`. Linear OLR
+makes the balance a single deterministic **tridiagonal solve** (Thomas
+algorithm, fixed sweep order — never `while (!converged)`), and because the
+transport is written in conservative flux form it telescopes to zero over the
+sphere, so the **global net top-of-atmosphere flux closes to machine
+precision** (the #30 invariant). The zonal profile maps to the per-cell
+`temperature` field as `zonal(lat) − lapse·max(0, elevation) +` a bounded land
+continentality term (land amplifies its departure from the global-mean zonal
+temperature, clamped to ±`CONTINENTALITY_MAX_K`); `globals.meanTemperatureK` is
+the cell-count-mean surface temperature (a diagnostic).
+
+**Timescale split & lag (§0/§3).** Temperature is a *fast* quasi-static
+diagnostic — every step re-solves it from the current boundary conditions, it
+carries no memory. The two *slow* reservoirs it reads (ice albedo, CO₂
+greenhouse) are consumed at the top of the step as their end-of-previous-step
+values; the #33/#34 systems that update them run later in the pipeline, closing
+the feedback with a one-step explicit lag rather than a per-step joint solve.
+The step order becomes `tectonics → wilson → erosion → energyBalance`, extended
+by `winds → moisture → ice → seaLevel → carbon → biome` as Phase 3 lands.
+`createInitialState` runs the energy balance once (after terrain/plates/precip)
+so the t=0 keyframe already carries a physical temperature field.
 
 ### Boundary classification (#14)
 
@@ -433,9 +467,16 @@ PlanetState = { timeYears, params: PlanetParams, globals: Globals, fields,
                 wilson: { contactSince } }
 PlanetParams = { seed, radiusMeters, gridN, stepYears, keyframeIntervalYears,
                  numPlates,
-                 starLuminosity, dayLengthHours, obliquityDeg }   // immutable per run
-Globals     = { landFraction }
+                 starLuminosity, dayLengthHours, obliquityDeg,
+                 initialCo2Ppm }   // immutable per run
+Globals     = { landFraction, co2, meanTemperatureK }
 ```
+
+`starLuminosity` (insolation) and `obliquityDeg` (annual-mean insolation
+profile) are activated by the #30 energy balance; `dayLengthHours` stays a
+placeholder until the #31 wind bands. `initialCo2Ppm` seeds `globals.co2`, the
+slow carbonate–silicate reservoir (constant until #34). `globals.co2` and
+`globals.meanTemperatureK` are maintained by the energy balance (#30).
 
 A **system** is a pure function `(state, dtYears, ctx) => PlanetState` with a
 name, applied in a fixed order by `step()`:
@@ -450,7 +491,8 @@ new state with replaced field arrays. `ctx` carries the run's forked PRNG
 (`createRng(seed).fork('sim')`) — no globals. Phase 0's pipeline is a single
 `identity` system; `initialTerrain` runs once inside `createInitialState`
 (seeded 5-octave fractal value noise on `hash3`, sea level at the exact 70th
-percentile ⇒ ~30% land, plus a placeholder latitude/lapse-rate temperature).
+percentile ⇒ ~30% land; the energy balance sets the initial temperature
+afterwards).
 
 `run(params, untilYears, onKeyframe)` steps `params.stepYears` (default 1 Myr)
 at a time and emits keyframes. Keyframe emission counts integer steps
