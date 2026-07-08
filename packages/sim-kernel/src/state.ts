@@ -27,7 +27,7 @@ export interface PlanetParams {
   numPlates: number;
   /** Stellar luminosity driving insolation (#30), W. */
   starLuminosity: number;
-  /** Placeholder for later phases (wind-band count, #31). Hours. */
+  /** Rotation period, hours — sets the #31 wind-band count (placeholder until #31). */
   dayLengthHours: number;
   /** Axial tilt shaping the annual-mean latitudinal insolation profile (#30), degrees. */
   obliquityDeg: number;

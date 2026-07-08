@@ -95,8 +95,9 @@
  *     against linear OLR with a logarithmic CO₂ greenhouse and North-style
  *     meridional diffusion, then mapped per-cell as zonal − lapse·elevation +
  *     bounded land continentality. Every cell's temperature changes at t=0 and
- *     every step (global mean ≈287 K, equator ≈303 K, pole ≈266 K vs the old
- *     ≈257 K pole), so field and codec goldens are regenerated deliberately in
+ *     every step (cell-count-mean surface T ≈290 K at t=0 settling to ≈286–288 K
+ *     as orography deepens, equator ≈303 K, pole ≈266 K vs the old ≈257 K pole),
+ *     so field and codec goldens are regenerated deliberately in
  *     the same commit; cached histories must invalidate. Precipitation, ice,
  *     and biome are untouched (the precip proxy still feeds erosion until #32),
  *     so no stored-field-set change and HISTORY_FORMAT_VERSION stays 1.
@@ -114,12 +115,6 @@ export const EARTH_DAY_HOURS = 24;
 
 /** Modern Earth axial tilt, degrees. Placeholder until seasons matter. */
 export const EARTH_OBLIQUITY_DEG = 23.44;
-
-/** Global mean surface temperature of modern Earth, K (NOAA ~14 C). */
-export const MEAN_SURFACE_TEMPERATURE_K = 287.15;
-
-/** Equator-to-pole surface temperature drop, K (order of modern Earth's ~45). */
-export const EQUATOR_POLE_TEMPERATURE_DROP_K = 45;
 
 /** Standard atmosphere tropospheric lapse rate, K/m (ICAO: 6.5 K/km). */
 export const LAPSE_RATE_K_PER_M = 0.0065;
@@ -156,12 +151,6 @@ export const TERRAIN_LAND_EXPONENT = 1.6;
  * non-integer values; changing them changes every planet (golden hashes).
  */
 export const TERRAIN_NOISE_OFFSET: readonly [number, number, number] = [17.13, 47.7, 89.02];
-
-/**
- * Mean of sin^2(latitude) over a sphere (∫ sin^2 · cos dlat / 2 = 1/3).
- * Subtracting it centers the latitude temperature term on the global mean.
- */
-export const MEAN_SIN2_LATITUDE = 1 / 3;
 
 // --- Tectonics (Phase 1) ----------------------------------------------------
 
@@ -661,10 +650,6 @@ export const OROGENIC_ROOT_DECAY_TAU_YEARS = 300e6;
 
 // --- Energy balance (#30, Phase 3) ------------------------------------------
 
-/** Stefan-Boltzmann constant, W/m^2/K^4 (CODATA 2018). Unused by the linear
- *  OLR closure below, kept for the diagnostic effective-temperature check. */
-export const STEFAN_BOLTZMANN_W_PER_M2_K4 = 5.670374419e-8;
-
 /**
  * Planet-star distance, m (1 au, IAU 2012). Insolation is
  * `starLuminosity / (4π·d²)` — the top-of-atmosphere solar constant. Distance
@@ -679,8 +664,8 @@ export const ORBITAL_DISTANCE_M = 1.495978707e11;
  * the Phase 3 energy balance distinguishes. Land/ocean is keyed off the sea-
  * level datum (elevation ≥ 0 is land), not crustType, so a submerged shelf
  * reflects like ocean and an emergent arc like land. Vegetation albedo is a
- * Phase 4 hook. Area-weighted over ~30% land these give a global mean ≈0.29,
- * matching Earth's ~0.30 Bond albedo. Ice is the #33 feedback surface.
+ * Phase 4 hook. Averaged over ~30% land these give a mean ≈0.29, matching
+ * Earth's ~0.30 Bond albedo. Ice is the #33 feedback surface.
  */
 export const ALBEDO_OCEAN = 0.28;
 export const ALBEDO_LAND = 0.32;
@@ -693,7 +678,9 @@ export const ALBEDO_ICE = 0.6;
  * zonal balance a single deterministic tridiagonal solve and the global net
  * top-of-atmosphere flux close to machine precision (the transport term is
  * conservative, so Σ(absorbed − OLR) = 0 at the solution). At Earth insolation
- * and albedo the 0-D balance sits at ≈287 K.
+ * and albedo the well-mixed sea-level balance sits at ≈292 K; the reported
+ * cell-count-mean surface temperature is lower — orographic lapse cooling over
+ * land pulls it to ≈290 K at t=0 and ≈286–288 K by 10 steps as mountains grow.
  */
 export const OLR_INTERCEPT_A_W_PER_M2 = 202;
 export const OLR_SLOPE_B_W_PER_M2_K = 2.1;

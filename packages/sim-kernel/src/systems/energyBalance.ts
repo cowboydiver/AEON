@@ -119,14 +119,40 @@ function cellAlbedo(elevation: number, iceFraction: number): number {
 export interface EnergyBalanceSolution {
   /** Solved zonal temperature per equal-area band, K. */
   readonly bandTemp: Float64Array;
-  /** Area-weighted (equal-area band) albedo per band. */
+  /** Cell-count-mean planetary albedo per band (the bands are equal-area in
+   *  sin φ; the average within a band is over cell count, not exact cell area). */
   readonly bandAlbedo: Float64Array;
-  /** Global area-mean net top-of-atmosphere flux, W/m² (≈0 at the solution). */
+  /** Absorbed shortwave per band, W/m² — `S0 · insolation · (1 − albedo)`. */
+  readonly bandAbsorbed: Float64Array;
+  /** Global mean net top-of-atmosphere flux over the equal-area bands, W/m²
+   *  (≈0 at the solution — the #30 invariant; see `netTopFluxForProfile`). */
   readonly netTopFlux: number;
   /** Per-cell surface temperature, K (zonal − lapse + continentality). */
   readonly temperature: Float32Array;
   /** Global cell-count-mean surface temperature, K. */
   readonly meanTemperatureK: number;
+}
+
+/**
+ * Global mean net top-of-atmosphere flux for an arbitrary band-temperature
+ * profile, W/m²: the equal-area-band mean of `absorbed − OLR`, with
+ * `OLR = (A − CO2_FORCING·ln(co2/ref)) + B·(T − 273.15)`. It is ≈0 only at the
+ * solved profile — moving any band off the solution opens the balance — so it
+ * is both the solve's invariant readout and the negative control that proves
+ * the invariant is not vacuous. Pure; no transport term because transport is
+ * conservative and telescopes to zero over the sphere.
+ */
+export function netTopFluxForProfile(
+  absorbed: Float64Array,
+  bandTemp: Float64Array,
+  co2: number,
+): number {
+  const Aeff = OLR_INTERCEPT_A_W_PER_M2 - CO2_FORCING_W_PER_M2 * Math.log(co2 / CO2_REFERENCE_PPM);
+  let net = 0;
+  for (let b = 0; b < bandTemp.length; b++) {
+    net += absorbed[b]! - (Aeff + OLR_SLOPE_B_W_PER_M2_K * (bandTemp[b]! - 273.15));
+  }
+  return net / bandTemp.length;
 }
 
 /**
@@ -144,7 +170,7 @@ export function solveEnergyBalance(state: PlanetState): EnergyBalanceSolution {
   const NB = ENERGY_BALANCE_BANDS;
   const dx = 2 / NB; // equal-area bands: uniform in x = sin(latitude)
 
-  // --- Band albedo: area-weighted (cell-count) mean of per-cell albedo. ------
+  // --- Band albedo: cell-count mean of per-cell albedo within each band. -----
   const albedoSum = new Float64Array(NB);
   const bandCells = new Int32Array(NB);
   const bandOf = new Int32Array(count);
@@ -203,12 +229,8 @@ export function solveEnergyBalance(state: PlanetState): EnergyBalanceSolution {
   }
   const bandTemp = solveTridiagonal(lower, diag, upper, rhs);
 
-  // --- Global net TOA flux (equal-area mean of absorbed − OLR), ≈0. ----------
-  let netTop = 0;
-  for (let b = 0; b < NB; b++) {
-    netTop += absorbed[b]! - (Aeff + B * (bandTemp[b]! - 273.15));
-  }
-  netTop /= NB;
+  // --- Global net TOA flux (equal-area-band mean of absorbed − OLR), ≈0. -----
+  const netTop = netTopFluxForProfile(absorbed, bandTemp, state.globals.co2);
 
   // Global mean zonal temperature (equal-area ⇒ plain band mean) — the
   // reference the land continentality term departs from.
@@ -234,6 +256,7 @@ export function solveEnergyBalance(state: PlanetState): EnergyBalanceSolution {
   return {
     bandTemp,
     bandAlbedo,
+    bandAbsorbed: absorbed,
     netTopFlux: netTop,
     temperature,
     meanTemperatureK: tempSum / count,
