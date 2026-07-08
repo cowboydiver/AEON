@@ -100,6 +100,8 @@ from it. All fields are `Float32Array` per cell.
 | `boundaryStress`| m/yr       | ≈ ±0.1, 0 interior | Signed normal closing speed at boundary cells: + convergent, − divergent, ≈0 transform. Derived, recomputed every step |
 | `sutureYears`   | yr         | 0 … sim age (0 = never) | Sim time when a continent-continent suture last welded this cell (#60). Crust property: advects with plate motion; fresh ocean and fresh arc crust carry 0. Appended last: the codec wire fieldId is the FIELD_NAMES index |
 | `sedimentM`     | m          | 0 … shelf fill   | Sediment on oceanic crust exported from the continents by erosion (#65); the age-depth relaxation target adds it on top, saturating at `SEDIMENT_SHELF_CEILING_M` (−200 m). Crust property: advects with plate motion; always 0 on continental crust and fresh ocean (crust that matures/re-roots to continental consumes it). Appended last (codec wire-id constraint) |
+| `windU`         | m/s        | ≈ ±30 (bound ±60) | Prevailing zonal (east–west) surface wind, signed (+ eastward), from the #31 band model. Fast diagnostic: recomputed every step from rotation + temperature gradient, carries no memory. Appended last (codec wire-id constraint) |
+| `windV`         | m/s        | ≈ ±12 (bound ±60) | Prevailing meridional (north–south) surface wind, signed (+ northward), from the #31 band model. Fast diagnostic: recomputed every step, carries no memory. Appended last (codec wire-id constraint) |
 
 ### Plates (Phase 1)
 
@@ -367,7 +369,7 @@ its stream every step, so a position/time hash is the deterministic
 equivalent (documented deviation). Euler-pole wander was considered and not
 implemented.
 
-### Erosion, precipitation proxy & energy balance (#19, #65, #30)
+### Erosion, precipitation proxy, energy balance & winds (#19, #65, #30, #31)
 
 `erosion` (after wilson): Jacobi diffusion of elevation over the 4-neighbor
 graph, continental-crust pairs only, flux ∝ height difference (slope) ×
@@ -429,16 +431,42 @@ continentality term (land amplifies its departure from the global-mean zonal
 temperature, clamped to ±`CONTINENTALITY_MAX_K`); `globals.meanTemperatureK` is
 the cell-count-mean surface temperature (a diagnostic).
 
+`winds` (after energyBalance, #31): the prevailing surface wind field
+`windU`/`windV`, a deterministic **band model** (not a fluid solve, §6). Two
+knobs set it. **Rotation → band count:** the number of circulation cells per
+hemisphere is `round(WIND_CELLS_PER_HEMISPHERE_EARTH · (24 /
+dayLengthHours)^WIND_ROTATION_EXPONENT)` clamped to
+[1, `WIND_MAX_CELLS_PER_HEMISPHERE`] — Earth's 24 h day gives the three-cell
+Hadley/Ferrel/Polar structure, faster rotators get more (narrower) bands
+(Rhines-scale jet spacing), and a day past ~96 h collapses to a single
+equator-to-pole Hadley cell. **Temperature gradient → strength:** the whole
+field scales by the equator-to-pole surface temperature contrast (equatorial
+band |sin lat| < `WIND_EQUATORIAL_SINLAT` minus polar band |sin lat| >
+`WIND_POLAR_SINLAT`) over `WIND_TEMP_GRADIENT_REF_K`, clamped to
+[`WIND_GRADIENT_FACTOR_MIN`, `WIND_GRADIENT_FACTOR_MAX`], so an icehouse blows
+harder than a well-mixed hothouse. Per hemisphere both components share the
+half-sine envelope `sin(nCells·π·|lat|/90°)` (zero at the equator, every cell
+boundary, and the poles): `windU` is even in latitude — easterly near the
+equator (the trades), alternating outward once per cell — and `windV` is odd —
+equatorward at the surface, so the Hadley cell yields the diagonal NE/SE trades
+and the Ferrel cell the SW/NW-erlies. Winds are clamped to ±`WIND_MAX_M_PER_S`
+(the codec bound). Like temperature the field is a *fast* diagnostic — no
+memory, re-solved each step — and it writes only the two new fields, leaving
+every other field's bytes untouched (`KERNEL_BEHAVIOR_VERSION` 10 is the
+schema-grew bump, not a physics change to existing fields). Consumed in-kernel
+by moisture transport (#32) and, in Phase 5, by cloud advection.
+
 **Timescale split & lag (§0/§3).** Temperature is a *fast* quasi-static
 diagnostic — every step re-solves it from the current boundary conditions, it
 carries no memory. The two *slow* reservoirs it reads (ice albedo, CO₂
 greenhouse) are consumed at the top of the step as their end-of-previous-step
 values; the #33/#34 systems that update them run later in the pipeline, closing
 the feedback with a one-step explicit lag rather than a per-step joint solve.
-The step order becomes `tectonics → wilson → erosion → energyBalance`, extended
-by `winds → moisture → ice → seaLevel → carbon → biome` as Phase 3 lands.
-`createInitialState` runs the energy balance once (after terrain/plates/precip)
-so the t=0 keyframe already carries a physical temperature field.
+The step order is `tectonics → wilson → erosion → energyBalance → winds`,
+extended by `moisture → ice → seaLevel → carbon → biome` as Phase 3 lands.
+`createInitialState` runs the energy balance and then winds once (after
+terrain/plates/precip) so the t=0 keyframe already carries a physical
+temperature and prevailing-wind field.
 
 ### Boundary classification (#14)
 
@@ -563,7 +591,11 @@ Continuous fields use a linear float↔uint map (out-of-range clamps to the ends
 bit-exact — they must never be interpolated** (the GPU path holds/nearest-picks
 them). `precipitation` is analytic (recomputed from latitude), `boundaryStress`
 is derivable and visually unused, and `iceFraction`/`biome` are still zero — none
-are stored. Two versions gate reuse: `HISTORY_FORMAT_VERSION` (codec byte
+are stored. `windU`/`windV` (#31) are likewise not yet stored: they are consumed
+in-kernel by moisture transport (#32) and dumpable from the full keyframe, so
+render-time storage waits for the single §1 stored-field-set bump
+(`HISTORY_FORMAT_VERSION` 1→2, adding the Phase 3 viz fields together) that the
+goldens-labeled Phase 3 work carries. Two versions gate reuse: `HISTORY_FORMAT_VERSION` (codec byte
 layout) and `KERNEL_BEHAVIOR_VERSION` (sim behavior; see below); together with
 the run params they key the keyframe cache. Codec correctness is locked by
 byte-level goldens over encoded keyframes plus round-trip fidelity tests (Spike A

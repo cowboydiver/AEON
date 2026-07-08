@@ -6,6 +6,7 @@ import { energyBalanceSystem } from './systems/energyBalance';
 import { erosionSystem } from './systems/erosion';
 import { tectonicsSystem } from './systems/tectonics';
 import { wilsonSystem } from './systems/wilson';
+import { windsSystem } from './systems/winds';
 
 /** Per-run context threaded through systems. Never global. */
 export interface SimContext {
@@ -32,16 +33,18 @@ export const identitySystem: System = {
  * Ordered system pipeline applied by every step: tectonics moves crust and
  * builds topography, wilson reorganizes plates, erosion redistributes relief,
  * then energyBalance re-solves the zonal temperature (#30) against the final
- * elevation and land mask. The Phase 3 climate block (winds → moisture → ice →
- * seaLevel → carbon → biome) extends this after energyBalance as it lands; the
- * latitude-band precipitation proxy still fills `precipitation` at init and
- * feeds erosion until moisture transport (#32) retires it.
+ * elevation and land mask, and winds derive the prevailing wind field (#31)
+ * from rotation and that temperature gradient. The rest of the Phase 3 climate
+ * block (moisture → ice → seaLevel → carbon → biome) extends this after winds
+ * as it lands; the latitude-band precipitation proxy still fills `precipitation`
+ * at init and feeds erosion until moisture transport (#32) retires it.
  */
 export const SYSTEMS: readonly System[] = [
   tectonicsSystem,
   wilsonSystem,
   erosionSystem,
   energyBalanceSystem,
+  windsSystem,
 ];
 
 /** Advance the state by dtYears through the ordered system pipeline. */

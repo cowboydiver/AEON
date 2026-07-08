@@ -15,6 +15,7 @@ import { applyInitialPlates, type PlateRecord } from './plates';
 import { applyPrecipitationProxy } from './systems/climateProxy';
 import { applyEnergyBalance } from './systems/energyBalance';
 import { applyInitialTerrain } from './systems/initialTerrain';
+import { applyWinds } from './systems/winds';
 
 /** Immutable per-run parameters. Same params + same seed => same history. */
 export interface PlanetParams {
@@ -27,7 +28,8 @@ export interface PlanetParams {
   numPlates: number;
   /** Stellar luminosity driving insolation (#30), W. */
   starLuminosity: number;
-  /** Rotation period, hours — sets the #31 wind-band count (placeholder until #31). */
+  /** Rotation period, hours — sets the #31 wind-band count (fast rotators get
+   *  more, narrower bands; slow rotators approach single-cell circulation). */
   dayLengthHours: number;
   /** Axial tilt shaping the annual-mean latitudinal insolation profile (#30), degrees. */
   obliquityDeg: number;
@@ -105,6 +107,9 @@ export function createInitialState(params: PlanetParams): PlanetState {
   // Terrain and plates first (they set the elevation/land mask the energy
   // balance reads), then the precipitation proxy (erosion input until #32),
   // then the energy balance so the t=0 keyframe already carries a physical
-  // temperature field and meanTemperatureK.
-  return applyEnergyBalance(applyPrecipitationProxy(applyInitialPlates(applyInitialTerrain(state))));
+  // temperature field and meanTemperatureK, then winds (#31) which read that
+  // temperature gradient — mirroring the step pipeline order.
+  return applyWinds(
+    applyEnergyBalance(applyPrecipitationProxy(applyInitialPlates(applyInitialTerrain(state)))),
+  );
 }

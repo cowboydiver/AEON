@@ -15,6 +15,8 @@ exports[`golden field hashes > seed 1: initial state and after 10 steps 1`] = `
     "sutureYears": "b0549dc5",
     "temperature": "c0bd5c46",
     "timeYears": 10000000,
+    "windU": "ae1b8375",
+    "windV": "77a5b155",
   },
   "initial": {
     "biome": "b0549dc5",
@@ -28,6 +30,8 @@ exports[`golden field hashes > seed 1: initial state and after 10 steps 1`] = `
     "sedimentM": "b0549dc5",
     "sutureYears": "b0549dc5",
     "temperature": "edda30dc",
+    "windU": "32f28705",
+    "windV": "2b109c45",
   },
 }
 `;
@@ -47,6 +51,8 @@ exports[`golden field hashes > seed 42: initial state and after 10 steps 1`] = `
     "sutureYears": "b0549dc5",
     "temperature": "42191926",
     "timeYears": 10000000,
+    "windU": "11a6a3c5",
+    "windV": "d6d6e855",
   },
   "initial": {
     "biome": "b0549dc5",
@@ -60,6 +66,8 @@ exports[`golden field hashes > seed 42: initial state and after 10 steps 1`] = `
     "sedimentM": "b0549dc5",
     "sutureYears": "b0549dc5",
     "temperature": "05e4bd0a",
+    "windU": "9e350335",
+    "windV": "18f86d55",
   },
 }
 `;
@@ -79,6 +87,8 @@ exports[`golden field hashes > seed 1337: initial state and after 10 steps 1`] =
     "sutureYears": "b0549dc5",
     "temperature": "9b48ca4e",
     "timeYears": 10000000,
+    "windU": "67393df5",
+    "windV": "d37ac5a5",
   },
   "initial": {
     "biome": "b0549dc5",
@@ -92,6 +102,8 @@ exports[`golden field hashes > seed 1337: initial state and after 10 steps 1`] =
     "sedimentM": "b0549dc5",
     "sutureYears": "b0549dc5",
     "temperature": "943c80bd",
+    "windU": "4d1f44f5",
+    "windV": "c917cae5",
   },
 }
 `;

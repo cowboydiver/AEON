@@ -38,6 +38,16 @@ export const FIELDS = {
     description:
       'Sediment thickness on oceanic crust exported from the continents by erosion (#65); the age-depth relaxation target adds it on top. Crust property: advects with plate motion; always 0 on continental crust and fresh ocean. Appended last (codec wire-id constraint, as above)',
   },
+  windU: {
+    unit: 'm/s',
+    description:
+      'Prevailing zonal (east-west) surface wind, signed (+ eastward). Diagnostic band model from rotation rate + temperature gradient (#31); recomputed every step, carries no memory. Appended last (codec wire-id constraint)',
+  },
+  windV: {
+    unit: 'm/s',
+    description:
+      'Prevailing meridional (north-south) surface wind, signed (+ northward). Diagnostic band model from rotation rate + temperature gradient (#31); recomputed every step, carries no memory. Appended last (codec wire-id constraint)',
+  },
 } as const;
 
 export type FieldName = keyof typeof FIELDS;
