@@ -6,6 +6,7 @@ import { createInitialState, createPlanetParams, type PlanetState } from '../src
 import { step, type SimContext } from '../src/step';
 import {
   annualMeanInsolation,
+  netTopFluxForProfile,
   solarConstant,
   solveEnergyBalance,
 } from '../src/systems/energyBalance';
@@ -66,18 +67,26 @@ describe('energy balance: the closing invariant (#30)', () => {
     }
   });
 
-  it('a broken (non-conservative) transport would leave the flux open — detector check', () => {
-    // Sanity that the invariant is not vacuously satisfied: perturbing one band
-    // temperature away from the solution opens the balance. Recompute the net
-    // flux against the *modified* profile via a direct absorbed−OLR sum.
-    const sol = solveEnergyBalance(stepped(42, 10, 32));
+  it('moving off the solved profile opens the balance — the invariant is not vacuous', () => {
+    // Negative control: recompute the *actual* net TOA flux against a perturbed
+    // profile (same absorbed shortwave, one band moved +5 K) and confirm it is
+    // materially non-zero — so the ~0 measured for the solved profile is a real
+    // property of the solution, not something every profile satisfies.
+    const s = stepped(42, 10, 32);
+    const sol = solveEnergyBalance(s);
+
+    // The solved profile closes (re-derived through the same helper).
+    const solved = netTopFluxForProfile(sol.bandAbsorbed, sol.bandTemp, s.globals.co2);
+    expect(Math.abs(solved)).toBeLessThan(1e-6);
+
+    // A +5 K bump in one band raises that band's OLR by B·5 ≈ 10.5 W/m², so the
+    // band-mean net flux shifts by ≈ −10.5 / bands ≈ −0.117 W/m² — orders of
+    // magnitude above the solved residual.
     const perturbed = sol.bandTemp.slice();
-    perturbed[10]! += 5; // move one band off equilibrium
-    // OLR = A + B(T−273.15); a +5 K bump raises OLR there, so the band-mean
-    // net flux is no longer zero. (A,B folded: only the delta matters.)
-    let deltaMean = 0;
-    for (let b = 0; b < perturbed.length; b++) deltaMean += perturbed[b]! - sol.bandTemp[b]!;
-    expect(Math.abs(deltaMean)).toBeGreaterThan(0); // the perturbation is real
+    perturbed[10]! += 5;
+    const opened = netTopFluxForProfile(sol.bandAbsorbed, perturbed, s.globals.co2);
+    expect(Math.abs(opened)).toBeGreaterThan(0.05);
+    expect(Math.abs(opened)).toBeGreaterThan(Math.abs(solved) * 1e6);
   });
 });
 

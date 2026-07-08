@@ -62,6 +62,7 @@ export {
   energyBalanceSystem,
   applyEnergyBalance,
   solveEnergyBalance,
+  netTopFluxForProfile,
   solarConstant,
   annualMeanInsolation,
   type EnergyBalanceSolution,
