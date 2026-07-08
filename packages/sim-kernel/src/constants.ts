@@ -88,8 +88,20 @@
  *     rework both act within the 10-step golden window; field and codec
  *     goldens regenerated deliberately in the same commit; cached histories
  *     must invalidate.
+ * 9 — Phase 3 zonal energy-balance model (#30) replaces the Phase 0/1
+ *     latitude+lapse temperature placeholder (climateProxy). Temperature is
+ *     now solved by a Budyko–Sellers zonal EBM: annual-mean insolation
+ *     (starLuminosity + obliquityDeg) × co-albedo (land/ocean/ice) balanced
+ *     against linear OLR with a logarithmic CO₂ greenhouse and North-style
+ *     meridional diffusion, then mapped per-cell as zonal − lapse·elevation +
+ *     bounded land continentality. Every cell's temperature changes at t=0 and
+ *     every step (global mean ≈287 K, equator ≈303 K, pole ≈266 K vs the old
+ *     ≈257 K pole), so field and codec goldens are regenerated deliberately in
+ *     the same commit; cached histories must invalidate. Precipitation, ice,
+ *     and biome are untouched (the precip proxy still feeds erosion until #32),
+ *     so no stored-field-set change and HISTORY_FORMAT_VERSION stays 1.
  */
-export const KERNEL_BEHAVIOR_VERSION = 8;
+export const KERNEL_BEHAVIOR_VERSION = 9;
 
 /** IUGG mean Earth radius, m. */
 export const EARTH_RADIUS_M = 6.371e6;
@@ -646,6 +658,95 @@ export const OROGENIC_ROOT_REFERENCE_M = 1000;
  * OROGENY_RATE_M_PER_YR ≈ 20× the decay rate even at the 9 km cap.
  */
 export const OROGENIC_ROOT_DECAY_TAU_YEARS = 300e6;
+
+// --- Energy balance (#30, Phase 3) ------------------------------------------
+
+/** Stefan-Boltzmann constant, W/m^2/K^4 (CODATA 2018). Unused by the linear
+ *  OLR closure below, kept for the diagnostic effective-temperature check. */
+export const STEFAN_BOLTZMANN_W_PER_M2_K4 = 5.670374419e-8;
+
+/**
+ * Planet-star distance, m (1 au, IAU 2012). Insolation is
+ * `starLuminosity / (4π·d²)` — the top-of-atmosphere solar constant. Distance
+ * is a fixed Earth-like 1 au for Phase 3 (a per-planet orbital-distance param
+ * is a later knob); `starLuminosity` is the active insolation control, so a
+ * brighter/dimmer star drives the snowball perturbation of §5.
+ */
+export const ORBITAL_DISTANCE_M = 1.495978707e11;
+
+/**
+ * Planetary (Bond-like, clouds folded in) albedos of the three surface classes
+ * the Phase 3 energy balance distinguishes. Land/ocean is keyed off the sea-
+ * level datum (elevation ≥ 0 is land), not crustType, so a submerged shelf
+ * reflects like ocean and an emergent arc like land. Vegetation albedo is a
+ * Phase 4 hook. Area-weighted over ~30% land these give a global mean ≈0.29,
+ * matching Earth's ~0.30 Bond albedo. Ice is the #33 feedback surface.
+ */
+export const ALBEDO_OCEAN = 0.28;
+export const ALBEDO_LAND = 0.32;
+export const ALBEDO_ICE = 0.6;
+
+/**
+ * Outgoing-longwave-radiation linear closure OLR = A + B·(T − 273.15 K),
+ * W/m^2, the Budyko–Sellers energy-balance parameterization (representative
+ * present-Earth fit; Budyko 1969 gives A≈203, B≈2.1). Linear OLR makes the
+ * zonal balance a single deterministic tridiagonal solve and the global net
+ * top-of-atmosphere flux close to machine precision (the transport term is
+ * conservative, so Σ(absorbed − OLR) = 0 at the solution). At Earth insolation
+ * and albedo the 0-D balance sits at ≈287 K.
+ */
+export const OLR_INTERCEPT_A_W_PER_M2 = 202;
+export const OLR_SLOPE_B_W_PER_M2_K = 2.1;
+
+/**
+ * Meridional heat-transport diffusivity in the North EBM form
+ * `D·d/dx[(1−x²)·dT/dx]`, x = sin(latitude), W/m^2/K. Sets the equator-to-pole
+ * gradient at fixed global mean; D/B ≈ 0.31 (North 1975) reproduces Earth's
+ * ~45 K annual-mean drop. Transport only redistributes energy — it never
+ * changes the global mean, so the net-TOA invariant is independent of it.
+ */
+export const HEAT_TRANSPORT_D_W_PER_M2_K = 0.42;
+
+/**
+ * CO₂ radiative forcing coefficient, W/m^2 per natural-log CO₂ ratio: the
+ * greenhouse hook lowers the OLR intercept by `·ln(co2 / CO2_REFERENCE_PPM)`,
+ * the standard logarithmic CO₂ forcing (≈5.35·ln, Myhre et al. 1998; ≈3.7 W/m²
+ * and ~2–3 K per doubling). Constant `co2 = initialCo2Ppm` until the #34
+ * carbonate–silicate reservoir drives it; raising co2 warms monotonically.
+ */
+export const CO2_FORCING_W_PER_M2 = 5.35;
+
+/** Preindustrial-ish reference CO₂ the greenhouse forcing is measured against, ppm. */
+export const CO2_REFERENCE_PPM = 280;
+
+/** Default atmospheric CO₂ reservoir seed, ppm (Earth preindustrial). #34 evolves it. */
+export const INITIAL_CO2_PPM = 280;
+
+/**
+ * Equal-area latitude bands (uniform in sin(latitude)) the zonal profile is
+ * solved on. 90 bands ≈ 2° at the equator — ample for a smooth zonal EBM, and
+ * coarse enough that every band holds cells down to the N=16 invariant grid
+ * (empty extreme bands, if any, inherit the nearest solved band's albedo).
+ */
+export const ENERGY_BALANCE_BANDS = 90;
+
+/**
+ * Deterministic annual-mean insolation: samples of solar longitude over one
+ * orbit averaged per band. Fixed count (no convergence test) — the annual mean
+ * is a one-time function of `obliquityDeg`, recomputed per solve but never a
+ * seasonal cycle (§7.2). 360 samples = one per day-of-year equivalent.
+ */
+export const INSOLATION_ORBIT_SAMPLES = 360;
+
+/**
+ * Land continentality: a bounded annual-mean correction added to land cells
+ * only, amplifying their departure from the global mean zonal temperature
+ * (continental interiors run more extreme than the maritime zonal mean).
+ * GAIN is small and the result clamped to ±MAX_K so it can never destabilize
+ * the biome/erosion consumers or push a cell out of the codec range.
+ */
+export const CONTINENTALITY_GAIN = 0.12;
+export const CONTINENTALITY_MAX_K = 6;
 
 /** Default simulation step, years. Chosen so 10 steps fit one keyframe interval. */
 export const DEFAULT_STEP_YEARS = 1e6;

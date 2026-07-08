@@ -57,10 +57,13 @@ export {
 export { tectonicsSystem } from './systems/tectonics';
 export { erosionSystem } from './systems/erosion';
 export { wilsonSystem } from './systems/wilson';
+export { applyPrecipitationProxy, precipitationForLatitude } from './systems/climateProxy';
 export {
-  climateProxySystem,
-  applyPrecipitationProxy,
-  precipitationForLatitude,
-  temperatureFor,
-} from './systems/climateProxy';
+  energyBalanceSystem,
+  applyEnergyBalance,
+  solveEnergyBalance,
+  solarConstant,
+  annualMeanInsolation,
+  type EnergyBalanceSolution,
+} from './systems/energyBalance';
 export { cellCenterTable, neighborTable } from './grid';

@@ -11,7 +11,6 @@ import { hash2, hashString } from '../hash';
 import { cellCenterDirection, cellCount } from '../grid';
 import { fractalNoise3 } from '../noise';
 import type { PlanetState } from '../state';
-import { temperatureFor } from './climateProxy';
 
 /**
  * Phase 0 placeholder terrain: seeded fractal value noise sampled at each
@@ -21,9 +20,8 @@ import { temperatureFor } from './climateProxy';
  * a ^TERRAIN_LAND_EXPONENT curve so most land is lowland with sparse peaks
  * (Earth-like hypsometry, throwaway physics, real plumbing).
  *
- * Also fills a trivial latitude + lapse-rate temperature so temperature dumps
- * and golden hashes exercise a second field (small, documented extension of
- * SCAFFOLD_SPEC 2.4).
+ * Temperature is set afterwards by the Phase 3 energy balance (#30) inside
+ * `createInitialState`; this pass only lays down elevation and the land count.
  */
 export function applyInitialTerrain(state: PlanetState): PlanetState {
   const { params } = state;
@@ -32,12 +30,8 @@ export function applyInitialTerrain(state: PlanetState): PlanetState {
   const [offsetX, offsetY, offsetZ] = TERRAIN_NOISE_OFFSET;
 
   const noise = new Float32Array(count);
-  // Cache sin(latitude) (= unit-dir y) at full f64 precision for the
-  // temperature pass, so it is not recomputed per cell.
-  const sinLat = new Float64Array(count);
   for (let i = 0; i < count; i++) {
     const [x, y, z] = cellCenterDirection(i, params.gridN);
-    sinLat[i] = y;
     noise[i] = fractalNoise3(
       terrainSeed,
       x * TERRAIN_BASE_FREQUENCY + offsetX,
@@ -59,7 +53,6 @@ export function applyInitialTerrain(state: PlanetState): PlanetState {
   const oceanRange = seaLevel - sorted[0]!;
 
   const elevation = new Float32Array(count);
-  const temperature = new Float32Array(count);
   let landCells = 0;
   for (let i = 0; i < count; i++) {
     const v = noise[i]!;
@@ -71,13 +64,11 @@ export function applyInitialTerrain(state: PlanetState): PlanetState {
       elev = oceanRange > 0 ? (-INITIAL_OCEAN_DEPTH_M * (seaLevel - v)) / oceanRange : 0;
     }
     elevation[i] = elev;
-
-    temperature[i] = temperatureFor(sinLat[i]!, elev);
   }
 
   return {
     ...state,
     globals: { ...state.globals, landFraction: landCells / count },
-    fields: { ...state.fields, elevation, temperature },
+    fields: { ...state.fields, elevation },
   };
 }
