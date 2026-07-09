@@ -209,6 +209,48 @@ export function eastNorthTable(N: number): Float64Array {
   return table;
 }
 
+const SOLID_ANGLE_TABLES = new Map<number, Float64Array>();
+
+/** Van Oosterom–Strackee solid angle of the spherical triangle abc (unit vectors). */
+function triSolidAngle(a: Vec3, b: Vec3, c: Vec3): number {
+  const cx = b[1] * c[2] - b[2] * c[1];
+  const cy = b[2] * c[0] - b[0] * c[2];
+  const cz = b[0] * c[1] - b[1] * c[0];
+  const numerator = Math.abs(a[0] * cx + a[1] * cy + a[2] * cz);
+  const denominator = 1 + dot3(a, b) + dot3(b, c) + dot3(a, c);
+  return 2 * Math.atan2(numerator, denominator);
+}
+
+/**
+ * Per-cell solid angles in steradians: each cell is the spherical quad of its
+ * four corners (via faceSTToDirection, so simulation and rendering agree),
+ * split into two triangles. The warp keeps the spread within ±35% of the mean
+ * but that residual distortion is real — a consumer that needs *physical*
+ * areas (block isostasy #84: a component's area sets its elevation ceiling)
+ * must sum these, not count cells × the mean. Derived, memoized per N.
+ */
+export function cellSolidAngleTable(N: number): Float64Array {
+  let table = SOLID_ANGLE_TABLES.get(N);
+  if (!table) {
+    const count = cellCount(N);
+    table = new Float64Array(count);
+    for (let i = 0; i < count; i++) {
+      const [face, row, col] = indexToFaceRC(i, N);
+      const s0 = (col / N) * 2 - 1;
+      const s1 = ((col + 1) / N) * 2 - 1;
+      const t0 = (row / N) * 2 - 1;
+      const t1 = ((row + 1) / N) * 2 - 1;
+      const a = faceSTToDirection(face, s0, t0);
+      const b = faceSTToDirection(face, s1, t0);
+      const c = faceSTToDirection(face, s1, t1);
+      const d = faceSTToDirection(face, s0, t1);
+      table[i] = triSolidAngle(a, b, c) + triSolidAngle(a, c, d);
+    }
+    SOLID_ANGLE_TABLES.set(N, table);
+  }
+  return table;
+}
+
 // --- Seam adjacency, derived from the face frames -------------------------
 
 interface EdgeMap {

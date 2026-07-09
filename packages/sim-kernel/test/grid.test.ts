@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   cellCenterDirection,
   cellCount,
+  cellSolidAngleTable,
   directionToIndex,
   eastNorthTable,
   faceRCToIndex,
@@ -186,5 +187,27 @@ describe('area coverage', () => {
       total += omega;
     }
     expect(Math.abs(total - 4 * Math.PI) / (4 * Math.PI)).toBeLessThan(0.01);
+  });
+
+  it('cellSolidAngleTable matches the corner-quad formula and sums to 4π (#84)', () => {
+    const N = 8;
+    const table = cellSolidAngleTable(N);
+    let total = 0;
+    for (let i = 0; i < cellCount(N); i++) {
+      const [face, row, col] = indexToFaceRC(i, N);
+      const s0 = (col / N) * 2 - 1;
+      const s1 = ((col + 1) / N) * 2 - 1;
+      const t0 = (row / N) * 2 - 1;
+      const t1 = ((row + 1) / N) * 2 - 1;
+      const a = faceSTToDirection(face, s0, t0);
+      const b = faceSTToDirection(face, s1, t0);
+      const c = faceSTToDirection(face, s1, t1);
+      const d = faceSTToDirection(face, s0, t1);
+      expect(table[i]).toBeCloseTo(triSolidAngle(a, b, c) + triSolidAngle(a, c, d), 14);
+      total += table[i]!;
+    }
+    // Spherical quads tile the sphere exactly — the sum closes to float
+    // precision, not just the 1% mapping tolerance above.
+    expect(Math.abs(total - 4 * Math.PI) / (4 * Math.PI)).toBeLessThan(1e-12);
   });
 });

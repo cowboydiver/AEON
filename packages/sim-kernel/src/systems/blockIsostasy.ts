@@ -45,7 +45,7 @@ import {
   MICROCONTINENT_FOUNDER_ELEVATION_M,
   OROGENY_MAX_ELEVATION_M,
 } from '../constants';
-import { cellCount, neighborTable } from '../grid';
+import { cellCount, cellSolidAngleTable, neighborTable } from '../grid';
 import type { System } from '../step';
 
 /**
@@ -69,30 +69,37 @@ export const blockIsostasySystem: System = {
   name: 'blockIsostasy',
   apply: (state, dtYears) => {
     if (!state.params.blockIsostasy) return state;
+    // Branched A/B (#84): inert before the onset year. No RNG is consumed
+    // here, so pre-onset history is bit-identical to a flag-off run.
+    if (state.timeYears < state.params.blockIsostasyOnsetYears) return state;
 
     const N = state.params.gridN;
     const count = cellCount(N);
     const nbTable = neighborTable(N);
     const { crustType } = state.fields;
     const R = state.params.radiusMeters;
-    const cellAreaM2 = (4 * Math.PI * R * R) / count;
+    // True per-cell areas: the warp leaves ±35% residual area distortion, so
+    // a component's area — which sets its ceiling — sums real solid angles
+    // rather than counting cells × the mean. Accumulation order is BFS
+    // discovery order, which is deterministic (fixed scan + neighbor order).
+    const solidAngle = cellSolidAngleTable(N);
 
     // Label 4-connected continental components, iterative BFS in ascending
     // cell order (recursion would overflow on a supercontinent at N=128).
     const componentOf = new Int32Array(count).fill(-1);
     const queue = new Int32Array(count);
-    const componentCells: number[] = [];
+    const componentOmega: number[] = [];
     for (let i = 0; i < count; i++) {
       if (crustType[i] !== 1 || componentOf[i] !== -1) continue;
-      const comp = componentCells.length;
-      let size = 0;
+      const comp = componentOmega.length;
+      let omega = 0;
       let head = 0;
       let tail = 0;
       queue[tail++] = i;
       componentOf[i] = comp;
       while (head < tail) {
         const c = queue[head++]!;
-        size++;
+        omega += solidAngle[c]!;
         for (let k = 0; k < 4; k++) {
           const nb = nbTable[c * 4 + k]!;
           if (crustType[nb] === 1 && componentOf[nb] === -1) {
@@ -101,11 +108,11 @@ export const blockIsostasySystem: System = {
           }
         }
       }
-      componentCells.push(size);
+      componentOmega.push(omega);
     }
-    if (componentCells.length === 0) return state;
+    if (componentOmega.length === 0) return state;
 
-    const caps = componentCells.map((cells) => blockElevationCap(cells * cellAreaM2));
+    const caps = componentOmega.map((omega) => blockElevationCap(omega * R * R));
 
     // Rate-bounded subsidence toward the cap; never raises. The elevation
     // array is copied lazily so an all-continents-huge step (caps inert)
