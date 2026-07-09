@@ -244,3 +244,66 @@ export function summarizeMetrics(
   );
   return lines.join('\n');
 }
+
+/** At most this many per-keyframe rows in a paired A/B table (evenly thinned). */
+const AB_MAX_ROWS = 16;
+
+/**
+ * Format the paired branched-A/B comparison (#84): both arms are bit-identical
+ * until `branchYears` (the flag-on arm's onset), so per-keyframe "off → on"
+ * deltas in the window right after the branch are the mechanism's direct
+ * effect. The whole-history on/off comparison in ISSUE_84_PROTOTYPE_FINDINGS
+ * could not separate mechanism from chaotic trajectory divergence — this can,
+ * for as long as the arms stay comparable (the deltas themselves compound, so
+ * trust the early window most and treat deep-window rows as trajectory again).
+ */
+export function summarizePairedMetrics(
+  off: readonly KeyframeMetrics[],
+  on: readonly KeyframeMetrics[],
+  branchYears: number,
+): string {
+  if (off.length !== on.length) {
+    // Cadence is params-derived and the arms share params except the flag —
+    // a length mismatch means the instrument itself is broken.
+    return `ab: keyframe count mismatch (off ${off.length}, on ${on.length}) — arms are not paired`;
+  }
+  const rows: string[] = [];
+  const window: Array<{ off: KeyframeMetrics; on: KeyframeMetrics }> = [];
+  for (let i = 0; i < off.length; i++) {
+    if (off[i]!.timeYears >= branchYears) window.push({ off: off[i]!, on: on[i]! });
+  }
+  if (window.length === 0) return 'ab: no keyframes at or after the branch point';
+
+  const stride = Math.max(1, Math.ceil(window.length / AB_MAX_ROWS));
+  const fmt = (o: number, n2: number, digits: number): string =>
+    `${o.toFixed(digits)} -> ${n2.toFixed(digits)}`;
+  rows.push(
+    ['t', 'land comps', 'largest land comp', 'land%'].map((h, i) => (i === 0 ? h.padStart(10) : h.padStart(22))).join('  '),
+  );
+  for (let i = 0; i < window.length; i++) {
+    if (i % stride !== 0 && i !== window.length - 1) continue;
+    const { off: a, on: b } = window[i]!;
+    rows.push(
+      [
+        `${(a.timeYears / 1e6).toFixed(0).padStart(7)} Myr`,
+        fmt(a.landComponents, b.landComponents, 0).padStart(22),
+        fmt(a.largestLandCompFrac, b.largestLandCompFrac, 3).padStart(22),
+        fmt(a.landFrac * 100, b.landFrac * 100, 1).padStart(22),
+      ].join('  '),
+    );
+  }
+
+  const mean = (xs: number[]): number => xs.reduce((s, x) => s + x, 0) / xs.length;
+  const dComps = mean(window.map((w) => w.on.landComponents - w.off.landComponents));
+  const dLargest = mean(window.map((w) => w.on.largestLandCompFrac - w.off.largestLandCompFrac));
+  const dLand = mean(window.map((w) => (w.on.landFrac - w.off.landFrac) * 100));
+  const minLandOn = Math.min(...window.map((w) => w.on.landFrac * 100));
+  rows.push(
+    `ab: window means (off -> on, ${window.length} keyframes past ${(branchYears / 1e6).toFixed(0)} Myr):` +
+      ` Δ land components ${dComps >= 0 ? '+' : ''}${dComps.toFixed(1)}` +
+      `, Δ largest land comp ${dLargest >= 0 ? '+' : ''}${dLargest.toFixed(3)}` +
+      `, Δ land ${dLand >= 0 ? '+' : ''}${dLand.toFixed(2)} pts` +
+      `; land min (on) ${minLandOn.toFixed(1)}%`,
+  );
+  return rows.join('\n');
+}

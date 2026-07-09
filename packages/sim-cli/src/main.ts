@@ -12,7 +12,12 @@ import {
   type Keyframe,
   type SimEvent,
 } from 'sim-kernel';
-import { computeKeyframeMetrics, summarizeMetrics, type KeyframeMetrics } from './metrics';
+import {
+  computeKeyframeMetrics,
+  summarizeMetrics,
+  summarizePairedMetrics,
+  type KeyframeMetrics,
+} from './metrics';
 import { fieldStats, renderFieldPng } from './render';
 
 const HELP = `sim-cli — headless planet simulation harness
@@ -32,6 +37,13 @@ Options:
   --block-isostasy            enable the crustal-block isostasy prototype (#84):
                               per-component elevation ceilings that founder
                               small continental blocks (default off)
+  --ab-block-isostasy <years> paired branched A/B (#84): run flag-off and
+                              flag-on-with-onset arms that are bit-identical
+                              until <years>, then print per-keyframe land-shape
+                              deltas — the mechanism's direct effect, before
+                              chaotic trajectory divergence swamps it. Trust
+                              the first few hundred Myr after the branch most.
+                              Mutually exclusive with --block-isostasy/--dump.
   --dump <fields>             comma-separated fields to dump as PNGs (e.g. elevation,temperature)
   --dump-every <k>            only dump every k-th keyframe (plus the final one);
                               default 1 = every keyframe. Use for long-run flipbooks.
@@ -52,6 +64,7 @@ const { values } = parseArgs({
     report: { type: 'boolean', default: false },
     metrics: { type: 'boolean', default: false },
     'block-isostasy': { type: 'boolean', default: false },
+    'ab-block-isostasy': { type: 'string' },
     dump: { type: 'string' },
     'dump-every': { type: 'string' },
     out: { type: 'string', default: 'tmp' },
@@ -79,6 +92,7 @@ const untilYears = numArg(values.until, 'until')!;
 const keyframeIntervalYears = numArg(values['keyframe-interval'], 'keyframe-interval');
 const gridN = numArg(values['grid-n'], 'grid-n');
 const dumpEvery = Math.max(1, Math.round(numArg(values['dump-every'], 'dump-every') ?? 1));
+const abBranchYears = numArg(values['ab-block-isostasy'], 'ab-block-isostasy');
 
 const dumpFields: FieldName[] = (values.dump ?? '')
   .split(',')
@@ -237,6 +251,57 @@ function reportTempo(events: readonly SimEvent[], simulatedYears: number): void 
       ` = ${per100Myr.toFixed(2)} reorganizations / 100 Myr` +
       `; mean interval per plate involved: ${meanInterval}`,
   );
+}
+
+/**
+ * Paired branched A/B (#84): both arms share the seed and every pre-branch
+ * byte (the flag-on arm's onset makes blockIsostasy inert until the branch,
+ * and the system consumes no RNG), so post-branch deltas are the mechanism's
+ * direct effect — the measurement the whole-history on/off comparison in
+ * ISSUE_84_PROTOTYPE_FINDINGS.md could not make.
+ */
+if (abBranchYears !== undefined) {
+  if (values['block-isostasy'] || dumpFields.length > 0) {
+    console.error('sim-cli: --ab-block-isostasy runs its own two arms; drop --block-isostasy/--dump');
+    process.exit(2);
+  }
+  if (abBranchYears < 0 || abBranchYears >= untilYears) {
+    console.error(`sim-cli: --ab-block-isostasy branch must be in [0, --until): ${abBranchYears}`);
+    process.exit(2);
+  }
+  const runArm = (blockIsostasy: boolean): { series: KeyframeMetrics[]; preBranchElev: string[] } => {
+    const armParams = createPlanetParams({
+      seed,
+      ...(gridN !== undefined ? { gridN } : {}),
+      ...(keyframeIntervalYears !== undefined ? { keyframeIntervalYears } : {}),
+      blockIsostasy,
+      blockIsostasyOnsetYears: abBranchYears,
+    });
+    const series: KeyframeMetrics[] = [];
+    const preBranchElev: string[] = [];
+    run(armParams, untilYears, (keyframe) => {
+      checkFinite(keyframe);
+      series.push(computeKeyframeMetrics(keyframe, armParams.gridN));
+      // The keyframe AT the branch year is still pre-onset work — include it.
+      if (keyframe.timeYears <= abBranchYears) preBranchElev.push(checksumHex(keyframe.fields.elevation));
+    });
+    return { series, preBranchElev };
+  };
+  console.log(`ab: arm A (blockIsostasy off), seed ${seed}, until ${(untilYears / 1e6).toFixed(0)} Myr ...`);
+  const armOff = runArm(false);
+  console.log(`ab: arm B (blockIsostasy on from ${(abBranchYears / 1e6).toFixed(0)} Myr) ...`);
+  const armOn = runArm(true);
+  // Instrument tripwire: pre-branch keyframes must be bit-identical, or the
+  // "paired" deltas below are ordinary trajectory divergence in disguise.
+  for (let i = 0; i < armOff.preBranchElev.length; i++) {
+    if (armOff.preBranchElev[i] !== armOn.preBranchElev[i]) {
+      console.error(`sim-cli: ab arms diverged BEFORE the branch (keyframe ${i}) — instrument broken`);
+      process.exit(1);
+    }
+  }
+  console.log(`ab: pre-branch identical (${armOff.preBranchElev.length} keyframes checked)`);
+  console.log(summarizePairedMetrics(armOff.series, armOn.series, abBranchYears));
+  process.exit(0);
 }
 
 let keyframeIndex = 0;

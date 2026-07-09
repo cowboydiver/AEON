@@ -118,3 +118,83 @@ next candidates, measurable with the same harness, are:
 3. **Arc-chain visual accounting** — active oceanic arcs are the other half
    of the island count; if they read as noise on the globe, cap emergent arc
    relief by margin age rather than a flat +1 km ceiling.
+
+Two further levers surfaced in the PR #85 review, complementary to the
+list above because both are *conservative* (transport, not subsidence) and
+attack consolidation rather than visibility:
+
+4. **Terrane docking** — Earth's actual fate for microcontinents is not
+   foundering but accretion: fragments ride plate motion into subduction
+   margins and dock (Wrangellia-style). Candidate 1's proximity merge is the
+   static half; the transport half (small components advected into a large
+   component's margin weld onto it) is the missing consolidation dynamics.
+5. **Marine planation for small components** — the #84 issue's own recap
+   pins island immortality on erosion (`EROSION_SUBSEA_FACTOR` ×0.1,
+   coastal export vanishing at 0 m). Scaling either by component area
+   removes island mass into `sedimentM` (conserved) instead of destroying
+   it, and composes with the shelf machinery: the founder level already
+   coincides with `SEDIMENT_SHELF_CEILING_M`.
+
+## Post-review follow-up: the branched A/B instrument
+
+The honest-reading conclusion above — whole-history on/off comparisons are
+trajectory noise, so the harness "cannot accept or reject" — was itself the
+biggest gap, and it is fixable. The PR #85 review pass added the fix:
+
+- **`blockIsostasyOnsetYears`** (kernel param, default 0): the system is
+  inert before the onset year. It consumes no RNG, so a flag-on run with
+  onset Y is **bit-identical** to a flag-off run until Y (invariant-tested
+  through the full pipeline) and diverges after Y only by the mechanism's
+  direct effect.
+- **`pnpm sim -- --ab-block-isostasy <years>`**: runs both arms, verifies
+  pre-branch keyframes are bit-identical (a tripwire, not an assumption),
+  and prints paired per-keyframe land-shape deltas plus window means. Trust
+  the first few hundred Myr after the branch most: the deltas themselves
+  compound, so deep-window rows decay back into trajectory comparison.
+- **True component areas**: the review also switched component area from
+  cells × mean cell area to summed per-cell solid angles × R²
+  (`cellSolidAngleTable`); the warp's ±35% residual distortion was enough to
+  mis-bin threshold-scale blocks near face corners. The measured tables
+  above predate this correction (their character is unaffected — the spread
+  they document is seed noise, which is the point); the flag-on goldens pin
+  the corrected math.
+
+Measured with the instrument (seed 42, N=64, branch at 3000 Myr — inside
+the deep-time confetti regime — window to 3500 Myr):
+
+```
+pnpm sim -- --seed 42 --until 3.5e9 --grid-n 64 --ab-block-isostasy 3e9
+```
+
+301 pre-branch keyframes verified bit-identical, then (off → on, excerpt):
+
+| t | land comps | largest land comp | land% |
+|---|---|---|---|
+| 3000 Myr | 252 → 252 | 0.300 → 0.300 | 18.5 → 18.5 |
+| 3120 Myr | 215 → 216 | 0.369 → 0.367 | 16.9 → 16.2 |
+| 3240 Myr | 219 → 228 | 0.407 → 0.428 | 16.6 → 15.6 |
+| 3360 Myr | 212 → 217 | 0.431 → 0.370 | 16.2 → 15.1 |
+| 3500 Myr | 227 → 218 | 0.426 → 0.441 | 15.4 → 14.2 |
+
+Window means over 51 paired keyframes: **Δ land components −0.2, Δ largest
+land comp −0.017, Δ land −0.96 pts, land min (on) 14.0%.**
+
+Reading: the instrument turns the "cannot accept or reject" shrug into a
+direct answer. Paired at the same trajectory, the mechanism (a) does not
+reduce the island count — foundered splinters are replaced by fresh ones
+from the boundary-process layer at the same rate, so Δ components ≈ 0;
+(b) does not consolidate — largest-component share is flat-to-slightly-down;
+(c) costs just under 1 point of land, ramping in over ~150 Myr as blocks
+founder (the sea-level solver claws back part, as predicted). The
+visibility claim (no more immortal 9 km splinter peaks) stands from the
+invariant tests and flipbooks; the consolidation claim is now *measured
+dead* rather than "inside noise" — which is exactly why follow-ups 1/2/4
+(crust fates, arc maturation, docking) are the levers that matter, and
+they should be evaluated with this same branched harness.
+
+Remaining methodology gap, deliberately not built yet: seed *batches*
+(15–20 seeds per arm) to put error bars on whole-history claims. The
+branched A/B answers "does the mechanism do what it says where it acts";
+batches answer "does it improve planets on average". Batch runs are a shell
+loop over `--seed` today; a `--seeds` convenience flag only earns its keep
+once a specific promotion decision needs it.
