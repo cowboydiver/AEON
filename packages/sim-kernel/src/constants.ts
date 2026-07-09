@@ -101,8 +101,25 @@
  *     the same commit; cached histories must invalidate. Precipitation, ice,
  *     and biome are untouched (the precip proxy still feeds erosion until #32),
  *     so no stored-field-set change and HISTORY_FORMAT_VERSION stays 1.
+ * 10 — Phase 3 prevailing wind bands (#31): two new advected-free diagnostic
+ *     fields `windU`/`windV` (appended after `sedimentM`) are populated by a
+ *     new `winds` system running after `energyBalance`. The wind field is a
+ *     deterministic band model — cell count from `dayLengthHours` (Earth's 24 h
+ *     ⇒ the three-cell Hadley/Ferrel/Polar structure), strength scaled by the
+ *     #30 equator-to-pole temperature gradient — with no per-step fluid solve
+ *     and no memory. It writes ONLY the two new fields: every pre-existing
+ *     field's bytes are bit-identical at t=0 and every step (verified — the
+ *     golden diff is purely the two added `windU`/`windV` entries). The
+ *     field-golden snapshot and the PlanetState field set grew, which is a
+ *     deliberate golden regeneration and owes this bump by the rule above.
+ *     The codec's stored-field subset is deliberately unchanged here (winds are
+ *     dumpable from the full keyframe and consumed in-kernel by #32; the §1
+ *     stored-field-set bump adding them for render-time use, with
+ *     HISTORY_FORMAT_VERSION 1→2, lands once with the goldens-labeled Phase 3
+ *     work), so this bump costs one benign cache miss and can never serve
+ *     stale bytes.
  */
-export const KERNEL_BEHAVIOR_VERSION = 9;
+export const KERNEL_BEHAVIOR_VERSION = 10;
 
 /** IUGG mean Earth radius, m. */
 export const EARTH_RADIUS_M = 6.371e6;
@@ -734,6 +751,84 @@ export const INSOLATION_ORBIT_SAMPLES = 360;
  */
 export const CONTINENTALITY_GAIN = 0.12;
 export const CONTINENTALITY_MAX_K = 6;
+
+// --- Wind bands (#31, Phase 3) ----------------------------------------------
+
+/**
+ * Circulation cells per hemisphere at Earth's rotation rate: the
+ * Hadley/Ferrel/Polar three-cell structure. The band model alternates surface
+ * easterlies and westerlies once per cell, so at Earth params it reproduces the
+ * trade-wind / mid-latitude-westerly / polar-easterly sequence.
+ */
+export const WIND_CELLS_PER_HEMISPHERE_EARTH = 3;
+
+/**
+ * Exponent tying cell count to rotation rate: `cells ∝ (Ω/Ω_earth)^EXP`, with
+ * Ω ∝ 1/dayLengthHours. The Rhines scale sets the meridional jet spacing on a
+ * rotating planet, L_β ∝ (U/β)^½ with β ∝ Ω, so the number of jets that fit
+ * between equator and pole grows as ~Ω^½ — fast rotators get more, narrower
+ * bands (Jupiter's ~10 h day and many banded jets), slow rotators collapse
+ * toward single-cell (Hadley-only) circulation. ½ is the Rhines exponent; the
+ * exact power is model-dependent in the literature (½–1) and this is a
+ * diagnostic band model, not a fluid solve (§6).
+ */
+export const WIND_ROTATION_EXPONENT = 0.5;
+
+/**
+ * Cap on cells per hemisphere for very fast rotators. 8 bands over a hemisphere
+ * is already finer than the N=16 invariant grid resolves cleanly; the cap keeps
+ * the pattern representable and the wind bound (below) safe. Reached only below
+ * a ~4 h day; Earth (24 h) sits at 3, far from the cap.
+ */
+export const WIND_MAX_CELLS_PER_HEMISPHERE = 8;
+
+/**
+ * Peak prevailing surface wind speeds at the reference temperature gradient,
+ * m/s: zonal (trade/westerly) component and the weaker meridional (overturning)
+ * component. Surface prevailing winds are ~5–10 m/s (the strong jets are aloft,
+ * out of scope for a surface band model); the meridional branch of the
+ * overturning is weaker still. Both scale with the equator-to-pole temperature
+ * gradient (below) and are clamped so a hot/steep-gradient state stays inside
+ * the ±`WIND_MAX_M_PER_S` codec bound.
+ */
+export const WIND_ZONAL_PEAK_M_PER_S = 10;
+export const WIND_MERIDIONAL_PEAK_M_PER_S = 4;
+
+/**
+ * Equator-to-pole surface temperature contrast (equatorial-band mean minus
+ * polar-band mean, K) at which the wind speeds above are realized — i.e. Earth
+ * default params give a gradient factor ≈ 1. Winds are driven by differential
+ * heating, so a steeper gradient strengthens the circulation and a flatter one
+ * (a warm, well-mixed hothouse) weakens it. Measured from the #30 energy
+ * balance at Earth params over the three golden seeds (equatorial band
+ * |sin lat| < `WIND_EQUATORIAL_SINLAT`, polar band |sin lat| >
+ * `WIND_POLAR_SINLAT`); ~27 K, below the ~45 K extreme-band drop the EBM
+ * transport is tuned to because these are area-band means, not band extremes.
+ */
+export const WIND_TEMP_GRADIENT_REF_K = 27;
+
+/** Equal-area latitude cutoffs (in |sin lat|) for the equatorial and polar
+ *  bands the temperature gradient is measured across. 0.25 and 0.75 make each
+ *  band a robust 25% of the sphere, so both are populated on every grid. */
+export const WIND_EQUATORIAL_SINLAT = 0.25;
+export const WIND_POLAR_SINLAT = 0.75;
+
+/**
+ * Clamp on the temperature-gradient factor that scales wind speed. Floor keeps
+ * a faint prevailing wind even in a near-isothermal state (moisture transport
+ * still needs a direction); ceiling caps a steep-gradient snowball so wind
+ * stays well inside the ±`WIND_MAX_M_PER_S` bound (`WIND_ZONAL_PEAK` × 3 = 30).
+ */
+export const WIND_GRADIENT_FACTOR_MIN = 0.1;
+export const WIND_GRADIENT_FACTOR_MAX = 3;
+
+/**
+ * Absolute wind-speed bound, m/s — the jet-stream-scale range the Phase 3 codec
+ * quantizes `windU`/`windV` over (±60 m/s, §1 table). A defensive final clamp:
+ * the model cannot reach it (peak × gradient ceiling = 30 m/s), but the clamp
+ * guarantees a stored-field value can never fall outside the codec range.
+ */
+export const WIND_MAX_M_PER_S = 60;
 
 /** Default simulation step, years. Chosen so 10 steps fit one keyframe interval. */
 export const DEFAULT_STEP_YEARS = 1e6;

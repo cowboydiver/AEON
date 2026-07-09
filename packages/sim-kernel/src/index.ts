@@ -67,4 +67,14 @@ export {
   annualMeanInsolation,
   type EnergyBalanceSolution,
 } from './systems/energyBalance';
+export {
+  windsSystem,
+  applyWinds,
+  solveWinds,
+  rotationCellCount,
+  windGradientFactor,
+  meridionalTemperatureGradientK,
+  windAtLatitude,
+  type WindSolution,
+} from './systems/winds';
 export { cellCenterTable, neighborTable } from './grid';

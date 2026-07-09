@@ -67,6 +67,10 @@ const RENDER_HINTS: Record<string, 'hypsometric' | 'categorical' | 'sequentialRe
   plateId: 'categorical',
   crustAge: 'sequentialReversed', // young crust = bright, per issue #11
   boundaryStress: 'diverging',
+  // Signed prevailing winds (#31): diverging ramp about 0 reads the
+  // easterly/westerly (windU) and equatorward/poleward (windV) band structure.
+  windU: 'diverging',
+  windV: 'diverging',
 };
 
 function hsvToRgb(h: number, s: number, v: number): Rgb {
