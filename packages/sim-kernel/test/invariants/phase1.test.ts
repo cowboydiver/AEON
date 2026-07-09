@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { MAX_PLATES, MIN_PLATES } from '../../src/constants';
+import { CO2_MIN_PPM, MAX_PLATES, MIN_PLATES } from '../../src/constants';
 import { faceSTToDirection, cellCount, indexToFaceRC, type Vec3 } from '../../src/grid';
 import { createRng } from '../../src/rng';
 import { createInitialState, createPlanetParams, type PlanetState } from '../../src/state';
@@ -143,6 +143,10 @@ describe('phase 1 invariants (#20)', () => {
       // still catching any re-frozen monopoly loudly.
       let monopolySince = -1;
       let worstMonopolyYears = 0;
+      // Carbonate–silicate thermostat (#34): CO₂ is now dynamic. Track its range
+      // to assert it stays regulated (never rides a clamp) over the whole run.
+      let co2Min = Infinity;
+      let co2Max = -Infinity;
       const end = runPipeline(params, 2250, (s, i) => {
         if (i % 50 !== 0) return;
         expect(allFinite(s), `seed ${seed} step ${i}: non-finite field value`).toBe(true);
@@ -162,8 +166,9 @@ describe('phase 1 invariants (#20)', () => {
         // Climate bounds (#30): the zonal energy balance must keep temperature
         // in physical range and inside the codec's [180, 320] K window over the
         // whole timeline, and the mean-temperature diagnostic must stay sane.
-        // co2 is constant here (the #34 reservoir is not wired yet) but must
-        // stay finite. Extends the §5 multi-Gyr climate-stability check.
+        // co2 is now the dynamic #34 carbonate–silicate reservoir (tracked below
+        // for the regulation bound); here it must stay finite. Extends the §5
+        // multi-Gyr climate-stability check.
         let tmin = Infinity;
         let tmax = -Infinity;
         for (const t of s.fields.temperature) {
@@ -175,11 +180,14 @@ describe('phase 1 invariants (#20)', () => {
         expect(s.globals.meanTemperatureK, `seed ${seed} step ${i}: mean T`).toBeGreaterThan(230);
         expect(s.globals.meanTemperatureK, `seed ${seed} step ${i}: mean T`).toBeLessThan(320);
         expect(Number.isFinite(s.globals.co2), `seed ${seed} step ${i}: co2 finite`).toBe(true);
+        co2Min = Math.min(co2Min, s.globals.co2);
+        co2Max = Math.max(co2Max, s.globals.co2);
         // Ice + sea level bounds (#33): iceFraction is a physical fraction, and
-        // the ice-albedo feedback must NOT spuriously snowball on default params
-        // (no #34 CO₂ thermostat yet) — the mean-T floor above is the tripwire,
-        // and mean ice must stay well short of a frozen planet. Sea level is
-        // finite and land fraction (emergent from it) stays in a sane band.
+        // the ice-albedo feedback must NOT spuriously snowball on default params —
+        // the #34 thermostat now actively regulates against it — so the mean-T
+        // floor above is the tripwire and mean ice must stay well short of a
+        // frozen planet. Sea level is finite and land fraction (emergent from it)
+        // stays in a sane band.
         let icemin = Infinity;
         let icemax = -Infinity;
         let iceSum = 0;
@@ -206,6 +214,15 @@ describe('phase 1 invariants (#20)', () => {
         }
       });
       expect(end.timeYears).toBe(4.5e9);
+      // Thermostat regulation (#34): over 4.5 Gyr CO₂ stays in an Earth-like band
+      // far inside the [CO2_MIN_PPM, CO2_MAX_PPM] clamps — this catches
+      // DIVERGENCE (a runaway would ride a clamp; the floor headroom is the
+      // stronger claim, since a runaway drawdown would peg CO2_MIN). The
+      // oscillation half of the risk — a sustained bounded limit cycle, which
+      // would pass this range bound — is pinned separately by the settling test
+      // in `invariants/carbon.test.ts`.
+      expect(co2Min, `seed ${seed}: CO₂ never pegged the floor`).toBeGreaterThan(CO2_MIN_PPM * 2);
+      expect(co2Max, `seed ${seed}: CO₂ stayed regulated (no runaway)`).toBeLessThan(10_000);
       expect(worstMonopolyYears, `seed ${seed}: longest >85%-of-sphere plate monopoly`).toBeLessThan(400e6);
       // The plate count bound (#18) over deep time.
       const live = end.plates.filter((p) => p.alive).length;

@@ -142,7 +142,7 @@ function reportEvents(keyframe: Keyframe): void {
 function report(keyframe: Keyframe): void {
   if (!printedHeader) {
     console.log(
-      ['time'.padStart(12), 'land%'.padStart(7), 'min elev'.padStart(10), 'mean elev'.padStart(10), 'max elev'.padStart(10), 'cont elev'.padStart(10), 'checksums (fnv1a32 per field)'].join('  '),
+      ['time'.padStart(12), 'land%'.padStart(7), 'min elev'.padStart(10), 'mean elev'.padStart(10), 'max elev'.padStart(10), 'cont elev'.padStart(10), 'mean T'.padStart(8), 'CO2 ppm'.padStart(9), 'checksums (fnv1a32 per field)'].join('  '),
     );
     printedHeader = true;
   }
@@ -165,6 +165,9 @@ function report(keyframe: Keyframe): void {
     }
   }
   const contMean = contCount > 0 ? contSum / contCount : 0;
+  // Climate scalars (#30/#34): the mean surface temperature and the dynamic CO₂
+  // reservoir the carbonate–silicate thermostat regulates. The thermostat holds
+  // mean T roughly steady while CO₂ swings — watch both to see it at work.
   const checksums = FIELD_NAMES.map((n) => `${n}:${checksumHex(keyframe.fields[n])}`).join(' ');
   console.log(
     [
@@ -174,6 +177,8 @@ function report(keyframe: Keyframe): void {
       mean.toFixed(0).padStart(10),
       max.toFixed(0).padStart(10),
       contMean.toFixed(0).padStart(10),
+      `${keyframe.globals.meanTemperatureK.toFixed(1)}K`.padStart(8),
+      keyframe.globals.co2.toFixed(0).padStart(9),
       checksums,
     ].join('  '),
   );

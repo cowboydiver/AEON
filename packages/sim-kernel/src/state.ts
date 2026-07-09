@@ -44,8 +44,10 @@ export interface Globals {
    *  (at t=0 `seaLevelM` is 0, so it equals the 0 m-datum land share). */
   landFraction: number;
   /** Atmospheric CO₂, ppm — the slow carbonate–silicate reservoir (#34); the
-   *  energy balance reads it as the greenhouse forcing. Constant at
-   *  `initialCo2Ppm` until #34 lands. */
+   *  energy balance reads it as the greenhouse forcing. Integrated each step by
+   *  the `carbon` system from tectonic outgassing minus silicate weathering (the
+   *  deep-time thermostat); seeded at `initialCo2Ppm` and, like the other slow
+   *  reservoirs, first departs it at step 1 (carbon is not run at init). */
   co2: number;
   /** Global cell-count-mean surface temperature, K — a diagnostic for the
    *  report/HUD and the #34 snowball detector (#30). */
@@ -153,9 +155,10 @@ export function createInitialState(params: PlanetParams): PlanetState {
   // ocean evaporation along the winds to fill `precipitation` — mirroring the
   // step pipeline order so the t=0 keyframe already carries physical
   // temperature/wind/precipitation (the erosion input). The slow reservoirs —
-  // `ice` (#33) and the derived `seaLevel` — are deliberately NOT run at init:
-  // they carry memory and start empty (iceFraction 0, seaLevelM 0), advancing
-  // over the timeline from step 1, so the t=0 keyframe's pre-existing fields
-  // stay byte-identical to the pre-#33 kernel.
+  // `ice` (#33), the derived `seaLevel` (#33) and the `carbon` CO₂ reservoir
+  // (#34) — are deliberately NOT run at init: they carry memory and start at
+  // their seed values (iceFraction 0, seaLevelM 0, co2 = initialCo2Ppm),
+  // advancing over the timeline from step 1, so the t=0 keyframe's pre-existing
+  // fields stay byte-identical to the pre-#33/#34 kernel.
   return applyMoisture(applyWinds(applyEnergyBalance(calibrated)));
 }

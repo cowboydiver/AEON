@@ -161,8 +161,33 @@
  *     HISTORY_FORMAT_VERSION 1→2 bump, as in bumps 10/11). Total water is
  *     conserved (ocean liquid volume + grounded-ice water-equivalent = the
  *     init inventory, to float tolerance — the invariant test pins it).
+ * 13 — Phase 3 carbonate–silicate CO₂ feedback (#34): a new slow-reservoir
+ *     `carbon` system runs LAST in the pipeline (after `seaLevel`), integrating
+ *     `globals.co2` from volcanic outgassing (tied to tectonic activity — the
+ *     mean boundary |stress|) minus silicate weathering (rising with surface
+ *     temperature, runoff and exposed land, gated off under ice and by the
+ *     direct pCO₂ term). It is the deep-time thermostat: weathering rises with
+ *     the CO₂-driven temperature, so the loop is a slow negative feedback, and
+ *     its snowball failure mode is reachable under a cold perturbation and
+ *     recovers as CO₂ accumulates while the land is ice-sealed. `co2` was a
+ *     constant `initialCo2Ppm` before; it is now dynamic, and the energy balance
+ *     reads the previous step's value (the same explicit lag as ice / sea
+ *     level / CO₂ already used). At t=0 `co2 = initialCo2Ppm` and `carbon` is
+ *     not run at init (like `ice`/`seaLevel`), so every field is byte-identical
+ *     at init; `co2` first departs at step 1 and the coupled fields (temperature
+ *     via the greenhouse from step 2, then elevation via erosion, precipitation,
+ *     winds, ice, sea level downstream) depart within the 10-step golden window,
+ *     so the field goldens and the codec BYTE goldens are regenerated
+ *     deliberately in the same commit. The codec's stored-field SUBSET and
+ *     quantization are unchanged (`co2` is a scalar global, not a stored field);
+ *     the byte goldens shift only because the stored elevation/temperature values
+ *     changed. `Globals` is unchanged (co2 already existed). Reference outgassing/
+ *     weathering rates are calibrated so the default planet's CO₂ settles in an
+ *     Earth-like band (a few hundred ppm) with temperatures inside the existing
+ *     invariant bounds; the thermostat holds CO₂ far inside its [CO2_MIN_PPM,
+ *     CO2_MAX_PPM] clamps over 4.5 Gyr (the invariant test pins no divergence).
  */
-export const KERNEL_BEHAVIOR_VERSION = 12;
+export const KERNEL_BEHAVIOR_VERSION = 13;
 
 /** IUGG mean Earth radius, m. */
 export const EARTH_RADIUS_M = 6.371e6;
@@ -1063,6 +1088,140 @@ export const ICE_SHEET_WATER_EQUIV_M = 600;
  * params ⇒ bit-identical `seaLevelM` on every machine.
  */
 export const SEA_LEVEL_SOLVE_ITERATIONS = 40;
+
+// --- Carbonate–silicate CO₂ feedback (#34, Phase 3) -------------------------
+// The deep-time thermostat. Volcanic outgassing (tied to tectonic activity)
+// restores CO₂; silicate weathering (rising with temperature, runoff and
+// exposed land) draws it down. The two balance at a fixed point, and because
+// weathering rises with temperature — which rises with CO₂ through the #30
+// greenhouse — the loop is a slow NEGATIVE feedback that regulates climate. Its
+// classic failure mode is a *feature*: cool the planet enough (fainter star or
+// low initial CO₂) and the #33 ice-albedo runaway tips it into a snowball, where
+// ice seals the land and weathering shuts off while outgassing keeps degassing,
+// so CO₂ accumulates until the greenhouse deglaciates it and the planet recovers.
+// `globals.co2` is a SLOW reservoir with cross-step memory (like `iceFraction`);
+// the `carbon` system integrates it last in the pipeline and the energy balance
+// reads the previous step's value (the same explicit lag as ice / sea level).
+// The reference rates below are calibrated so the default planet settles near
+// the preindustrial CO₂_REFERENCE with Earth-like temperatures; see the #34
+// section of the golden-regeneration note on KERNEL_BEHAVIOR_VERSION.
+
+/**
+ * Volcanic CO₂ outgassing at the reference tectonic activity, ppm/yr — the
+ * source term. Paired with the weathering reference below (≈ this ÷ the default
+ * planet's ~0.19 weathering potential) so the default planet's fixed point sits
+ * near `CO2_REFERENCE_PPM`. Sized so the reservoir is SLOW: a small perturbation
+ * relaxes over tens of Myr (smooth on the 10 Myr keyframe cadence), and a
+ * snowball — weathering off, outgassing unopposed — rebuilds CO₂ over ~10²–10³
+ * Myr rather than instantly. Deep-time outgassing continues in a snowball
+ * (tectonics is climate-independent), which is what makes recovery inevitable.
+ */
+export const CO2_OUTGAS_REFERENCE_PPM_PER_YR = 8e-5;
+
+/**
+ * Reference tectonic activity the outgassing factor is measured against, m/yr:
+ * the mean |boundaryStress| over ACTIVE boundary cells (a typical plate
+ * closing/opening speed, ~1 cm/yr). Measured over the golden seeds at N=16–64
+ * (grid-stable, unlike the all-cell mean, whose boundary-length share falls
+ * ∝ 1/N). Ridges and arcs both degas, so |stress| (convergent and divergent
+ * alike) is the vigor proxy; a boundary cell is one with |boundaryStress| above
+ * a tiny epsilon (interiors are exactly 0).
+ */
+export const CO2_OUTGAS_ACTIVITY_REF_M_PER_YR = 1e-2;
+
+/**
+ * Clamp on the tectonic outgassing factor (activity / reference). The floor is
+ * the crucial one: a tectonically quiet interval still degasses at
+ * `FLOOR · reference`, so CO₂ can never stall — the guarantee behind snowball
+ * recovery and against a frozen dead end. The ceiling keeps a vigorous plate
+ * reorganization (a rift/suture spike) from running CO₂ — and thus climate —
+ * away; the weathering thermostat absorbs the rest.
+ */
+export const CO2_OUTGAS_ACTIVITY_FACTOR_MIN = 0.4;
+export const CO2_OUTGAS_ACTIVITY_FACTOR_MAX = 1.6;
+
+/**
+ * Silicate-weathering CO₂ drawdown at the reference state (CO₂ =
+ * `CO2_REFERENCE_PPM`, and a unit weathering potential — every cell warm, wet,
+ * ice-free land), ppm/yr — the sink term's scale. The actual drawdown multiplies
+ * this by the CO₂ factor and the weathering potential below, the latter ≈0.19 on
+ * the default planet (≈30–40% land × sub-unity temperature/runoff factors), so
+ * effective weathering ≈ outgassing there. Chosen with
+ * `CO2_OUTGAS_REFERENCE_PPM_PER_YR` to place the fixed point near the reference.
+ */
+export const CO2_WEATHER_REFERENCE_PPM_PER_YR = 5.5e-4;
+
+/**
+ * Reference surface temperature for the weathering temperature factor, K
+ * (Earth's mean surface temperature). Weathering rises with warmth
+ * (activation-energy kinetics + a wetter, more vigorous hydrological cycle):
+ * `factor = exp(SENS·(T − ref))`, so warm land weathers fast and near-freezing
+ * land slowly. This is the dominant leg of the thermostat — the leg that makes
+ * weathering a decreasing function of CO₂-driven cooling.
+ */
+export const CO2_WEATHER_REF_TEMP_K = 288;
+
+/**
+ * Fractional growth of silicate weathering per K of surface warming, 1/K.
+ * 0.07/K ⇒ weathering roughly doubles per +10 K (e^0.7 ≈ 2), the order of the
+ * combined kinetic + runoff temperature dependence in weathering models
+ * (an effective activation energy of a few tens of kJ/mol). The greenhouse
+ * gain `dT/d(ln CO₂)` times this sets the thermostat's restoring strength.
+ */
+export const CO2_WEATHER_TEMP_SENSITIVITY_PER_K = 0.07;
+
+/** Clamp on the weathering temperature factor: a frozen world still floors at 0
+ *  (via 1−iceFraction and the precip factor) and a hothouse is bounded so
+ *  drawdown cannot diverge. exp(0.07·ΔT)=4 at ΔT≈+20 K. */
+export const CO2_WEATHER_TEMP_FACTOR_MAX = 4;
+
+/**
+ * Precipitation giving unit weathering runoff factor, kg/m²/yr (≈ Earth's mean
+ * precipitation). Weathering is water-limited — a rain-shadow desert weathers
+ * little however warm — so the factor is `min(precip / ref, cap)`; a bone-dry
+ * cell contributes nothing. Reuses the moisture field the erosion/ice systems
+ * already read.
+ */
+export const CO2_WEATHER_PRECIP_REF_KG_PER_M2_YR = 1000;
+
+/** Clamp on the weathering runoff factor, so a monsoon cell cannot draw CO₂ down
+ *  arbitrarily fast. */
+export const CO2_WEATHER_PRECIP_FACTOR_MAX = 3;
+
+/**
+ * Direct dependence of silicate weathering on atmospheric CO₂: the drawdown
+ * scales `(co2 / CO2_REFERENCE_PPM)^EXPONENT`. 0.5 is within the WHAK range
+ * (~0.2–0.5): higher pCO₂ makes soils more acidic and weathering faster. This
+ * leg both sharpens the negative feedback (extra restoring force when CO₂ is
+ * high) and, with the `CO2_MIN_PPM` floor, guarantees a well-defined warm fixed
+ * point — as CO₂ falls the drawdown falls with it, so CO₂ can never be driven
+ * to zero. In a snowball it is inert: the weathering potential is ~0 (ice-sealed
+ * land), so no power of CO₂ revives the sink until the ice retreats.
+ */
+export const CO2_WEATHER_CO2_EXPONENT = 0.5;
+
+/**
+ * Hard bounds on the CO₂ reservoir, ppm. The floor keeps the greenhouse forcing
+ * `ln(co2/ref)` finite and a faint atmosphere present; the ceiling bounds the
+ * snowball buildup (weathering off, outgassing unopposed) at a large but finite
+ * value so the field and the temperatures it drives stay representable. Neither
+ * is a physical target — the thermostat holds CO₂ far inside this range on any
+ * non-pathological planet.
+ */
+export const CO2_MIN_PPM = 10;
+export const CO2_MAX_PPM = 1e6;
+
+/**
+ * Maximum fractional change in `co2` a single step may apply, per Myr of step —
+ * a stability rate-limit on the explicit-lag feedback (§5), scaled by `× dt`.
+ * As a FRACTION of the current CO₂ it gives an exponential-approach cap that is
+ * gentle near the (low) fixed point and permissive during a (high-CO₂) snowball
+ * recovery. The thermostat's own relaxation is far slower than this at the
+ * default rates; the cap only bites on a pathological transient (a coarse step
+ * into a just-frozen ocean), preventing an overshoot that could set the feedback
+ * ringing — the phase's named oscillation/divergence risk.
+ */
+export const CO2_MAX_CHANGE_FRAC_PER_MYR = 0.05;
 
 /** Default simulation step, years. Chosen so 10 steps fit one keyframe interval. */
 export const DEFAULT_STEP_YEARS = 1e6;

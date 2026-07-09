@@ -99,4 +99,16 @@ export {
   windAtLatitude,
   type WindSolution,
 } from './systems/winds';
+export {
+  carbonSystem,
+  applyCarbon,
+  solveCarbon,
+  tectonicActivity,
+  outgassingPpmPerYr,
+  weatheringTempFactor,
+  weatheringPrecipFactor,
+  weatheringPotential,
+  weatheringPpmPerYr,
+  type CarbonSolution,
+} from './systems/carbon';
 export { cellCenterTable, neighborTable, eastNorthTable } from './grid';

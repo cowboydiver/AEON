@@ -1,7 +1,8 @@
 import { copyEvents, type SimEvent } from './events';
 import { FIELD_NAMES, type Fields } from './fields';
 import { createRng, type Rng } from './rng';
-import { createInitialState, type PlanetState, type PlanetParams } from './state';
+import { createInitialState, type Globals, type PlanetState, type PlanetParams } from './state';
+import { carbonSystem } from './systems/carbon';
 import { energyBalanceSystem } from './systems/energyBalance';
 import { erosionSystem } from './systems/erosion';
 import { iceSystem } from './systems/ice';
@@ -40,13 +41,15 @@ export const identitySystem: System = {
  * rotation and that temperature gradient, moisture advects ocean evaporation
  * along that wind to precipitate real, orographic precipitation (#32), ice
  * integrates the `iceFraction` mass balance (#33) from that temperature and
- * precipitation, and seaLevel re-solves the global sea level (#33) from the
- * conserved water inventory minus grounded ice. The fields those last two write
- * are read back at the TOP of the next step — energyBalance takes the previous
- * step's `iceFraction` (albedo) and `seaLevelM` (land mask), and erosion the
- * previous `seaLevelM` (base level) — closing the feedbacks with a one-step
- * explicit lag rather than a joint solve. The rest of the Phase 3 climate block
- * (carbon → biome) extends this after seaLevel as it lands.
+ * precipitation, seaLevel re-solves the global sea level (#33) from the
+ * conserved water inventory minus grounded ice, and carbon integrates the slow
+ * carbonate–silicate CO₂ reservoir (#34) from tectonic outgassing minus
+ * silicate weathering. The globals/fields those last systems write are read back
+ * at the TOP of the next step — energyBalance takes the previous step's
+ * `iceFraction` (albedo), `seaLevelM` (land mask) and `co2` (greenhouse), and
+ * erosion the previous `seaLevelM` (base level) — closing the feedbacks with a
+ * one-step explicit lag rather than a joint solve. The remaining Phase 3 climate
+ * block (biome) extends this after carbon as it lands.
  */
 export const SYSTEMS: readonly System[] = [
   tectonicsSystem,
@@ -57,6 +60,7 @@ export const SYSTEMS: readonly System[] = [
   moistureSystem,
   iceSystem,
   seaLevelSystem,
+  carbonSystem,
 ];
 
 /** Advance the state by dtYears through the ordered system pipeline. */
@@ -74,12 +78,18 @@ export function step(
 }
 
 /**
- * Deep snapshot of the per-cell fields at a point in time, plus the full
- * event log so far. Arrays and events are copies, safe to transfer/mutate.
+ * Deep snapshot of the per-cell fields at a point in time, plus the scalar
+ * globals and the full event log so far. Arrays and events are copies, safe to
+ * transfer/mutate; `globals` is a shallow copy of the whole-planet scalars
+ * (co2, meanTemperatureK, seaLevelM, landFraction, waterInventoryM) so a
+ * consumer (the CLI report, a HUD) can read them without re-deriving. The codec
+ * ignores it — `encodeKeyframe` reads `.fields` only — so this does not touch
+ * the stored/rendered path.
  */
 export interface Keyframe {
   timeYears: number;
   fields: Fields;
+  globals: Globals;
   events: SimEvent[];
 }
 
@@ -87,7 +97,12 @@ export function snapshotKeyframe(state: PlanetState): Keyframe {
   const fields = Object.fromEntries(
     FIELD_NAMES.map((name) => [name, state.fields[name].slice()]),
   ) as Fields;
-  return { timeYears: state.timeYears, fields, events: copyEvents(state.events) };
+  return {
+    timeYears: state.timeYears,
+    fields,
+    globals: { ...state.globals },
+    events: copyEvents(state.events),
+  };
 }
 
 /**
