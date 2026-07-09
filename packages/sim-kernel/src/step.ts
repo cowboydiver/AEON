@@ -4,7 +4,9 @@ import { createRng, type Rng } from './rng';
 import { createInitialState, type PlanetState, type PlanetParams } from './state';
 import { energyBalanceSystem } from './systems/energyBalance';
 import { erosionSystem } from './systems/erosion';
+import { iceSystem } from './systems/ice';
 import { moistureSystem } from './systems/moisture';
+import { seaLevelSystem } from './systems/seaLevel';
 import { tectonicsSystem } from './systems/tectonics';
 import { wilsonSystem } from './systems/wilson';
 import { windsSystem } from './systems/winds';
@@ -35,12 +37,16 @@ export const identitySystem: System = {
  * builds topography, wilson reorganizes plates, erosion redistributes relief,
  * then energyBalance re-solves the zonal temperature (#30) against the final
  * elevation and land mask, winds derive the prevailing wind field (#31) from
- * rotation and that temperature gradient, and moisture advects ocean
- * evaporation along that wind to precipitate real, orographic precipitation
- * (#32) — which erosion reads on the next step (a one-step lag, like the energy
- * balance reads the previous step's ice/CO₂). The rest of the Phase 3 climate
- * block (ice → seaLevel → carbon → biome) extends this after moisture as it
- * lands.
+ * rotation and that temperature gradient, moisture advects ocean evaporation
+ * along that wind to precipitate real, orographic precipitation (#32), ice
+ * integrates the `iceFraction` mass balance (#33) from that temperature and
+ * precipitation, and seaLevel re-solves the global sea level (#33) from the
+ * conserved water inventory minus grounded ice. The fields those last two write
+ * are read back at the TOP of the next step — energyBalance takes the previous
+ * step's `iceFraction` (albedo) and `seaLevelM` (land mask), and erosion the
+ * previous `seaLevelM` (base level) — closing the feedbacks with a one-step
+ * explicit lag rather than a joint solve. The rest of the Phase 3 climate block
+ * (carbon → biome) extends this after seaLevel as it lands.
  */
 export const SYSTEMS: readonly System[] = [
   tectonicsSystem,
@@ -49,6 +55,8 @@ export const SYSTEMS: readonly System[] = [
   energyBalanceSystem,
   windsSystem,
   moistureSystem,
+  iceSystem,
+  seaLevelSystem,
 ];
 
 /** Advance the state by dtYears through the ordered system pipeline. */

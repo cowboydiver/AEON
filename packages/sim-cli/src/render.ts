@@ -62,7 +62,7 @@ export function hypsometricColor(elevation: number, min: number, max: number): R
  */
 // Keyed by plain string, not FieldName: plateId/boundaryStress land in the
 // kernel schema in later Phase 1 issues; hints for them are inert until then.
-const RENDER_HINTS: Record<string, 'hypsometric' | 'categorical' | 'sequentialReversed' | 'diverging' | 'precip' | undefined> = {
+const RENDER_HINTS: Record<string, 'hypsometric' | 'categorical' | 'sequentialReversed' | 'diverging' | 'precip' | 'ice' | undefined> = {
   elevation: 'hypsometric',
   plateId: 'categorical',
   crustAge: 'sequentialReversed', // young crust = bright, per issue #11
@@ -75,6 +75,10 @@ const RENDER_HINTS: Record<string, 'hypsometric' | 'categorical' | 'sequentialRe
   // (not the field's own max) so the rain shadows are not washed out by the
   // handful of very wet orographic cells — arid tan through green to wet blue.
   precipitation: 'precip',
+  // Ice cover (#33), 0..1: dark open ground/ocean → white ice cap, on a FIXED
+  // 0–1 scale so the caps read at the same brightness across a flipbook as they
+  // advance and retreat (a per-frame min/max stretch would hide a shrinking cap).
+  iceFraction: 'ice',
 };
 
 /** Precipitation viz reference, kg/m²/yr: values at/above map to the wettest
@@ -89,6 +93,14 @@ const PRECIP_STOPS = [
   [0.3, [170, 175, 96]],
   [0.6, [70, 150, 84]],
   [1, [34, 94, 168]],
+] as const satisfies readonly (readonly [number, Rgb])[];
+
+/** Ice-free → ice ramp over [0,1] (#33): dark slate (no ice) through pale blue
+ *  to white (full cover), so caps stand out against ocean and bare land. */
+const ICE_STOPS = [
+  [0, [26, 34, 48]],
+  [0.5, [120, 155, 190]],
+  [1, [248, 250, 255]],
 ] as const satisfies readonly (readonly [number, Rgb])[];
 
 function hsvToRgb(h: number, s: number, v: number): Rgb {
@@ -178,6 +190,8 @@ export function renderFieldPng(
         rgb = ramp(DIVERGING_STOPS, t);
       } else if (hint === 'precip') {
         rgb = ramp(PRECIP_STOPS, Math.min(1, Math.max(0, value / PRECIP_VIZ_REF)));
+      } else if (hint === 'ice') {
+        rgb = ramp(ICE_STOPS, Math.min(1, Math.max(0, value)));
       } else {
         const g = span > 0 ? ((value - min) / span) * 255 : 128;
         rgb = [g, g, g];

@@ -16,21 +16,29 @@
  *
  * Timescale split (§0): temperature is a FAST quasi-static diagnostic — a step
  * re-solves it from the current boundary conditions, it carries no memory. The
- * two SLOW reservoirs it reads are fed to it with a one-step lag:
+ * slow reservoirs and the dynamic sea level it reads are fed to it with a
+ * one-step lag:
  *   - **ice albedo** (#33): per-cell albedo blends toward `ALBEDO_ICE` by the
- *     `iceFraction` field, which is zero until #33 populates it — the hook is
- *     live, it just reads zeros for now.
+ *     `iceFraction` field — the feedback that makes snowball states reachable,
+ *     now reading the real ice the `ice` system integrates (it read zeros
+ *     before #33).
+ *   - **sea level** (#33): the land/ocean mask albedo and continentality key
+ *     off is `elevation ≥ seaLevelM` rather than the fixed 0 m datum, so a drop
+ *     that exposes a shelf turns it from reflective ocean to land. (The lapse
+ *     term keys off absolute altitude above the fixed datum, not the moving sea
+ *     surface — see the per-cell mapping below.)
  *   - **CO₂ greenhouse** (#34): the OLR intercept drops by
  *     `CO2_FORCING_W_PER_M2·ln(co2/CO2_REFERENCE_PPM)`, reading
  *     `globals.co2`, constant at `initialCo2Ppm` until #34 drives it.
- * Both are read at the top of the step (their end-of-previous-step values),
+ * All are read at the top of the step (their end-of-previous-step values),
  * which is exactly the explicit lag §3 prescribes; #33/#34 run later in the
  * pipeline and update them for the next step.
  *
  * Per-cell temperature is the zonal profile minus the elevation lapse and a
- * bounded land continentality term (§7.4): `T = zonal(lat) − lapse·max(0,elev)
- * + continentality`. Longitudinal structure enters through elevation and the
- * land mask; a full 2-D temperature field is out of scope (§6).
+ * bounded land continentality term (§7.4): `T = zonal(lat) − lapse·max(0, elev)
+ * + continentality`, the continentality gated by the land mask `elev ≥
+ * seaLevelM`. Longitudinal structure enters through elevation and the land
+ * mask; a full 2-D temperature field is out of scope (§6).
  */
 
 import {
@@ -108,10 +116,12 @@ export function bandInsolationProfile(obliquityDeg: number, bands: number): Floa
   return profile;
 }
 
-/** Planetary albedo of a cell: ice-free base keyed off the sea-level datum,
- *  blended toward ice albedo by iceFraction (the #33 hook; zero for now). */
-function cellAlbedo(elevation: number, iceFraction: number): number {
-  const base = elevation >= 0 ? ALBEDO_LAND : ALBEDO_OCEAN;
+/** Planetary albedo of a cell: ice-free base keyed off the sea level (land when
+ *  `elevation ≥ seaLevel`), blended toward ice albedo by iceFraction — the #33
+ *  ice-albedo feedback, now reading the real ice field and the dynamic sea
+ *  level (both zero-equivalent at t=0). */
+function cellAlbedo(elevation: number, iceFraction: number, seaLevel: number): number {
+  const base = elevation >= seaLevel ? ALBEDO_LAND : ALBEDO_OCEAN;
   const f = iceFraction <= 0 ? 0 : iceFraction >= 1 ? 1 : iceFraction;
   return base + f * (ALBEDO_ICE - base);
 }
@@ -166,6 +176,9 @@ export function solveEnergyBalance(state: PlanetState): EnergyBalanceSolution {
   const centers = cellCenterTable(N);
   const elevation = state.fields.elevation;
   const iceFraction = state.fields.iceFraction;
+  // Previous step's sea level (the #33 explicit lag — `seaLevel` runs after this
+  // system): the land/ocean mask albedo, lapse and continentality key off.
+  const seaLevel = state.globals.seaLevelM;
 
   const NB = ENERGY_BALANCE_BANDS;
   const dx = 2 / NB; // equal-area bands: uniform in x = sin(latitude)
@@ -180,7 +193,7 @@ export function solveEnergyBalance(state: PlanetState): EnergyBalanceSolution {
     if (b < 0) b = 0;
     else if (b >= NB) b = NB - 1;
     bandOf[i] = b;
-    albedoSum[b]! += cellAlbedo(elevation[i]!, iceFraction[i]!);
+    albedoSum[b]! += cellAlbedo(elevation[i]!, iceFraction[i]!, seaLevel);
     bandCells[b]!++;
   }
   const bandAlbedo = new Float64Array(NB);
@@ -244,8 +257,14 @@ export function solveEnergyBalance(state: PlanetState): EnergyBalanceSolution {
   for (let i = 0; i < count; i++) {
     const zt = bandTemp[bandOf[i]!]!;
     const elev = elevation[i]!;
+    // Lapse cools with absolute altitude above the FIXED 0 m crust datum, not
+    // above the moving sea surface: atmospheric altitude tracks the solid
+    // surface, and keying lapse to a sea level that swings kilometres (as ocean
+    // basins mature) would spuriously cool/warm the whole planet. Sea level
+    // governs only the land/ocean MASK below (albedo, continentality). Same
+    // max(0, elev) as the pre-#33 kernel.
     let t = zt - LAPSE_RATE_K_PER_M * Math.max(0, elev);
-    if (elev >= 0) {
+    if (elev >= seaLevel) {
       const cont = CONTINENTALITY_GAIN * (zt - zonalMean);
       t += cont < -CONTINENTALITY_MAX_K ? -CONTINENTALITY_MAX_K : cont > CONTINENTALITY_MAX_K ? CONTINENTALITY_MAX_K : cont;
     }

@@ -66,6 +66,21 @@ export {
   type MoistureSolution,
 } from './systems/moisture';
 export {
+  iceSystem,
+  applyIce,
+  solveIce,
+  iceEquilibriumCover,
+  iceMoistureSupply,
+} from './systems/ice';
+export {
+  seaLevelSystem,
+  applySeaLevel,
+  solveSeaLevel,
+  solveSeaLevelState,
+  oceanVolumeMean,
+  type SeaLevelSolution,
+} from './systems/seaLevel';
+export {
   energyBalanceSystem,
   applyEnergyBalance,
   solveEnergyBalance,

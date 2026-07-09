@@ -8,8 +8,8 @@
  * equilibrium (§0): a step re-solves the steady moisture field from the current
  * winds/temperature/elevation, it carries no memory. Three parts:
  *
- *  - **Evaporate.** Ocean cells (below the sea-level datum) inject a moisture
- *    source `E` (kg/m²/yr) scaled by a Clausius–Clapeyron temperature factor —
+ *  - **Evaporate.** Ocean cells (below the dynamic sea level, #33) inject a
+ *    moisture source `E` (kg/m²/yr) scaled by a Clausius–Clapeyron factor —
  *    warm seas evaporate more. Land injects nothing: continents are watered only
  *    by what the wind carries in from the sea.
  *  - **Advect.** The atmospheric moisture column `q` is transported along the
@@ -106,6 +106,9 @@ export function solveMoisture(state: PlanetState): MoistureSolution {
   const nb = neighborTable(N);
   const frame = eastNorthTable(N); // per-cell [ex,ey,ez, nx,ny,nz] tangent basis
   const { elevation, temperature, windU, windV } = state.fields;
+  // Previous step's sea level (the #33 explicit lag): ocean = below it, and the
+  // orographic forcing measures the climb in land height above it.
+  const seaLevel = state.globals.seaLevelM;
 
   // Per-cell transport weight (κ), rain-out weight (λ), evaporation source (E),
   // and the downwind donor split (outFrac, 4 per cell, summing to 1 when κ > 0).
@@ -127,9 +130,9 @@ export function solveMoisture(state: PlanetState): MoistureSolution {
     // reference temperature): drives the ocean evaporation source and the
     // saturation rain-out term below.
     const capacity = evaporationFactor(temperature[i]!);
-    // Evaporation source: ocean = below the sea-level datum. A submerged shelf
-    // evaporates like open ocean; emergent land injects nothing.
-    evap[i] = elevation[i]! < 0 ? MOIST_EVAP_REF_KG_PER_M2_YR * capacity : 0;
+    // Evaporation source: ocean = below the (dynamic) sea level. A submerged
+    // shelf evaporates like open ocean; emergent land injects nothing.
+    evap[i] = elevation[i]! < seaLevel ? MOIST_EVAP_REF_KG_PER_M2_YR * capacity : 0;
 
     // Downwind donor split from the wind direction: assemble the 3-D wind from
     // the grid's local east/north basis and weight each neighbour by max(0,
@@ -174,14 +177,15 @@ export function solveMoisture(state: PlanetState): MoistureSolution {
     // departing air climbs into (downwind-ward rise in height ABOVE SEA LEVEL —
     // air over the sea sits at the datum, it only ascends emergent terrain),
     // which drives extra rain-out on windward slopes and leaves the lee dry.
-    const landI = elevation[i]! > 0 ? elevation[i]! : 0;
+    const ei = elevation[i]! - seaLevel;
+    const landI = ei > 0 ? ei : 0;
     let rise = 0;
     if (totalAlign > 0) {
       for (let k = 0; k < 4; k++) {
         const f = align[k]! / totalAlign;
         outFrac[base + k] = f;
         if (f > 0) {
-          const ej = elevation[nb[base + k]!]!;
+          const ej = elevation[nb[base + k]!]! - seaLevel;
           const dh = (ej > 0 ? ej : 0) - landI;
           if (dh > 0) rise += f * dh;
         }

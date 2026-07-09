@@ -50,7 +50,13 @@ export function twoPlateState(
   return {
     timeYears: 0,
     params,
-    globals: { landFraction: 0, co2: params.initialCo2Ppm, meanTemperatureK: 0 },
+    globals: {
+      landFraction: 0,
+      co2: params.initialCo2Ppm,
+      meanTemperatureK: 0,
+      seaLevelM: 0,
+      waterInventoryM: 0,
+    },
     fields,
     plates: [makePlate(plate0), makePlate(plate1)],
     events: [],
