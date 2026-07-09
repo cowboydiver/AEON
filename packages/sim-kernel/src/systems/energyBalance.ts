@@ -28,8 +28,10 @@
  *     term keys off absolute altitude above the fixed datum, not the moving sea
  *     surface — see the per-cell mapping below.)
  *   - **CO₂ greenhouse** (#34): the OLR intercept drops by
- *     `CO2_FORCING_W_PER_M2·ln(co2/CO2_REFERENCE_PPM)`, reading
- *     `globals.co2`, constant at `initialCo2Ppm` until #34 drives it.
+ *     `CO2_FORCING_W_PER_M2·ln(co2/CO2_REFERENCE_PPM)`, reading `globals.co2` —
+ *     now the slow carbonate–silicate reservoir the `carbon` system drives (the
+ *     deep-time thermostat), read at the previous step's value like ice / sea
+ *     level.
  * All are read at the top of the step (their end-of-previous-step values),
  * which is exactly the explicit lag §3 prescribes; #33/#34 run later in the
  * pipeline and update them for the next step.

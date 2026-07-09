@@ -24,7 +24,10 @@ function emptyKeyframe(timeYears: number): Keyframe {
   ) as Fields;
   // Ocean floor everywhere so landFrac counts only painted cells.
   fields.elevation.fill(-4000);
-  return { timeYears, fields, events: [] };
+  // computeKeyframeMetrics reads only `.fields`; globals is required by the
+  // Keyframe type but unused here, so a zeroed set suffices.
+  const globals = { landFraction: 0, co2: 0, meanTemperatureK: 0, seaLevelM: 0, waterInventoryM: 0 };
+  return { timeYears, fields, globals, events: [] };
 }
 
 function metricsOf(keyframe: Keyframe): KeyframeMetrics {

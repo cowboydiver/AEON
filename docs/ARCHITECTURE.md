@@ -369,7 +369,7 @@ its stream every step, so a position/time hash is the deterministic
 equivalent (documented deviation). Euler-pole wander was considered and not
 implemented.
 
-### Erosion, energy balance, winds, moisture, ice & sea level (#19, #65, #30, #31, #32, #33)
+### Erosion, energy balance, winds, moisture, ice, sea level & carbon (#19, #65, #30, #31, #32, #33, #34)
 
 `erosion` (after wilson): Jacobi diffusion of elevation over the 4-neighbor
 graph, continental-crust pairs only, flux ∝ height difference (slope) ×
@@ -421,8 +421,9 @@ now reading the real ice field the `ice` system integrates, which is what makes
 snowball states reachable). This
 is balanced against a **linear OLR** closure `A + B·(T − 273.15)` whose
 intercept drops by `CO2_FORCING·ln(co2 / CO2_REFERENCE_PPM)` — the **#34
-greenhouse hook**, reading `globals.co2` (constant `initialCo2Ppm` until #34) —
-and against North-style meridional diffusion `D·d/dx[(1−x²)·dT/dx]`. Linear OLR
+greenhouse hook**, reading `globals.co2` (now the dynamic carbonate–silicate
+reservoir the `carbon` system drives, at the previous step's value) — and
+against North-style meridional diffusion `D·d/dx[(1−x²)·dT/dx]`. Linear OLR
 makes the balance a single deterministic **tridiagonal solve** (Thomas
 algorithm, fixed sweep order — never `while (!converged)`), and because the
 transport is written in conservative flux form it telescopes to zero over the
@@ -523,6 +524,51 @@ bisection precision every step (tested over the golden seeds). Sea level also
 falls over early deep time as ocean basins mature to abyssal depth (the same
 conserved volume sits lower in a deeper container), then ice modulates it.
 
+`carbon` (after seaLevel, #34): the **carbonate–silicate CO₂ thermostat** — the
+deep-time negative feedback that regulates climate. Like `ice` it is a **slow
+reservoir** with cross-step memory (`globals.co2`, ppm), integrated with `dt`;
+unlike the fast diagnostics it carries state. The balance is `d(co2)/dt =
+outgassing − weathering`:
+
+- **Outgassing** (source) is volcanic degassing tied to tectonic activity — the
+  mean `|boundaryStress|` over *active boundary cells* (ridges and arcs both
+  degas, so convergence and divergence count alike; averaging over boundary
+  cells, not all cells, makes it grid-independent, since the boundary share
+  falls ∝ 1/N). It scales a reference rate by that activity, clamped to
+  [`CO2_OUTGAS_ACTIVITY_FACTOR_MIN`, `MAX`]. The **floor is > 0** — a quiet world
+  still leaks mantle CO₂ — which is what guarantees snowball recovery.
+- **Weathering** (sink) is silicate weathering: a reference rate ×
+  `(co2/CO2_REFERENCE_PPM)^CO2_WEATHER_CO2_EXPONENT` (the direct pCO₂ dependence)
+  × a **weathering potential** — the cell-count mean over *exposed land*
+  (`elevation ≥ seaLevelM`) of `(1 − iceFraction)·tempFactor(T)·precipFactor(precip)`.
+  So it rises with surface temperature (activation-energy kinetics), runoff and
+  the continental area Phase-1 tectonics builds, needs liquid water (ice-sealed
+  land contributes nothing), and vanishes on a frozen planet.
+
+Warm ⇒ high weathering ⇒ CO₂ drawn down ⇒ cooling: a **negative feedback**,
+because temperature itself rises with CO₂ through the #30 greenhouse. Its fixed
+point is where weathering = outgassing, and the reference rates are calibrated so
+the default planet settles at a few hundred ppm with Earth-like temperatures. The
+**snowball failure mode is a feature**: a cold perturbation (a fainter star, or a
+low `initialCo2Ppm`) tips the #33 ice-albedo runaway into a snowball; the ice
+seals the land, weathering shuts off, and unopposed outgassing accumulates CO₂
+until the greenhouse deglaciates it and the thermostat draws CO₂ back down — the
+classic carbonate–silicate recovery (an invariant test triggers a snowball with a
+transient faint star and pins the recovery; the CO₂ build-up is load-bearing).
+Integration is explicit forward-Euler, **rate-limited** to
+`CO2_MAX_CHANGE_FRAC_PER_MYR` of the current CO₂ per Myr and clamped to
+[`CO2_MIN_PPM`, `CO2_MAX_PPM`]: the fractional cap prevents the explicit-lag
+overshoot that would set the feedback oscillating (the phase's named risk), and
+the 4.5 Gyr invariant pins CO₂ far inside its clamps with no divergence. Pure and
+dt-correct: a function of `boundaryStress`, `temperature`, `precipitation`,
+`iceFraction`, `elevation`, `seaLevelM` and the current `co2` only — and because
+`carbon` runs **last**, all of those are *this* step's freshly-solved values (it
+reads no lagged input, unlike erosion/energyBalance which read the previous
+`seaLevelM`). `carbon` writes only `globals.co2` (no per-cell field); the
+one-step lag is on its **output** — the next step's energy balance reads this
+`co2` as the greenhouse forcing (the same lag `ice`/`seaLevel` feed the energy
+balance through).
+
 **Timescale split & lag (§0/§3).** Temperature is a *fast* quasi-static
 diagnostic — every step re-solves it from the current boundary conditions, it
 carries no memory. The *slow* reservoirs and the dynamic sea level it reads (ice
@@ -530,14 +576,16 @@ albedo, `seaLevelM` land mask, CO₂ greenhouse) are consumed at the top of the
 step as their end-of-previous-step values; the #33/#34 systems that update them
 run later in the pipeline, closing the feedback with a one-step explicit lag
 rather than a per-step joint solve (erosion likewise reads the previous
-`seaLevelM` as its base level). The step order is `tectonics → wilson → erosion
-→ energyBalance → winds → moisture → ice → seaLevel`, extended by `carbon →
-biome` as Phase 3 lands. `createInitialState` runs energy balance, then winds,
-then moisture once (after terrain/plates) so the t=0 keyframe already carries a
-physical temperature, prevailing-wind, and precipitation field; the slow `ice`
-and derived `seaLevel` are deliberately **not** run at init (they carry memory
-and start empty — `iceFraction` 0, `seaLevelM` 0 — advancing from step 1), so the
-t=0 keyframe's pre-existing field bytes are identical to the pre-#33 kernel.
+`seaLevelM` as its base level, and the energy balance the previous `co2`). The
+step order is `tectonics → wilson → erosion → energyBalance → winds → moisture →
+ice → seaLevel → carbon`, extended by `biome` as Phase 3 lands.
+`createInitialState` runs energy balance, then winds, then moisture once (after
+terrain/plates) so the t=0 keyframe already carries a physical temperature,
+prevailing-wind, and precipitation field; the slow `ice`, derived `seaLevel` and
+slow `carbon` reservoir are deliberately **not** run at init (they carry memory
+and start at their seeds — `iceFraction` 0, `seaLevelM` 0, `co2 = initialCo2Ppm`
+— advancing from step 1), so the t=0 keyframe's pre-existing field bytes are
+identical to the pre-#33/#34 kernel.
 
 ### Boundary classification (#14)
 
@@ -574,8 +622,10 @@ Globals     = { landFraction, co2, meanTemperatureK, seaLevelM, waterInventoryM 
 `starLuminosity` (insolation) and `obliquityDeg` (annual-mean insolation
 profile) are activated by the #30 energy balance; `dayLengthHours` is activated
 by the #31 wind bands. `initialCo2Ppm` seeds `globals.co2`, the slow
-carbonate–silicate reservoir (constant until #34). `globals.co2` and
-`globals.meanTemperatureK` are maintained by the energy balance (#30).
+carbonate–silicate reservoir the `carbon` system (#34) integrates each step from
+tectonic outgassing minus silicate weathering (the deep-time thermostat); the
+energy balance reads it as the greenhouse forcing and maintains
+`globals.meanTemperatureK` (#30).
 `globals.seaLevelM` (dynamic sea level) and `globals.waterInventoryM` (the
 conserved total-water global-equivalent layer thickness) are the #33 sea-level
 state: the inventory is calibrated once at init from the initial ocean volume at
@@ -627,11 +677,15 @@ them as timeline markers.
 
 ```
 Keyframe = { timeYears: number, fields: Record<FieldName, Float32Array>,
-             events: SimEvent[] }
+             globals: Globals, events: SimEvent[] }
 ```
 
-Deep snapshot — arrays and events are copies, safe to transfer to other
-threads (the web app transfers the field buffers worker → main). One keyframe is emitted for the initial
+Deep snapshot — arrays and events are copies (and `globals` a shallow copy of
+the scalar whole-planet quantities, so a consumer like the CLI `--report` or a
+HUD can read `co2` / `meanTemperatureK` / `seaLevelM` without re-deriving),
+safe to transfer to other threads (the web app transfers the field buffers
+worker → main). The codec reads `.fields` only, so `globals` never touches the
+stored/rendered path. One keyframe is emitted for the initial
 state, then one per `keyframeIntervalYears` (default 10 Myr), plus a final one
 if `untilYears` is off-interval. The renderer's texture set is named `fieldsA`
 so a second set (`fieldsB`) and a blend uniform can be added for timeline
@@ -676,12 +730,13 @@ the winds; the energy balance reads ice) and dumpable from the full keyframe, so
 render-time storage waits for the single §1 stored-field-set bump
 (`HISTORY_FORMAT_VERSION` 1→2, adding the Phase 3 viz fields — precipitation,
 iceFraction, biome, windU, windV — together, with the temperature range widened
-to 330 K) that the goldens-labeled renderer-facing Phase 3 work carries. #32 and
-#33 regenerate the sim goldens (real precipitation replaces the proxy; the
-ice-albedo + sea-level feedbacks then change erosion→elevation→temperature→winds
-within the golden window) but leave the codec's stored-field set and quantization
-untouched — the byte goldens shift only because the stored elevation/temperature
-values changed. Note `EncodedKeyframe.landFraction` (a decode-free UI convenience)
+to 330 K) that the goldens-labeled renderer-facing Phase 3 work carries. #32,
+#33 and #34 regenerate the sim goldens (real precipitation replaces the proxy;
+the ice-albedo + sea-level feedbacks, then the #34 CO₂ thermostat driving the
+greenhouse, change erosion→elevation→temperature→winds within the golden window)
+but leave the codec's stored-field set and quantization untouched — the byte
+goldens shift only because the stored elevation/temperature values changed (`co2`
+is a scalar global, never a stored field). Note `EncodedKeyframe.landFraction` (a decode-free UI convenience)
 is still recomputed against the 0 m datum, so it lags `globals.landFraction` (now
 emergent from `seaLevelM`) until the deferred sea-level shoreline render lands.
 Two versions gate reuse: `HISTORY_FORMAT_VERSION` (codec byte
