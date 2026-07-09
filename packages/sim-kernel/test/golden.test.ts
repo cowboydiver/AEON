@@ -37,3 +37,26 @@ describe('golden field hashes', () => {
     });
   }
 });
+
+/**
+ * Flag-on spine for the #84 prototype: the default-off gate keeps the main
+ * goldens byte-identical, but without its own goldens the flag-on path could
+ * drift silently under refactors (and a future default-on promotion would
+ * have no baseline). Initial state is identical to flag-off (the system only
+ * acts in steps), so only the stepped hashes are pinned.
+ */
+describe('golden field hashes: blockIsostasy on (#84)', () => {
+  for (const seed of GOLDEN_SEEDS) {
+    it(`seed ${seed}: after 10 steps`, () => {
+      const params = createPlanetParams({ seed, blockIsostasy: true });
+      const ctx: SimContext = { rng: createRng(params.seed).fork('sim') };
+      let stepped = createInitialState(params);
+      for (let i = 0; i < 10; i++) {
+        stepped = step(stepped, params.stepYears, ctx);
+      }
+      expect({
+        after10Steps: { timeYears: stepped.timeYears, ...fieldHashes(stepped) },
+      }).toMatchSnapshot();
+    });
+  }
+});

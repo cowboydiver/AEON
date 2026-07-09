@@ -107,3 +107,66 @@ exports[`golden field hashes > seed 1337: initial state and after 10 steps 1`] =
   },
 }
 `;
+
+exports[`golden field hashes: blockIsostasy on (#84) > seed 1: after 10 steps 1`] = `
+{
+  "after10Steps": {
+    "biome": "83b09b05",
+    "boundaryStress": "94af51be",
+    "crustAge": "348c1b00",
+    "crustType": "5285f5b5",
+    "elevation": "d08119e0",
+    "iceFraction": "f4efeeca",
+    "plateId": "1659f272",
+    "precipitation": "677ace70",
+    "sedimentM": "1a12eb05",
+    "sutureYears": "b0549dc5",
+    "temperature": "85a5fe1c",
+    "timeYears": 10000000,
+    "windU": "3942f885",
+    "windV": "408c8d15",
+  },
+}
+`;
+
+exports[`golden field hashes: blockIsostasy on (#84) > seed 42: after 10 steps 1`] = `
+{
+  "after10Steps": {
+    "biome": "aa6345b8",
+    "boundaryStress": "3470f23d",
+    "crustAge": "5df42012",
+    "crustType": "8383c658",
+    "elevation": "2df8c3ed",
+    "iceFraction": "4f08a051",
+    "plateId": "830343d2",
+    "precipitation": "f3c4f6ec",
+    "sedimentM": "f90bc780",
+    "sutureYears": "b0549dc5",
+    "temperature": "d79b5e0d",
+    "timeYears": 10000000,
+    "windU": "1d7faea5",
+    "windV": "1fde7be5",
+  },
+}
+`;
+
+exports[`golden field hashes: blockIsostasy on (#84) > seed 1337: after 10 steps 1`] = `
+{
+  "after10Steps": {
+    "biome": "7d1ebe45",
+    "boundaryStress": "fb4df36a",
+    "crustAge": "f9bebba2",
+    "crustType": "0f3eab88",
+    "elevation": "6d058a53",
+    "iceFraction": "24589704",
+    "plateId": "6e0c87c2",
+    "precipitation": "ec3b1676",
+    "sedimentM": "8f4bfb92",
+    "sutureYears": "b0549dc5",
+    "temperature": "6d4825c9",
+    "timeYears": 10000000,
+    "windU": "d87ba375",
+    "windV": "29e0b3f5",
+  },
+}
+`;
