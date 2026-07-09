@@ -55,6 +55,7 @@ export {
   type Keyframe,
 } from './step';
 export { tectonicsSystem } from './systems/tectonics';
+export { blockIsostasySystem, blockElevationCap } from './systems/blockIsostasy';
 export { erosionSystem } from './systems/erosion';
 export { wilsonSystem } from './systems/wilson';
 export {

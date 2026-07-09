@@ -471,6 +471,42 @@ export const MICROCONTINENT_FOUNDER_ELEVATION_M = -200;
  */
 export const MARGIN_CONSOLIDATION_HOLE_MIN_NEIGHBORS = 3;
 
+// --- Crustal-block isostasy (#84 prototype) ----------------------------------
+
+/**
+ * Continental-block area below which the block founders — its elevation
+ * ceiling is MICROCONTINENT_FOUNDER_ELEVATION_M, m² (#84). Physical premise:
+ * a small crustal block has no cratonic root and is not durably emergent
+ * (Zealandia, 4.9 Mkm², is 95% submerged; the Seychelles microcontinent is
+ * drowned platform). 3e11 m² = 300,000 km² sits below Madagascar (587k km²,
+ * emergent) and above the collision-debris / rifted-sliver scale the
+ * boundary processes strand. This generalizes the one-cell founder clamp in
+ * tectonics.ts to whole components — the 2+-cell splinters that clamp and
+ * margin consolidation both miss are what shredded deep-time land into
+ * tall-island confetti.
+ */
+export const BLOCK_FOUNDER_AREA_M2 = 3e11;
+
+/**
+ * Continental-block area at which the block's elevation ceiling reaches the
+ * full OROGENY_MAX_ELEVATION_M, m² (#84) — blocks this large are true
+ * continents and the cap is inert on them. Between the founder area and
+ * this, the ceiling rises as sqrt of the normalized area (gravitational
+ * spreading limits unsupported topography). Calibration anchor: New Guinea
+ * (~0.79 Mkm²) holds ~4.9 km peaks; the sqrt ramp gives ~4.7 km there.
+ */
+export const BLOCK_FULL_OROGENY_AREA_M2 = 2e12;
+
+/**
+ * Rate at which elevation above a block's isostatic ceiling subsides toward
+ * it, m/yr (#84). Rate-bounded like OCEAN_RELIEF_RELAX_M_PER_YR, never a
+ * hard-set, so a component split by a rift or advection tear subsides over
+ * ~5-10 Myr (1e-3 m/yr takes a 9 km orogen to the founder level in ~9 Myr —
+ * a gravitational-collapse timescale) instead of popping between 10 Myr
+ * keyframes. Subsidence only: the cap never raises elevation.
+ */
+export const BLOCK_ISOSTASY_RELAX_M_PER_YR = 1e-3;
+
 // --- Wilson cycles (#18) -----------------------------------------------------
 
 /**
