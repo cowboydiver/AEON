@@ -22,11 +22,10 @@ issue #6); each issue carries its full motivation, approach sketch, and
 acceptance criteria — this spec is the milestone-level map, the issues are the
 ground truth for per-task detail.
 
-**Status: awaiting human sign-off. No Phase 4 implementation before sign-off**
-(HANDOVER §4.5). The Milestone 0 de-risking prototype below is part of the plan
-to be signed off, not a pre-approved exception. Several **design decisions are
-folded into this spec (§7)** — they change the field set, the pipeline shape, the
-event schema, and the acceptance criteria; flag any you disagree with at sign-off.
+**Status: SIGNED OFF (2026-07-09). Implementation proceeds in the §2 milestone
+order, starting with Milestone 0** (HANDOVER §4.5). The §7 folded decisions are
+accepted as written. Milestone 0 changes no kernel bytes; the first golden regen
+is in #37.
 
 ---
 
