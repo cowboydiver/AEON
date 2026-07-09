@@ -224,3 +224,12 @@ unless noted (the standing-invariant Vitest runs at N=16 to keep the suite < 30 
   eight Whittaker classes colour the globe correctly but were not art-directed;
   Phase 5's per-epoch design deliverables should revisit the ramp (and the ice /
   shoreline blend) against real reference, as the spec anticipated.
+- **Only three of the climate signals reach the globe.** The render shows
+  `biome`, `iceFraction`, and the sea-level shoreline; `temperature`,
+  `precipitation`, and the winds drive those but have no on-globe view (only the
+  CLI `--dump`). That the land colour is genuinely biome-driven — not an earthlike
+  hypsometric ramp — is now pinned by a kernel discriminator (`phase3.test.ts`:
+  land at the same elevation carries several biome classes; a height-only ramp
+  gives one). A Phase 5 field-overlay debug view (`?view=temperature|
+  precipitation|wind`) would make the working systems directly visible in the
+  app — filed as #83 (draft in `docs/phase5-backlog/on-globe-climate-debug-views.md`).

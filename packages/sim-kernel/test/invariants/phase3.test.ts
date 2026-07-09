@@ -309,3 +309,73 @@ describe('phase 3 acceptance detectors catch planted bugs (#36)', () => {
     expect(isBreathing(iceBreathing(alive))).toBe(true);
   });
 });
+
+// --- The from-orbit colour is biome-driven, not a relabelled height ramp ------
+
+/** Step a fresh planet `n` macro steps at grid `gridN`. */
+function stepped(seed: number, n: number, gridN: number): PlanetState {
+  const params = createPlanetParams({ seed, gridN });
+  const ctx: SimContext = { rng: createRng(params.seed).fork('sim') };
+  let s = createInitialState(params);
+  for (let i = 0; i < n; i++) s = step(s, params.stepYears, ctx);
+  return s;
+}
+
+/**
+ * Distinct land biome classes among cells inside a narrow elevation band, each
+ * cell's class read through `biomeOf`. With the real `biome` field this counts
+ * how many ecosystems share the SAME heights; with a height-only `biomeOf` it
+ * collapses to one — the discriminator's negative control below.
+ */
+function distinctLandBiomesInBand(
+  s: PlanetState,
+  loM: number,
+  hiM: number,
+  biomeOf: (i: number) => number,
+): Set<number> {
+  const set = new Set<number>();
+  for (let c = 0; c < s.fields.elevation.length; c++) {
+    const e = s.fields.elevation[c]!;
+    if (e < s.globals.seaLevelM || e < loM || e > hiM) continue;
+    set.add(Math.round(biomeOf(c)));
+  }
+  return set;
+}
+
+describe('phase 3 acceptance: the from-orbit colour is biome-driven, not hypsometric (#36)', () => {
+  // The renderer colours land by the categorical `biome` field (#35,
+  // planet-renderer/src/material.ts `biomePalette`), NOT by elevation. The tell
+  // that it is genuinely biome-driven — and not merely an earthlike palette that
+  // resembles the old hypsometric ramp — is that land cells at the SAME height
+  // take DIFFERENT colours (cold → tundra, dry → desert, wet → forest). A
+  // height-only ramp cannot: equal elevation ⇒ equal colour.
+  const BAND = { lo: 200, hi: 350 }; // a narrow 150 m land band
+
+  it('land at the same elevation carries several biome classes (colour tracks climate, not height)', () => {
+    for (const seed of SEEDS) {
+      const s = stepped(seed, 30, 32);
+      const classes = distinctLandBiomesInBand(s, BAND.lo, BAND.hi, (c) => s.fields.biome[c]!);
+      // Measured 5–7 classes in the 200–350 m band on every golden seed; a
+      // height-only ramp gives exactly 1. > 2 is a wide-margin gate.
+      expect(
+        classes.size,
+        `seed ${seed}: biome classes at ${BAND.lo}–${BAND.hi} m {${[...classes].sort((a, b) => a - b).join(',')}}`,
+      ).toBeGreaterThan(2);
+    }
+  });
+
+  it('the discriminator CATCHES a height-only (hypsometric) colouring — it is not vacuous', () => {
+    // Negative control: recolour by a pure function of elevation — what the
+    // pre-#35 hypsometric renderer encoded. The same narrow band collapses to
+    // ONE class, so the check above genuinely distinguishes biome from height.
+    const s = stepped(42, 30, 32);
+    const heightOnly = (c: number): number =>
+      s.fields.elevation[c]! < s.globals.seaLevelM
+        ? 0
+        : 1 + Math.floor(Math.max(0, s.fields.elevation[c]!) / 500);
+    expect(
+      distinctLandBiomesInBand(s, BAND.lo, BAND.hi, heightOnly).size,
+      'a height-only ramp collapses the band to a single class',
+    ).toBeLessThanOrEqual(1);
+  });
+});

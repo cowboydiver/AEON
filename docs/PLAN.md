@@ -166,7 +166,8 @@ decisions go to the human):
 [#44](https://github.com/cowboydiver/AEON/issues/44) specular ocean + night side ·
 [#45](https://github.com/cowboydiver/AEON/issues/45) moon, rings, star color ·
 [#46](https://github.com/cowboydiver/AEON/issues/46) HUD + camera to design deliverables ·
-[#47](https://github.com/cowboydiver/AEON/issues/47) acceptance + PHASE_5_REPORT.md
+[#47](https://github.com/cowboydiver/AEON/issues/47) acceptance + PHASE_5_REPORT.md ·
+[#83](https://github.com/cowboydiver/AEON/issues/83) on-globe climate debug views (`?view=temperature|precipitation|wind`, raised in #36; draft in `docs/phase5-backlog/on-globe-climate-debug-views.md`)
 
 ## Phase 6 — Surface exploration · [milestone](https://github.com/cowboydiver/AEON/milestone/6) · overview [#8](https://github.com/cowboydiver/AEON/issues/8)
 
