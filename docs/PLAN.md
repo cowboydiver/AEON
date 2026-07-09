@@ -168,6 +168,11 @@ decisions go to the human):
 [#46](https://github.com/cowboydiver/AEON/issues/46) HUD + camera to design deliverables ·
 [#47](https://github.com/cowboydiver/AEON/issues/47) acceptance + PHASE_5_REPORT.md
 
+Candidate (unfiled — GitHub connector was down when raised during #36; draft in
+`docs/phase5-backlog/on-globe-climate-debug-views.md`): on-globe debug views for
+the climate fields (`?view=temperature|precipitation|wind`) so the Phase 3
+systems that only feed biomes/ice today gain a direct on-globe view.
+
 ## Phase 6 — Surface exploration · [milestone](https://github.com/cowboydiver/AEON/milestone/6) · overview [#8](https://github.com/cowboydiver/AEON/issues/8)
 
 Coarsest placeholders by design; the phase is its own multi-milestone arc and

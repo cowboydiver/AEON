@@ -157,8 +157,12 @@ test('the from-orbit planet is biome-coloured with ice, and evolves across the t
   console.log(`[#36] end-of-span render: ${JSON.stringify(end)}`);
   expect(end.litFraction, `lit ${end.litFraction.toFixed(3)}`).toBeGreaterThan(0.05);
   expect(end.chromaticFraction, `chromatic ${end.chromaticFraction.toFixed(3)}`).toBeGreaterThan(0.02);
-  // Biome-driven, not a single hypsometric gradient: ocean, vegetation and
-  // arid/bare families are all present on the globe.
+  // Ocean, vegetation and arid/bare families are all present on the globe. NOTE:
+  // this is a liveness/eyeball check — hue families alone do NOT distinguish a
+  // biome ramp from a hypsometric one (both show blue/green/tan). That the land
+  // colour is genuinely biome-driven (climate, not height) is proven
+  // deterministically in the kernel: `test/invariants/phase3.test.ts` →
+  // "the from-orbit colour is biome-driven, not hypsometric".
   expect(end.hueFamilies, `biome hue families ${end.hueFamilies}`).toBeGreaterThanOrEqual(2);
   // Rain shadows read in the live render THROUGH the biome ramp: the wet windward
   // margins are vegetated (green) while the dry continental interiors / mountain
