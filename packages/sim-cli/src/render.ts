@@ -62,7 +62,7 @@ export function hypsometricColor(elevation: number, min: number, max: number): R
  */
 // Keyed by plain string, not FieldName: plateId/boundaryStress land in the
 // kernel schema in later Phase 1 issues; hints for them are inert until then.
-const RENDER_HINTS: Record<string, 'hypsometric' | 'categorical' | 'sequentialReversed' | 'diverging' | 'precip' | 'ice' | undefined> = {
+const RENDER_HINTS: Record<string, 'hypsometric' | 'categorical' | 'sequentialReversed' | 'diverging' | 'precip' | 'ice' | 'biome' | undefined> = {
   elevation: 'hypsometric',
   plateId: 'categorical',
   crustAge: 'sequentialReversed', // young crust = bright, per issue #11
@@ -79,7 +79,33 @@ const RENDER_HINTS: Record<string, 'hypsometric' | 'categorical' | 'sequentialRe
   // 0–1 scale so the caps read at the same brightness across a flipbook as they
   // advance and retreat (a per-frame min/max stretch would hide a shrinking cap).
   iceFraction: 'ice',
+  // Whittaker biome class (#35): a fixed categorical palette matching the
+  // renderer's, so a --dump biome PNG reads the same ecosystems the globe shows.
+  biome: 'biome',
 };
+
+/**
+ * Whittaker biome palette, indexed by the kernel `BIOMES` code (0..7): ocean,
+ * tundra, taiga, grassland, temperate forest, desert, savanna, tropical forest.
+ * Mirrors `planet-renderer`'s `BIOME_COLORS` (there in 0–1, here in 0–255) so the
+ * dumped field and the live globe agree; the CLASS ORDER must match `BIOMES`.
+ */
+const BIOME_DUMP_COLORS: readonly Rgb[] = [
+  [20, 71, 128], //   0 ocean
+  [140, 148, 133], // 1 tundra
+  [33, 77, 51], //    2 taiga
+  [133, 148, 71], //  3 grassland
+  [51, 107, 51], //   4 temperate forest
+  [209, 184, 122], // 5 desert
+  [184, 148, 77], //  6 savanna
+  [26, 115, 41], //   7 tropical forest
+];
+
+/** Look up a biome cell's colour, clamping any out-of-range code to ocean. */
+export function biomeColor(id: number): Rgb {
+  const k = Math.round(id);
+  return BIOME_DUMP_COLORS[k] ?? BIOME_DUMP_COLORS[0]!;
+}
 
 /** Precipitation viz reference, kg/m²/yr: values at/above map to the wettest
  *  color. Fixed (not per-frame max) so dry lee / wet windward read consistently
@@ -192,6 +218,8 @@ export function renderFieldPng(
         rgb = ramp(PRECIP_STOPS, Math.min(1, Math.max(0, value / PRECIP_VIZ_REF)));
       } else if (hint === 'ice') {
         rgb = ramp(ICE_STOPS, Math.min(1, Math.max(0, value)));
+      } else if (hint === 'biome') {
+        rgb = biomeColor(value);
       } else {
         const g = span > 0 ? ((value - min) / span) * 255 : 128;
         rgb = [g, g, g];

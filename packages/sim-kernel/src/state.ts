@@ -12,6 +12,7 @@ import type { SimEvent } from './events';
 import { FIELD_NAMES, type Fields } from './fields';
 import { DEFAULT_GRID_N, cellCount } from './grid';
 import { applyInitialPlates, type PlateRecord } from './plates';
+import { applyBiome } from './systems/biome';
 import { applyEnergyBalance } from './systems/energyBalance';
 import { applyInitialTerrain } from './systems/initialTerrain';
 import { applyMoisture } from './systems/moisture';
@@ -151,14 +152,15 @@ export function createInitialState(params: PlanetParams): PlanetState {
   };
 
   // Then the energy balance (a physical temperature field + meanTemperatureK),
-  // winds (#31) from that temperature gradient, and moisture (#32) advecting
-  // ocean evaporation along the winds to fill `precipitation` — mirroring the
-  // step pipeline order so the t=0 keyframe already carries physical
-  // temperature/wind/precipitation (the erosion input). The slow reservoirs —
-  // `ice` (#33), the derived `seaLevel` (#33) and the `carbon` CO₂ reservoir
-  // (#34) — are deliberately NOT run at init: they carry memory and start at
-  // their seed values (iceFraction 0, seaLevelM 0, co2 = initialCo2Ppm),
-  // advancing over the timeline from step 1, so the t=0 keyframe's pre-existing
-  // fields stay byte-identical to the pre-#33/#34 kernel.
-  return applyMoisture(applyWinds(applyEnergyBalance(calibrated)));
+  // winds (#31) from that temperature gradient, moisture (#32) advecting ocean
+  // evaporation along the winds to fill `precipitation` (the erosion input), and
+  // biome (#35) classifying that temperature/precipitation into `biome` — all
+  // FAST diagnostics, mirroring the step pipeline order so the t=0 keyframe
+  // already carries physical temperature/wind/precipitation/biome. The slow
+  // reservoirs — `ice` (#33), the derived `seaLevel` (#33) and the `carbon` CO₂
+  // reservoir (#34) — are deliberately NOT run at init: they carry memory and
+  // start at their seed values (iceFraction 0, seaLevelM 0, co2 = initialCo2Ppm),
+  // advancing over the timeline from step 1, so every pre-existing slow-reservoir
+  // field stays byte-identical to the pre-#33/#34 kernel.
+  return applyBiome(applyMoisture(applyWinds(applyEnergyBalance(calibrated))));
 }

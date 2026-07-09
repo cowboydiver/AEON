@@ -79,8 +79,18 @@ export function createPlanetMesh(gridN: number, radiusMeters: number): PlanetHan
     const mesh = new Mesh(
       createFaceGeometry(face, gridN),
       createPlanetMaterial(
-        { elevation: fieldsA.elevation[face]!, plateId: fieldsA.plateId[face]! },
-        { elevation: fieldsB.elevation[face]!, plateId: fieldsB.plateId[face]! },
+        {
+          elevation: fieldsA.elevation[face]!,
+          plateId: fieldsA.plateId[face]!,
+          biome: fieldsA.biome[face]!,
+          iceFraction: fieldsA.iceFraction[face]!,
+        },
+        {
+          elevation: fieldsB.elevation[face]!,
+          plateId: fieldsB.plateId[face]!,
+          biome: fieldsB.biome[face]!,
+          iceFraction: fieldsB.iceFraction[face]!,
+        },
         uniforms,
         radiusMeters,
       ),

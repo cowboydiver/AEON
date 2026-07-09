@@ -21,11 +21,14 @@ import { faceRCToIndex, neighbors, type Fields } from 'sim-kernel';
  *     filtering of 32-bit float behind the optional `float32-filterable`
  *     feature, while half-float filtering is universal. Elevation spans
  *     ±~6500 m, where half precision resolves ~4 m: invisible at display scale.
- *   - **Categorical** (`plateId`): filtered NEAREST and picked hold/nearest
- *     (`blend < 0.5 ? A : B`) — NEVER interpolated. A lerp between plate ids 3
- *     and 7 is a meaningless 5, and even linear *filtering within one set* would
- *     smear ids across cell boundaries. Small integer ids (≤ 255) are exact in
- *     half-float, so the R16F container round-trips them losslessly.
+ *   - **Categorical** (`plateId`, `biome`): filtered NEAREST and picked
+ *     hold/nearest (`blend < 0.5 ? A : B`) — NEVER interpolated. A lerp between
+ *     plate ids 3 and 7 (or biome classes 2 and 6) is a meaningless in-between,
+ *     and even linear *filtering within one set* would smear classes across cell
+ *     boundaries. Small integer codes (≤ 255) are exact in half-float, so the
+ *     R16F container round-trips them losslessly.
+ *   - `iceFraction` is continuous like elevation (linear + `mix`): it whitens
+ *     the biome colour, so it must interpolate smoothly as caps advance/retreat.
  *
  * Layout: each texture is (N+2)×(N+2) — the N×N face cells plus a 1-texel
  * border filled from the adjacent faces via the kernel's seam-aware
@@ -41,10 +44,16 @@ export interface PlanetFieldTextures {
   elevation: DataTexture[];
   /** Categorical plate id, one (N+2)² R16F texture per face 0..5 (nearest). */
   plateId: DataTexture[];
+  /** Categorical Whittaker biome class (#35), per face (nearest). Drives the
+   *  from-orbit colour ramp. */
+  biome: DataTexture[];
+  /** Continuous ice cover 0–1 (#33), per face (linear). Whitens the biome
+   *  colour; interpolates as caps advance/retreat. */
+  iceFraction: DataTexture[];
 }
 
 /** The fields a set can hold; extend (temperature, crustAge) as views need them. */
-export type BlendFieldName = keyof Pick<Fields, 'elevation' | 'plateId'>;
+export type BlendFieldName = keyof Pick<Fields, 'elevation' | 'plateId' | 'biome' | 'iceFraction'>;
 
 interface FieldSpec {
   name: BlendFieldName;
@@ -54,6 +63,8 @@ interface FieldSpec {
 const FIELD_SPECS: readonly FieldSpec[] = [
   { name: 'elevation', categorical: false },
   { name: 'plateId', categorical: true },
+  { name: 'biome', categorical: true },
+  { name: 'iceFraction', categorical: false },
 ];
 
 function makeFaceTextures(size: number, filter: MagnificationTextureFilter): DataTexture[] {
@@ -71,6 +82,8 @@ export function createPlanetTextures(gridN: number): PlanetFieldTextures {
     gridN,
     elevation: makeFaceTextures(size, LinearFilter),
     plateId: makeFaceTextures(size, NearestFilter),
+    biome: makeFaceTextures(size, NearestFilter),
+    iceFraction: makeFaceTextures(size, LinearFilter),
   };
 }
 

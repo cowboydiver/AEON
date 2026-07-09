@@ -2,6 +2,7 @@ import { copyEvents, type SimEvent } from './events';
 import { FIELD_NAMES, type Fields } from './fields';
 import { createRng, type Rng } from './rng';
 import { createInitialState, type Globals, type PlanetState, type PlanetParams } from './state';
+import { biomeSystem } from './systems/biome';
 import { carbonSystem } from './systems/carbon';
 import { energyBalanceSystem } from './systems/energyBalance';
 import { erosionSystem } from './systems/erosion';
@@ -48,8 +49,10 @@ export const identitySystem: System = {
  * at the TOP of the next step — energyBalance takes the previous step's
  * `iceFraction` (albedo), `seaLevelM` (land mask) and `co2` (greenhouse), and
  * erosion the previous `seaLevelM` (base level) — closing the feedbacks with a
- * one-step explicit lag rather than a joint solve. The remaining Phase 3 climate
- * block (biome) extends this after carbon as it lands.
+ * one-step explicit lag rather than a joint solve. Finally biome (#35) runs last
+ * of all, classifying the fully-solved temperature/precipitation over the
+ * dynamic sea-level mask into the categorical `biome` field the renderer colours
+ * the planet by; nothing downstream reads it.
  */
 export const SYSTEMS: readonly System[] = [
   tectonicsSystem,
@@ -61,6 +64,7 @@ export const SYSTEMS: readonly System[] = [
   iceSystem,
   seaLevelSystem,
   carbonSystem,
+  biomeSystem,
 ];
 
 /** Advance the state by dtYears through the ordered system pipeline. */

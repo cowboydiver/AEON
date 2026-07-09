@@ -186,8 +186,24 @@
  *     Earth-like band (a few hundred ppm) with temperatures inside the existing
  *     invariant bounds; the thermostat holds CO₂ far inside its [CO2_MIN_PPM,
  *     CO2_MAX_PPM] clamps over 4.5 Gyr (the invariant test pins no divergence).
+ * 14 — Phase 3 Whittaker biome classification (#35): a new `biome` system runs
+ *     LAST in the pipeline (after `carbon`), filling the categorical `biome`
+ *     field from a Whittaker lookup over this step's (temperature, precipitation)
+ *     with ocean its own class below the dynamic sea-level mask. It is a FAST
+ *     diagnostic (recomputed every step, no memory) and, run at init like the
+ *     other fast diagnostics, `biome` is populated at t=0 too. It writes ONLY the
+ *     `biome` field — every other field's bytes are bit-identical at t=0 and
+ *     every step (verified — the golden diff is purely the `biome` entry, which
+ *     went from all-zero to classified) — but the field-golden snapshot changed,
+ *     a deliberate regeneration owing this bump. Paired with it, the render path
+ *     finally needs the climate viz fields, so this commit also carries the §1
+ *     stored-field-set growth (deferred since bump 10): `precipitation`,
+ *     `iceFraction`, `biome`, `windU`, `windV` join `STORED_FIELDS` and
+ *     `temperature`'s codec max widens 320→330 K, bumping HISTORY_FORMAT_VERSION
+ *     1→2. That is a codec-layout change (new byte goldens) but touches no
+ *     simulation bytes; both version integers move together this once.
  */
-export const KERNEL_BEHAVIOR_VERSION = 13;
+export const KERNEL_BEHAVIOR_VERSION = 14;
 
 /** IUGG mean Earth radius, m. */
 export const EARTH_RADIUS_M = 6.371e6;
@@ -1222,6 +1238,71 @@ export const CO2_MAX_PPM = 1e6;
  * ringing — the phase's named oscillation/divergence risk.
  */
 export const CO2_MAX_CHANGE_FRAC_PER_MYR = 0.05;
+
+// --- Whittaker biome classification (#35, Phase 3) --------------------------
+// The `biome` field is a categorical Whittaker-style lookup over (temperature,
+// precipitation) that drives the renderer's from-orbit colour ramp (retiring
+// raw hypsometry). It is a FAST diagnostic (§0): recomputed every step from the
+// current climate, no memory, and — being categorical — round-trips bit-exact
+// through the codec and is nearest-picked (never lerped) at render (like
+// `plateId`). Ocean is its own class (below the sea-level mask); the remaining
+// land classes tile the Whittaker plane by two mean-annual-temperature cutoffs
+// (boreal/temperate/tropical) and precipitation cutoffs whose aridity boundary
+// rises with warmth — a coarse nod to the Whittaker diagonal (higher potential
+// evapotranspiration needs more rain to escape desert). Thresholds are the
+// classification's only tunable knobs; the palette lives in the renderer/CLI
+// (a rendering concern, like the plate hue), not here.
+
+/**
+ * Upper mean-surface-temperature bound of the TUNDRA band, °C. At or below
+ * freezing (0 °C annual mean) land is treeless tundra; the coldest cells are
+ * usually ice-whitened at render by `iceFraction` on top of this class.
+ */
+export const BIOME_TUNDRA_MAX_C = 0;
+
+/**
+ * Upper bound of the BOREAL band, °C. Between `BIOME_TUNDRA_MAX_C` and this,
+ * moist land is taiga (boreal forest); dry land in the same band falls to cold
+ * desert (the shared DESERT class) via `BIOME_ARID_MAX_PRECIP_COOL`.
+ */
+export const BIOME_BOREAL_MAX_C = 7;
+
+/**
+ * Upper bound of the TEMPERATE band, °C. Above it, land is subtropical/tropical
+ * and classified with the warm aridity/savanna cutoffs; below it (and above the
+ * boreal cutoff) land is temperate desert/grassland/forest by precipitation.
+ */
+export const BIOME_TEMPERATE_MAX_C = 20;
+
+/**
+ * Aridity cutoff in the COOL half (boreal + temperate bands), kg/m²/yr: land
+ * drier than this is desert (cold steppe/shrub). ~200 mm/yr is the conventional
+ * arid boundary in cool climates where evaporative demand is modest.
+ */
+export const BIOME_ARID_MAX_PRECIP_COOL = 200;
+
+/**
+ * Aridity cutoff in the WARM half (tropical/subtropical band), kg/m²/yr: higher
+ * than the cool cutoff because hot air's larger moisture demand keeps land arid
+ * up to more rainfall (subtropical desert extends past ~400 mm/yr). This lift is
+ * the Whittaker diagonal in discretized form.
+ */
+export const BIOME_ARID_MAX_PRECIP_WARM = 400;
+
+/**
+ * Grassland/forest split in the TEMPERATE band, kg/m²/yr: non-arid temperate
+ * land drier than this is grassland (prairie/steppe), wetter is temperate
+ * forest. ~600 mm/yr is the rough forest threshold at temperate evaporation.
+ */
+export const BIOME_TEMPERATE_FOREST_MIN_PRECIP = 600;
+
+/**
+ * Savanna/rainforest split in the TROPICAL band, kg/m²/yr: non-arid tropical
+ * land drier than this is savanna (seasonal grassland/woodland), wetter is
+ * tropical rainforest. ~1500 mm/yr separates seasonally-dry tropics from
+ * perhumid rainforest.
+ */
+export const BIOME_TROPICAL_FOREST_MIN_PRECIP = 1500;
 
 /** Default simulation step, years. Chosen so 10 steps fit one keyframe interval. */
 export const DEFAULT_STEP_YEARS = 1e6;

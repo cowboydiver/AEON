@@ -37,9 +37,15 @@ describe('codec container (#22)', () => {
     expect(decoded.version).toBe(HISTORY_FORMAT_VERSION);
     expect(decoded.count).toBe(count);
     expect(Object.keys(decoded.fields).sort()).toEqual([...STORED_FIELD_NAMES].sort());
-    // Non-stored fields (precipitation, boundaryStress, ice, biome) are absent.
+    // Derivable/crust-advected fields (boundaryStress, sutureYears, sedimentM)
+    // stay out of the render-facing stored set.
     expect(decoded.fields.boundaryStress).toBeUndefined();
-    expect(decoded.fields.precipitation).toBeUndefined();
+    expect(decoded.fields.sutureYears).toBeUndefined();
+    expect(decoded.fields.sedimentM).toBeUndefined();
+    // The Phase 3 viz fields are now stored (§1 stored-field-set growth, #35).
+    expect(decoded.fields.precipitation).toBeDefined();
+    expect(decoded.fields.iceFraction).toBeDefined();
+    expect(decoded.fields.biome).toBeDefined();
   });
 
   it('holds continuous fields within half a quantization step', () => {
@@ -47,7 +53,7 @@ describe('codec container (#22)', () => {
     const count = cellCount(state.params.gridN);
     const decoded = decodeKeyframe(encodeKeyframe(state.fields, count));
 
-    for (const name of ['elevation', 'crustAge', 'temperature'] as const) {
+    for (const name of ['elevation', 'crustAge', 'temperature', 'iceFraction'] as const) {
       const q = QUANT_TABLE[name];
       const half = quantStep(name) / 2;
       const orig = state.fields[name];
@@ -75,7 +81,7 @@ describe('codec container (#22)', () => {
     const count = cellCount(state.params.gridN);
     const decoded = decodeKeyframe(encodeKeyframe(state.fields, count));
 
-    for (const name of ['plateId', 'crustType'] as const) {
+    for (const name of ['plateId', 'crustType', 'biome'] as const) {
       const orig = state.fields[name];
       const out = decoded.fields[name]!;
       for (let i = 0; i < count; i++) {

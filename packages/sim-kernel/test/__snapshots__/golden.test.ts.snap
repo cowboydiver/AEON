@@ -3,7 +3,7 @@
 exports[`golden field hashes > seed 1: initial state and after 10 steps 1`] = `
 {
   "after10Steps": {
-    "biome": "b0549dc5",
+    "biome": "03fe7ed8",
     "boundaryStress": "94af51be",
     "crustAge": "348c1b00",
     "crustType": "5285f5b5",
@@ -19,7 +19,7 @@ exports[`golden field hashes > seed 1: initial state and after 10 steps 1`] = `
     "windV": "6f28d0e5",
   },
   "initial": {
-    "biome": "b0549dc5",
+    "biome": "a7666ca5",
     "boundaryStress": "b0549dc5",
     "crustAge": "012fbce4",
     "crustType": "10946445",
@@ -39,7 +39,7 @@ exports[`golden field hashes > seed 1: initial state and after 10 steps 1`] = `
 exports[`golden field hashes > seed 42: initial state and after 10 steps 1`] = `
 {
   "after10Steps": {
-    "biome": "b0549dc5",
+    "biome": "e2e31168",
     "boundaryStress": "3470f23d",
     "crustAge": "5df42012",
     "crustType": "8383c658",
@@ -55,7 +55,7 @@ exports[`golden field hashes > seed 42: initial state and after 10 steps 1`] = `
     "windV": "5f9a56b5",
   },
   "initial": {
-    "biome": "b0549dc5",
+    "biome": "0dfa5ef5",
     "boundaryStress": "b0549dc5",
     "crustAge": "69172c16",
     "crustType": "041eea65",
@@ -75,7 +75,7 @@ exports[`golden field hashes > seed 42: initial state and after 10 steps 1`] = `
 exports[`golden field hashes > seed 1337: initial state and after 10 steps 1`] = `
 {
   "after10Steps": {
-    "biome": "b0549dc5",
+    "biome": "887eb9b5",
     "boundaryStress": "fb4df36a",
     "crustAge": "f9bebba2",
     "crustType": "0f3eab88",
@@ -91,7 +91,7 @@ exports[`golden field hashes > seed 1337: initial state and after 10 steps 1`] =
     "windV": "0999dc75",
   },
   "initial": {
-    "biome": "b0549dc5",
+    "biome": "02ded838",
     "boundaryStress": "b0549dc5",
     "crustAge": "d7f5b05d",
     "crustType": "da81d005",
