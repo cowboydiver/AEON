@@ -111,4 +111,13 @@ export {
   weatheringPpmPerYr,
   type CarbonSolution,
 } from './systems/carbon';
+export {
+  biomeSystem,
+  applyBiome,
+  solveBiome,
+  classifyBiome,
+  BIOMES,
+  BIOME_INDICES,
+  type BiomeName,
+} from './systems/biome';
 export { cellCenterTable, neighborTable, eastNorthTable } from './grid';

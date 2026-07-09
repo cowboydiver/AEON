@@ -94,7 +94,7 @@ from it. All fields are `Float32Array` per cell.
 | `temperature`   | K          | ≈ 205 … 305      | Mean surface air temperature from the Phase 3 zonal energy balance (#30): zonal EBM profile − lapse·elevation + bounded land continentality |
 | `precipitation` | kg/m²/yr   | 0 … ~8000 (mean ~1000) | Annual precipitation from moisture transport (#32): ocean evaporation advected along the #31 winds and rained out (base + orographic). Fast diagnostic, re-solved each step, no memory. Σ = Σ evaporation (water conserved). Wettest orographic cells can exceed 8000 at coarse N |
 | `iceFraction`   | 0–1        | 0 … 1 (mean ~0.05–0.15) | Ice cover fraction from the #33 mass balance (accumulate where cold + wet, ablate where warm). A **slow** reservoir with cross-step memory; feeds the #30 ice-albedo term and, where grounded, locks ocean water to lower sea level. First departs 0 at step 1 (it advances/retreats over the timeline) |
-| `biome`         | index      | 0                | Biome class (zeros until biomes)               |
+| `biome`         | index      | 0 … 7 (categorical) | Whittaker biome class from the #35 lookup over (temperature, precipitation): `0` ocean (below the sea-level mask), then land classes `1` tundra, `2` taiga, `3` grassland, `4` temperate forest, `5` desert, `6` savanna, `7` tropical forest. Fast diagnostic, re-solved each step, no memory. **Categorical**: bit-exact through the codec, nearest-picked (never lerped) at render — drives the from-orbit colour ramp. Populated at t=0 |
 | `plateId`       | index      | 0 … numPlates−1  | Owning plate, index into `PlanetState.plates`. Small integers stored in float32 (exact up to 2^24) |
 | `crustType`     | flag       | {0, 1}           | 0 = oceanic (subductable), 1 = continental (buoyant, never subducts) |
 | `boundaryStress`| m/yr       | ≈ ±0.1, 0 interior | Signed normal closing speed at boundary cells: + convergent, − divergent, ≈0 transform. Derived, recomputed every step |
@@ -578,14 +578,18 @@ run later in the pipeline, closing the feedback with a one-step explicit lag
 rather than a per-step joint solve (erosion likewise reads the previous
 `seaLevelM` as its base level, and the energy balance the previous `co2`). The
 step order is `tectonics → wilson → erosion → energyBalance → winds → moisture →
-ice → seaLevel → carbon`, extended by `biome` as Phase 3 lands.
-`createInitialState` runs energy balance, then winds, then moisture once (after
-terrain/plates) so the t=0 keyframe already carries a physical temperature,
-prevailing-wind, and precipitation field; the slow `ice`, derived `seaLevel` and
-slow `carbon` reservoir are deliberately **not** run at init (they carry memory
-and start at their seeds — `iceFraction` 0, `seaLevelM` 0, `co2 = initialCo2Ppm`
-— advancing from step 1), so the t=0 keyframe's pre-existing field bytes are
-identical to the pre-#33/#34 kernel.
+ice → seaLevel → carbon → biome`. `biome` (#35) runs **last** of all — a fast
+diagnostic classifying the fully-solved temperature/precipitation over the
+dynamic sea-level mask into the categorical `biome` field the renderer colours
+by; nothing downstream reads it, so it never perturbs another field (its golden
+diff is purely the `biome` entry going from all-zero to classified).
+`createInitialState` runs energy balance, then winds, moisture, then biome once
+(after terrain/plates) so the t=0 keyframe already carries a physical
+temperature, prevailing-wind, precipitation and biome field; the slow `ice`,
+derived `seaLevel` and slow `carbon` reservoir are deliberately **not** run at
+init (they carry memory and start at their seeds — `iceFraction` 0, `seaLevelM`
+0, `co2 = initialCo2Ppm` — advancing from step 1), so the t=0 keyframe's
+slow-reservoir field bytes are identical to the pre-#33/#34 kernel.
 
 ### Boundary classification (#14)
 
@@ -715,30 +719,35 @@ verified against Phase 1 runs):
 |-------|--------|-------|-----------|
 | elevation | Uint16 | −11,000 … +9,500 m | ~0.31 m |
 | crustAge | Uint16 | 0 … 7.0 Gyr | ~107 kyr |
-| temperature | Uint8 | 180 … 320 K | ~0.55 K |
+| temperature | Uint8 | 180 … 330 K | ~0.59 K |
 | plateId | Uint8 | 0 … 255 exact | exact (asserts < 256) |
 | crustType | Uint8 | {0,1} exact | exact |
+| precipitation | Uint8 | 0 … 8000 kg/m²/yr | ~31 kg/m²/yr |
+| iceFraction | Uint8 | 0 … 1 | ~1/255 |
+| biome | Uint8 | 0 … 255 exact | exact (asserts < 256) |
+| windU | Uint8 | −60 … +60 m/s | ~0.47 m/s |
+| windV | Uint8 | −60 … +60 m/s | ~0.47 m/s |
 
 Continuous fields use a linear float↔uint map (out-of-range clamps to the ends);
-**categorical fields (`plateId`, `crustType`) use an identity map and round-trip
-bit-exact — they must never be interpolated** (the GPU path holds/nearest-picks
-them). `boundaryStress` is derivable and visually unused, and `biome` is still
-zero — neither is stored. `precipitation` (moisture, #32), `windU`/`windV` (#31)
-and now `iceFraction` (the ice mass balance, #33) are populated but **not stored
-yet**: all are consumed in-kernel (erosion reads precipitation; moisture reads
-the winds; the energy balance reads ice) and dumpable from the full keyframe, so
-render-time storage waits for the single §1 stored-field-set bump
-(`HISTORY_FORMAT_VERSION` 1→2, adding the Phase 3 viz fields — precipitation,
-iceFraction, biome, windU, windV — together, with the temperature range widened
-to 330 K) that the goldens-labeled renderer-facing Phase 3 work carries. #32,
-#33 and #34 regenerate the sim goldens (real precipitation replaces the proxy;
-the ice-albedo + sea-level feedbacks, then the #34 CO₂ thermostat driving the
-greenhouse, change erosion→elevation→temperature→winds within the golden window)
-but leave the codec's stored-field set and quantization untouched — the byte
-goldens shift only because the stored elevation/temperature values changed (`co2`
-is a scalar global, never a stored field). Note `EncodedKeyframe.landFraction` (a decode-free UI convenience)
+**categorical fields (`plateId`, `crustType`, `biome`) use an identity map and
+round-trip bit-exact — they must never be interpolated** (the GPU path
+holds/nearest-picks them). As of #35 the Phase 3 climate viz fields join the
+stored set — the single §1 stored-field-set growth (`HISTORY_FORMAT_VERSION`
+1→2), adding `precipitation` (#32), `iceFraction` (#33), `biome` (#35) and
+`windU`/`windV` (#31) together, with `temperature`'s max widened 320→330 K for
+hot-CO₂ states — because the renderer now needs them: `biome` drives the colour
+ramp, `iceFraction` whitens it, and the winds/precipitation ride along for Phase 5
+and `--dump`. New fields are **appended** so their on-wire `fieldId` (the
+`FIELD_NAMES` index) is stable and the header stays self-describing. Only
+`boundaryStress` (derivable, visually unused) and the crust-advected `sutureYears`
+/`sedimentM` stay out. Earlier Phase 3 bumps (#32/#33/#34) regenerated the sim
+goldens but left the stored set untouched, so their byte goldens shifted only
+because stored elevation/temperature values changed; #35 is the first to change
+the stored-field set and layout itself (new byte goldens over the grown
+container). Note `EncodedKeyframe.landFraction` (a decode-free UI convenience)
 is still recomputed against the 0 m datum, so it lags `globals.landFraction` (now
-emergent from `seaLevelM`) until the deferred sea-level shoreline render lands.
+emergent from `seaLevelM`); the rendered shoreline instead follows sea level
+through `biome`'s ocean class, which is masked at `elevation < seaLevelM`.
 Two versions gate reuse: `HISTORY_FORMAT_VERSION` (codec byte
 layout) and `KERNEL_BEHAVIOR_VERSION` (sim behavior; see below); together with
 the run params they key the keyframe cache. Codec correctness is locked by
@@ -830,11 +839,13 @@ a cached history is bit-identical to re-simulating it.
 ## Rendering (Phase 0)
 
 Six face meshes (one per cube face) share uniforms (`exaggeration`,
-`sunDirection`); each samples its own elevation `DataTexture` in a TSL node
+`sunDirection`); each samples its own field `DataTexture`s in a TSL node
 material: radial vertex displacement
-`position · (1 + elevation / radiusMeters · exaggeration)`, hypsometric color
-ramp (blues below datum, green→brown→white above), Lambert-ish lighting from
-the sun uniform.
+`position · (1 + elevation / radiusMeters · exaggeration)`, a colour ramp, and
+Lambert-ish lighting from the sun uniform. The colour ramp was hypsometric
+(blues below datum, green→brown→white above) through Phase 2; as of #35 it is
+**biome-driven** (see "Biome colour ramp" below), with only the ocean keeping a
+depth-shaded blue from elevation.
 
 Face textures are (N+2)×(N+2) **R16F** (half float filters on every WebGPU
 adapter; R32F linear filtering needs the optional `float32-filterable`
@@ -856,25 +867,45 @@ the whole planet between bracketing keyframes entirely on the GPU. Two field
 kinds, two rules (`textures.ts` carries the per-field filter and corner
 strategy; the material in `material.ts` carries the sampling rule):
 
-- **Continuous** (`elevation`): `mix(A, B, blend)`, filtered **linearly**, drives
-  both the radial vertex displacement and the hypsometric ramp — continents
-  *morph* rather than pop, and because the (N+2)² seam border is blended with the
-  *same* uniform (borders live in the same textures) no cracks open mid-blend.
-- **Categorical** (`plateId`): picked hold/nearest with `blend < 0.5 ? A : B`,
-  filtered **nearest**, and **never lerped** — a lerp between plate ids 3 and 7 is
-  a meaningless 5. Categorical borders take the neighbor id (not a mean) and
-  categorical corners the own corner cell, so ids stay valid. It drives a subtle
-  per-plate tint gated by the `plateTint` uniform (0 = pure elevation ramp), which
-  keeps plate boundaries crisp across a blend. The codec's bit-exact categorical
-  round-trip (#22) is what makes this crispness possible.
+- **Continuous** (`elevation`, `iceFraction`): `mix(A, B, blend)`, filtered
+  **linearly** — continents *morph* rather than pop, and because the (N+2)² seam
+  border is blended with the *same* uniform (borders live in the same textures) no
+  cracks open mid-blend. `elevation` drives the radial vertex displacement and the
+  ocean depth tint; `iceFraction` (#33) whitens the surface toward ice so caps
+  breathe smoothly across a boundary.
+- **Categorical** (`plateId`, `biome`): picked hold/nearest with `blend < 0.5 ? A
+  : B`, filtered **nearest**, and **never lerped** — a lerp between plate ids 3 and
+  7 (or biome classes 2 and 6) is meaningless. Categorical borders take the
+  neighbor code (not a mean) and categorical corners the own corner cell, so codes
+  stay valid. `biome` (#35) drives the base colour; `plateId` drives a subtle
+  per-plate tint gated by the `plateTint` uniform (0 = pure biome colour). The
+  codec's bit-exact categorical round-trip (#22) is what makes this crispness
+  possible.
 
 A **plate-debug toggle** (web app checkbox → `plateDebug` uniform, 0/1) swaps the
-hypsometric surface for a flat per-plate colour so the tectonic partition is
+biome surface for a flat per-plate colour so the tectonic partition is
 legible at a glance. Each plate's hue comes from `fract(id · φ⁻¹)` (golden-ratio
 stride, so consecutive ids get well-separated hues) run through a cosine palette;
 the pick is the same nearest `plateId` sample, so plate regions stay crisp and the
 overlay costs a single uniform flip (no re-upload). Radial displacement and
 Lambert shading are kept, so the plates read on the 3D globe.
+
+### Biome colour ramp (Phase 3, #35)
+
+The from-orbit base colour comes from the categorical `biome` field, not raw
+height: the nearest-picked class indexes a fixed Whittaker palette
+(`material.ts`'s `BIOME_COLORS`, mirrored 0–255 in `sim-cli`'s
+`BIOME_DUMP_COLORS`) — tundra, taiga, grassland, temperate forest, desert,
+savanna, tropical forest — so land reads by ecosystem. The **ocean class** (`0`,
+masked at `elevation < seaLevelM` in the kernel) is instead depth-shaded from
+elevation, keeping the bathymetric gradient; because that mask moves with the
+dynamic sea level, the rendered shoreline follows `seaLevelM` for free without
+the render payload carrying the scalar. `iceFraction` then whitens the result
+(land caps and sea ice alike), and the `plateTint`/`plateDebug` path is unchanged
+— it now tints/​overlays the biome colour rather than the hypsometric one. The
+`biome` and `iceFraction` textures ride the same `HISTORY_FORMAT_VERSION` 1→2
+stored-set growth (codec §), decoded and uploaded by the existing keyframe path
+with no new plumbing.
 
 Residency ping-pongs between the two sets (`residency.ts`, `KeyframeBlender`): a
 fractional scrub inside one bracket only moves the `blend` uniform (no upload, so

@@ -16,10 +16,11 @@
  * Quantization is a linear map float -> unsigned integer over a fixed range for
  * continuous fields, and an *identity* map (round, range-assert) for
  * categorical fields, which must round-trip bit-exact and never be interpolated
- * (`plateId`, `crustType`). Ranges are verified against Phase 1 reality; see
- * docs/PHASE_2_SPEC.md and the fidelity tests. Precision at the shipped ranges:
- * elevation ~0.31 m (Uint16 over −11,000…+9,500 m), crustAge ~107 kyr, and
- * temperature ~0.55 K.
+ * (`plateId`, `crustType`, `biome`). Ranges are verified against Phase 1/3
+ * reality; see docs/PHASE_2_SPEC.md and the fidelity tests. Precision at the
+ * shipped ranges: elevation ~0.31 m (Uint16 over −11,000…+9,500 m), crustAge
+ * ~107 kyr, temperature ~0.59 K (Uint8 over 180…330 K), and the Phase 3 viz
+ * fields precipitation ~31 kg/m²/yr, iceFraction ~1/255, winds ~0.47 m/s.
  */
 
 import { FIELD_NAMES, type FieldName, type Fields } from './fields';
@@ -31,8 +32,15 @@ import { keyframes } from './step';
  * Container-layout version. Bump on ANY change to the byte layout, the stored
  * field set, or a field's quantization mapping. It is one of the IndexedDB
  * cache keys (#24) — a bump invalidates every persisted keyframe.
+ *
+ * 2 — Phase 3 stored-field-set growth (#35, the §1 deferred bump): the render
+ *     path now needs the climate viz fields, so `precipitation`, `iceFraction`,
+ *     `biome`, `windU` and `windV` join `STORED_FIELDS` and `temperature`'s max
+ *     widens 320→330 K for hot-CO₂ states. The container is self-describing (the
+ *     range table travels in the header) so this is purely a cache-buster, not a
+ *     format rewrite; old histories miss and re-simulate.
  */
-export const HISTORY_FORMAT_VERSION = 1;
+export const HISTORY_FORMAT_VERSION = 2;
 
 /** Wire codes for the per-field quantized element type. */
 const FORMAT_U8 = 0;
@@ -50,17 +58,29 @@ interface FieldQuant {
 
 /**
  * The stored field set and its quantization. Insertion order is the on-wire
- * order. `precipitation` is analytic (recomputed from latitude at render),
- * `boundaryStress` is derivable and visually unused, and `iceFraction`/`biome`
- * are still zero — none are stored. Categorical ranges are the type's full
- * unsigned span; only the round/assert matters for them, not min/max.
+ * order. The Phase 3 climate viz fields join the set here (#35): `precipitation`
+ * (moisture #32), `iceFraction` (ice #33), `biome` (Whittaker #35), and the
+ * `windU`/`windV` prevailing winds (#31) — all consumed at render, biome the one
+ * that drives the from-orbit colour ramp. `biome` is CATEGORICAL (exact
+ * round-trip, never lerped — the GPU nearest-picks it like `plateId`);
+ * `iceFraction`/`precipitation`/`windU`/`windV` are continuous. `temperature`'s
+ * max widens 320→330 K for hot-CO₂ states (#34). `boundaryStress` stays out
+ * (derivable, visually unused). New fields are APPENDED so their on-wire
+ * `fieldId` (the `FIELD_NAMES` index) is stable; the header is self-describing so
+ * old bytes of the same `HISTORY_FORMAT_VERSION` still decode. Categorical ranges
+ * are the type's full unsigned span; only the round/assert matters for them.
  */
 export const QUANT_TABLE = {
   elevation: { format: 'u16', min: -11000, max: 9500, categorical: false },
   crustAge: { format: 'u16', min: 0, max: 7.0e9, categorical: false },
-  temperature: { format: 'u8', min: 180, max: 320, categorical: false },
+  temperature: { format: 'u8', min: 180, max: 330, categorical: false },
   plateId: { format: 'u8', min: 0, max: LEVELS_U8, categorical: true },
   crustType: { format: 'u8', min: 0, max: LEVELS_U8, categorical: true },
+  precipitation: { format: 'u8', min: 0, max: 8000, categorical: false },
+  iceFraction: { format: 'u8', min: 0, max: 1, categorical: false },
+  biome: { format: 'u8', min: 0, max: LEVELS_U8, categorical: true },
+  windU: { format: 'u8', min: -60, max: 60, categorical: false },
+  windV: { format: 'u8', min: -60, max: 60, categorical: false },
 } as const satisfies Partial<Record<FieldName, FieldQuant>>;
 
 export type StoredFieldName = keyof typeof QUANT_TABLE;
@@ -225,9 +245,10 @@ export function encodedKeyframeBytes(gridN: number): number {
 
 /**
  * Main-thread retained-history budget, bytes (#27). The full history's quantized
- * keyframes live in memory for scrubbing; this caps that. 0.5 GB comfortably
- * holds 4.5 Gyr @ 10 Myr @ N=128 (~0.30 GB) with headroom, and `planHistory`
- * coarsens the keyframe interval to stay under it for heavier requests.
+ * keyframes live in memory for scrubbing; this caps that. 0.5 GB holds 4.5 Gyr @
+ * 10 Myr @ N=128 (~0.50 GB now the Phase 3 viz fields are stored — 12 B/cell,
+ * up from 7) with a few MB to spare, and `planHistory` coarsens the keyframe
+ * interval to stay under it for heavier requests.
  */
 export const MAX_RETAINED_HISTORY_BYTES = 0.5 * 1024 * 1024 * 1024;
 
@@ -274,9 +295,10 @@ export interface EncodedKeyframe {
    *  the UI needn't decode to show it. NOTE: since #33 this is a *proxy* that no
    *  longer equals `PlanetState.globals.landFraction` (now emergent from the
    *  dynamic `seaLevelM`); the two diverge whenever `seaLevelM ≠ 0`. It stays on
-   *  the 0 m datum until `seaLevelM` enters the wire payload with the deferred
-   *  §1 stored-field-set / `HISTORY_FORMAT_VERSION` bump (the renderer can't draw
-   *  the moved shoreline without it either). */
+   *  the 0 m datum as a decode-free HUD convenience. The rendered shoreline no
+   *  longer needs `seaLevelM` on the wire: since #35 it follows sea level through
+   *  the stored `biome` field's ocean class (masked at `elevation < seaLevelM` in
+   *  the kernel), so only this HUD number lags the datum. */
   readonly landFraction: number;
   /** Codec container for this keyframe; a fresh ArrayBuffer, safe to transfer. */
   readonly payload: ArrayBuffer;
