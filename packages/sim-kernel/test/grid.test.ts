@@ -3,6 +3,7 @@ import {
   cellCenterDirection,
   cellCount,
   directionToIndex,
+  eastNorthTable,
   faceRCToIndex,
   faceSTToDirection,
   indexToFaceRC,
@@ -29,6 +30,28 @@ describe('index math', () => {
   it('cellCount is 6 N^2', () => {
     expect(cellCount(8)).toBe(384);
     expect(cellCount(128)).toBe(98_304);
+  });
+
+  it('eastNorthTable gives an orthonormal, correctly-oriented tangent frame', () => {
+    const N = 8;
+    const t = eastNorthTable(N);
+    for (let i = 0; i < cellCount(N); i++) {
+      const up = cellCenterDirection(i, N);
+      const east: Vec3 = [t[i * 6]!, t[i * 6 + 1]!, t[i * 6 + 2]!];
+      const north: Vec3 = [t[i * 6 + 3]!, t[i * 6 + 4]!, t[i * 6 + 5]!];
+      // Unit length and mutually orthogonal (with up too).
+      expect(Math.hypot(...east)).toBeCloseTo(1, 12);
+      expect(Math.hypot(...north)).toBeCloseTo(1, 12);
+      expect(dot(east, north)).toBeCloseTo(0, 12);
+      expect(dot(east, up)).toBeCloseTo(0, 12);
+      expect(dot(north, up)).toBeCloseTo(0, 12);
+      // east lies in the equatorial plane (no pole-axis component); north points
+      // toward the +y pole (increasing latitude); right-handed east × up = north.
+      expect(east[1]).toBeCloseTo(0, 12);
+      expect(north[1]).toBeGreaterThanOrEqual(-1e-12);
+      const eXup = cross(east, up);
+      expect(dot(eXup, north)).toBeCloseTo(1, 12);
+    }
   });
 
   it('indexToFaceRC and faceRCToIndex are inverses over the whole grid', () => {

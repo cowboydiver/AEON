@@ -167,6 +167,48 @@ export function neighborTable(N: number): Int32Array {
   return table;
 }
 
+const EAST_NORTH_TABLES = new Map<number, Float64Array>();
+
+/**
+ * Per-cell local east/north tangent basis, packed [ex,ey,ez, nx,ny,nz, ...].
+ * `east` points toward increasing longitude, `north` toward increasing latitude
+ * (the pole axis is +y, since y = sin(latitude) on this grid). This is the
+ * geometry that turns a scalar (windU east, windV north) field into a 3-D
+ * surface vector — shared truth for moisture transport (#32) and, later, cloud
+ * advection, so it lives with the grid rather than in a consumer. The two
+ * polar cells are degenerate (east undefined) and store all zeros; a consumer
+ * treats a zero basis as "no horizontal frame here". Derived, memoized per N.
+ */
+export function eastNorthTable(N: number): Float64Array {
+  let table = EAST_NORTH_TABLES.get(N);
+  if (!table) {
+    const centers = cellCenterTable(N);
+    const count = cellCount(N);
+    table = new Float64Array(count * 6);
+    for (let i = 0; i < count; i++) {
+      const ux = centers[i * 3]!;
+      const uy = centers[i * 3 + 1]!;
+      const uz = centers[i * 3 + 2]!;
+      // east = normalize(up × pole), pole = [0,1,0] ⇒ up × pole = [-uz, 0, ux].
+      const exr = -uz;
+      const ezr = ux;
+      const elen = Math.sqrt(exr * exr + ezr * ezr);
+      if (elen < 1e-12) continue; // polar cell: leave the 6-tuple zeroed
+      const ex = exr / elen;
+      const ez = ezr / elen; // ey = 0 by construction
+      // north = east × up.
+      table[i * 6] = ex;
+      table[i * 6 + 1] = 0;
+      table[i * 6 + 2] = ez;
+      table[i * 6 + 3] = -ez * uy;
+      table[i * 6 + 4] = ez * ux - ex * uz;
+      table[i * 6 + 5] = ex * uy;
+    }
+    EAST_NORTH_TABLES.set(N, table);
+  }
+  return table;
+}
+
 // --- Seam adjacency, derived from the face frames -------------------------
 
 interface EdgeMap {

@@ -62,7 +62,7 @@ export function hypsometricColor(elevation: number, min: number, max: number): R
  */
 // Keyed by plain string, not FieldName: plateId/boundaryStress land in the
 // kernel schema in later Phase 1 issues; hints for them are inert until then.
-const RENDER_HINTS: Record<string, 'hypsometric' | 'categorical' | 'sequentialReversed' | 'diverging' | undefined> = {
+const RENDER_HINTS: Record<string, 'hypsometric' | 'categorical' | 'sequentialReversed' | 'diverging' | 'precip' | undefined> = {
   elevation: 'hypsometric',
   plateId: 'categorical',
   crustAge: 'sequentialReversed', // young crust = bright, per issue #11
@@ -71,7 +71,25 @@ const RENDER_HINTS: Record<string, 'hypsometric' | 'categorical' | 'sequentialRe
   // easterly/westerly (windU) and equatorward/poleward (windV) band structure.
   windU: 'diverging',
   windV: 'diverging',
+  // Moisture-transport precipitation (#32): a dry→wet ramp on a FIXED reference
+  // (not the field's own max) so the rain shadows are not washed out by the
+  // handful of very wet orographic cells — arid tan through green to wet blue.
+  precipitation: 'precip',
 };
+
+/** Precipitation viz reference, kg/m²/yr: values at/above map to the wettest
+ *  color. Fixed (not per-frame max) so dry lee / wet windward read consistently
+ *  across a flipbook, and a lone 20,000 mm/yr orographic cell can't black out
+ *  the desert-vs-forest structure the way a min/max grayscale stretch would. */
+const PRECIP_VIZ_REF = 2500;
+
+/** Dry → wet ramp over [0,1]: arid tan, savanna, forest green, wet blue. */
+const PRECIP_STOPS = [
+  [0, [200, 178, 132]],
+  [0.3, [170, 175, 96]],
+  [0.6, [70, 150, 84]],
+  [1, [34, 94, 168]],
+] as const satisfies readonly (readonly [number, Rgb])[];
 
 function hsvToRgb(h: number, s: number, v: number): Rgb {
   const c = v * s;
@@ -158,6 +176,8 @@ export function renderFieldPng(
       } else if (hint === 'diverging') {
         const t = maxAbs > 0 ? 0.5 + (0.5 * value) / maxAbs : 0.5;
         rgb = ramp(DIVERGING_STOPS, t);
+      } else if (hint === 'precip') {
+        rgb = ramp(PRECIP_STOPS, Math.min(1, Math.max(0, value / PRECIP_VIZ_REF)));
       } else {
         const g = span > 0 ? ((value - min) / span) * 255 : 128;
         rgb = [g, g, g];

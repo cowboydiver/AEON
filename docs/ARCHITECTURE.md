@@ -92,7 +92,7 @@ from it. All fields are `Float32Array` per cell.
 | `elevation`     | m          | ≈ −6000 … +4500  | Height relative to the 0 m datum (sea level)   |
 | `crustAge`      | yr         | 0 … sim age (+2 Gyr shield offset) | Age of crust: 0 at spreading centers, +dt per step everywhere. Initial ocean gets a depth-consistent age; initial continents start at 2 Gyr |
 | `temperature`   | K          | ≈ 205 … 305      | Mean surface air temperature from the Phase 3 zonal energy balance (#30): zonal EBM profile − lapse·elevation + bounded land continentality |
-| `precipitation` | kg/m²/yr   | ≈ 100 … 1800     | Annual precipitation: static latitude-band proxy until moisture transport (#32) |
+| `precipitation` | kg/m²/yr   | 0 … ~8000 (mean ~1000) | Annual precipitation from moisture transport (#32): ocean evaporation advected along the #31 winds and rained out (base + orographic). Fast diagnostic, re-solved each step, no memory. Σ = Σ evaporation (water conserved). Wettest orographic cells can exceed 8000 at coarse N |
 | `iceFraction`   | 0–1        | 0                | Ice cover fraction (zeros until cryosphere)    |
 | `biome`         | index      | 0                | Biome class (zeros until biomes)               |
 | `plateId`       | index      | 0 … numPlates−1  | Owning plate, index into `PlanetState.plates`. Small integers stored in float32 (exact up to 2^24) |
@@ -369,7 +369,7 @@ its stream every step, so a position/time hash is the deterministic
 equivalent (documented deviation). Euler-pole wander was considered and not
 implemented.
 
-### Erosion, precipitation proxy, energy balance & winds (#19, #65, #30, #31)
+### Erosion, energy balance, winds & moisture (#19, #65, #30, #31, #32)
 
 `erosion` (after wilson): Jacobi diffusion of elevation over the 4-neighbor
 graph, continental-crust pairs only, flux ∝ height difference (slope) ×
@@ -402,11 +402,11 @@ upward — orogeny kept injecting and nothing ever left):
   at the 9 km cap — while belts welded into interiors by sutures retire to
   low relief within ~0.5–1 Gyr instead of persisting as immortal plateaus.
 
-`climateProxy` no longer runs in the step pipeline: it now owns only the
-static latitude-band `precipitation` proxy (ITCZ peak, subtropical dry belts,
-mid-latitude storm tracks, dry poles), filled once at state creation and read
-by erosion until Phase 3 moisture transport (#32) replaces it. Its temperature
-placeholder is gone — temperature is the energy balance's now.
+The precipitation erosion reads is now real: `climateProxy` (the static
+latitude-band proxy, and before that the temperature placeholder) is **deleted**,
+replaced by the `moisture` system below. Erosion reads the previous step's
+`precipitation` — a one-step lag, since moisture runs after erosion in the
+pipeline — exactly as the energy balance reads the previous step's ice/CO₂.
 
 `energyBalance` (last, #30): the Phase 3 climate hub. A Budyko–Sellers **zonal
 energy-balance model** solved on `ENERGY_BALANCE_BANDS` (90) equal-area
@@ -456,17 +456,38 @@ every other field's bytes untouched (`KERNEL_BEHAVIOR_VERSION` 10 is the
 schema-grew bump, not a physics change to existing fields). Consumed in-kernel
 by moisture transport (#32) and, in Phase 5, by cloud advection.
 
+`moisture` (after winds, #32): fills `precipitation` by an **evaporate → advect →
+precipitate** solve — rain shadows *emerge* from the transport, they are not
+painted on. Ocean cells (below the datum) inject an evaporation source scaled by
+a Clausius–Clapeyron temperature factor (warm seas evaporate more); the moisture
+column is advected along `windU`/`windV` by a **conservative upwind donor
+scheme** — each cell sheds a wind-speed-scaled fraction to the neighbours the
+wind points toward (`outFrac`, summing to 1) — and rained out at a rate `q·λ`,
+`λ` a base drizzle plus an **orographic** term that grows where the wind climbs
+toward higher land (height above sea level). A windward slope rains hard and
+depletes the column before the crest, so the lee is left in the dried-out air;
+sea air also rains out with distance inland, so continental interiors dry.
+Steady state is a **fixed-count upwind Jacobi relaxation** (sweeps ∝ N —
+`relaxSweepCount` — so the fetch is resolution-independent; a fixed schedule, not
+a `while (!converged)`), then precipitation is closed **exactly** to the
+evaporation total (`Σ precipitation = Σ evaporation`, the water-mass invariant)
+by one global scale — a uniform factor that preserves every windward/lee ratio.
+Fast diagnostic, no memory. Its output feeds erosion on the next step. (The
+wettest orographic cells can exceed the codec's future 0–8000 range at coarse N;
+that saturates visually only and never reaches erosion, which caps at
+`EROSION_PRECIP_FACTOR_MAX`. The raw field is finite and non-negative.)
+
 **Timescale split & lag (§0/§3).** Temperature is a *fast* quasi-static
 diagnostic — every step re-solves it from the current boundary conditions, it
 carries no memory. The two *slow* reservoirs it reads (ice albedo, CO₂
 greenhouse) are consumed at the top of the step as their end-of-previous-step
 values; the #33/#34 systems that update them run later in the pipeline, closing
 the feedback with a one-step explicit lag rather than a per-step joint solve.
-The step order is `tectonics → wilson → erosion → energyBalance → winds`,
-extended by `moisture → ice → seaLevel → carbon → biome` as Phase 3 lands.
-`createInitialState` runs the energy balance and then winds once (after
-terrain/plates/precip) so the t=0 keyframe already carries a physical
-temperature and prevailing-wind field.
+The step order is `tectonics → wilson → erosion → energyBalance → winds →
+moisture`, extended by `ice → seaLevel → carbon → biome` as Phase 3 lands.
+`createInitialState` runs energy balance, then winds, then moisture once (after
+terrain/plates) so the t=0 keyframe already carries a physical temperature,
+prevailing-wind, and precipitation field.
 
 ### Boundary classification (#14)
 
@@ -589,13 +610,17 @@ verified against Phase 1 runs):
 Continuous fields use a linear float↔uint map (out-of-range clamps to the ends);
 **categorical fields (`plateId`, `crustType`) use an identity map and round-trip
 bit-exact — they must never be interpolated** (the GPU path holds/nearest-picks
-them). `precipitation` is analytic (recomputed from latitude), `boundaryStress`
-is derivable and visually unused, and `iceFraction`/`biome` are still zero — none
-are stored. `windU`/`windV` (#31) are likewise not yet stored: they are consumed
-in-kernel by moisture transport (#32) and dumpable from the full keyframe, so
-render-time storage waits for the single §1 stored-field-set bump
-(`HISTORY_FORMAT_VERSION` 1→2, adding the Phase 3 viz fields together) that the
-goldens-labeled Phase 3 work carries. Two versions gate reuse: `HISTORY_FORMAT_VERSION` (codec byte
+them). `boundaryStress` is derivable and visually unused, and `iceFraction`/
+`biome` are still zero — none are stored. `precipitation` is now dynamic
+(moisture transport, #32) and `windU`/`windV` (#31) are populated, but neither is
+stored yet: both are consumed in-kernel (erosion reads precipitation; moisture
+reads the winds) and dumpable from the full keyframe, so render-time storage
+waits for the single §1 stored-field-set bump (`HISTORY_FORMAT_VERSION` 1→2,
+adding the Phase 3 viz fields — precipitation, iceFraction, biome, windU, windV —
+together, with the temperature range widened to 330 K) that the goldens-labeled
+renderer-facing Phase 3 work carries; #32 regenerates the sim goldens (real
+precipitation replaces the proxy, changing erosion→elevation→temperature→winds)
+but leaves the codec's stored-field set and quantization untouched. Two versions gate reuse: `HISTORY_FORMAT_VERSION` (codec byte
 layout) and `KERNEL_BEHAVIOR_VERSION` (sim behavior; see below); together with
 the run params they key the keyframe cache. Codec correctness is locked by
 byte-level goldens over encoded keyframes plus round-trip fidelity tests (Spike A
