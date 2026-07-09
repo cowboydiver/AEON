@@ -3,6 +3,7 @@ import { FIELD_NAMES, type Fields } from './fields';
 import { createRng, type Rng } from './rng';
 import { createInitialState, type Globals, type PlanetState, type PlanetParams } from './state';
 import { biomeSystem } from './systems/biome';
+import { blockIsostasySystem } from './systems/blockIsostasy';
 import { carbonSystem } from './systems/carbon';
 import { energyBalanceSystem } from './systems/energyBalance';
 import { erosionSystem } from './systems/erosion';
@@ -58,6 +59,10 @@ export const SYSTEMS: readonly System[] = [
   tectonicsSystem,
   wilsonSystem,
   erosionSystem,
+  // Crustal-block isostasy (#84, default-off prototype): after erosion so it
+  // caps the fully-reworked relief, before the climate stack so temperature/
+  // winds/moisture see the capped elevation. Identity when the param is off.
+  blockIsostasySystem,
   energyBalanceSystem,
   windsSystem,
   moistureSystem,

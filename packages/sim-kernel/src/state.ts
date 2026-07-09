@@ -36,6 +36,13 @@ export interface PlanetParams {
   obliquityDeg: number;
   /** Atmospheric CO₂ reservoir seed (#30 greenhouse; #34 evolves it), ppm. */
   initialCo2Ppm: number;
+  /**
+   * Enable the crustal-block isostasy system (#84 prototype): per-component
+   * elevation ceilings that founder small continental blocks. Default OFF —
+   * flag-off runs are byte-identical to the pre-#84 kernel (goldens
+   * unchanged); flip on via sim-cli --block-isostasy for A/B measurement.
+   */
+  blockIsostasy: boolean;
 }
 
 /** Scalar whole-planet quantities, updated by systems as they run. */
@@ -104,6 +111,7 @@ export function createPlanetParams(partial: Partial<PlanetParams> & { seed: numb
     dayLengthHours: EARTH_DAY_HOURS,
     obliquityDeg: EARTH_OBLIQUITY_DEG,
     initialCo2Ppm: INITIAL_CO2_PPM,
+    blockIsostasy: false,
     ...partial,
   };
 }

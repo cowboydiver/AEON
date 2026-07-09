@@ -28,6 +28,9 @@ export interface HistoryCacheConfig {
   gridN: number;
   untilYears: number;
   keyframeIntervalYears: number;
+  /** Crustal-block isostasy prototype (#84). Part of the key so a flag-on
+   *  run never hydrates from a flag-off history or vice versa. */
+  blockIsostasy: boolean;
 }
 
 /** A keyframe as stored/returned: metadata plus the still-encoded payload. */
@@ -63,6 +66,9 @@ export function historyCacheKey(cfg: HistoryCacheConfig): string {
     cfg.keyframeIntervalYears,
     HISTORY_FORMAT_VERSION,
     KERNEL_BEHAVIOR_VERSION,
+    // Appended only when on, so existing cached flag-off histories keep
+    // matching their pre-#84 keys.
+    ...(cfg.blockIsostasy ? ['iso'] : []),
   ].join(':');
 }
 

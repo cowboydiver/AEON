@@ -32,6 +32,16 @@ export interface KeyframeMetrics {
   contComponents: number;
   largestCompFrac: number;
   edgeToArea: number;
+  /**
+   * Connected components of emergent LAND (elevation >= the keyframe's
+   * dynamic sea level) under 4-adjacency (#84). The crustType metrics above
+   * are blind to the block-isostasy founder by design (foundering keeps the
+   * crustal ledger intact); the user-visible "tall-island confetti"
+   * complaint is about land, so land gets its own shape numbers.
+   */
+  landComponents: number;
+  /** The largest land component's share of land area (#84). */
+  largestLandCompFrac: number;
 }
 
 /** Threshold below which a keyframe counts as dispersed (findings tables). */
@@ -94,6 +104,39 @@ export function computeKeyframeMetrics(keyframe: Keyframe, gridN: number): Keyfr
     if (size > largest) largest = size;
   }
 
+  // Land components (#84): same BFS over the emergent-land mask, measured
+  // against the keyframe's dynamic sea level (#33) — the mask the viewer
+  // actually sees. (landFrac above keeps its historical 0 m-datum definition;
+  // the findings tables were computed with it — don't rebaseline.)
+  const seaLevel = keyframe.globals.seaLevelM;
+  const isLand = (i: number): boolean => elevation[i]! >= seaLevel;
+  seen.fill(0);
+  let landComponents = 0;
+  let largestLand = 0;
+  let landCells = 0;
+  for (let i = 0; i < count; i++) {
+    if (!isLand(i) || seen[i]) continue;
+    landComponents++;
+    let size = 0;
+    let head = 0;
+    let tail = 0;
+    queue[tail++] = i;
+    seen[i] = 1;
+    while (head < tail) {
+      const c = queue[head++]!;
+      size++;
+      for (let k = 0; k < 4; k++) {
+        const nb = nbTable[c * 4 + k]!;
+        if (isLand(nb) && !seen[nb]) {
+          seen[nb] = 1;
+          queue[tail++] = nb;
+        }
+      }
+    }
+    landCells += size;
+    if (size > largestLand) largestLand = size;
+  }
+
   return {
     timeYears: keyframe.timeYears,
     landFrac: land / count,
@@ -102,6 +145,8 @@ export function computeKeyframeMetrics(keyframe: Keyframe, gridN: number): Keyfr
     contComponents: components,
     largestCompFrac: cont > 0 ? largest / cont : 0,
     edgeToArea: cont > 0 ? edges / cont : 0,
+    landComponents,
+    largestLandCompFrac: landCells > 0 ? largestLand / landCells : 0,
   };
 }
 
@@ -183,12 +228,19 @@ export function summarizeMetrics(
         `, edge/area ${mean(late.map((m) => m.edgeToArea)).toFixed(3)}` +
         `, cont crust ${mean(late.map((m) => m.contFrac)).toFixed(3)} of sphere`,
     );
+    lines.push(
+      `metrics: land shape past ${SHAPE_METRICS_AFTER_YEARS / 1e9} Gyr:` +
+        ` land components ${mean(late.map((m) => m.landComponents)).toFixed(0)}` +
+        `, largest land comp ${mean(late.map((m) => m.largestLandCompFrac)).toFixed(3)} of land area`,
+    );
   }
   lines.push(
     `metrics: final frame: cont components ${final.contComponents}` +
       `, largest comp ${final.largestCompFrac.toFixed(3)}` +
       `, edge/area ${final.edgeToArea.toFixed(3)}` +
-      `, land ${(final.landFrac * 100).toFixed(1)}%`,
+      `, land ${(final.landFrac * 100).toFixed(1)}%` +
+      `, land components ${final.landComponents}` +
+      `, largest land comp ${final.largestLandCompFrac.toFixed(3)}`,
   );
   return lines.join('\n');
 }

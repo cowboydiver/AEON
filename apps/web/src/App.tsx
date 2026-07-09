@@ -14,9 +14,11 @@ const DEFAULT_UNTIL_YEARS = 4.5e9;
 const DEFAULT_KEYFRAME_INTERVAL_YEARS = 10e6;
 
 /** Optional URL knobs: `?seed=N` deep-links a planet, `?until=Y` shortens the
- *  history span (years) — handy for a quick look and for a fast cache e2e. */
-function readUrlParams(): { seed: number; untilYears: number } {
-  const fallback = { seed: DEFAULT_SEED, untilYears: DEFAULT_UNTIL_YEARS };
+ *  history span (years) — handy for a quick look and for a fast cache e2e —
+ *  and `?iso=1` enables the crustal-block isostasy prototype (#84) for
+ *  side-by-side visual inspection against the default kernel. */
+function readUrlParams(): { seed: number; untilYears: number; blockIsostasy: boolean } {
+  const fallback = { seed: DEFAULT_SEED, untilYears: DEFAULT_UNTIL_YEARS, blockIsostasy: false };
   if (typeof window === 'undefined') return fallback;
   const params = new URLSearchParams(window.location.search);
   const seed = Number(params.get('seed'));
@@ -24,6 +26,7 @@ function readUrlParams(): { seed: number; untilYears: number } {
   return {
     seed: Number.isFinite(seed) && params.has('seed') ? Math.trunc(seed) : DEFAULT_SEED,
     untilYears: Number.isFinite(until) && until > 0 ? until : DEFAULT_UNTIL_YEARS,
+    blockIsostasy: params.get('iso') === '1',
   };
 }
 
@@ -45,6 +48,7 @@ export function App() {
       gridN: DEFAULT_GRID_N,
       untilYears: plan.untilYears,
       keyframeIntervalYears: plan.keyframeIntervalYears,
+      blockIsostasy: url.blockIsostasy,
     });
 
   useEffect(() => {
@@ -146,6 +150,14 @@ export function App() {
             {done
               ? `${progress.keyframesEmitted} keyframes`
               : `${((progress.currentYears / progress.untilYears) * 100).toFixed(0)}%`}
+          </span>
+        ) : null}
+        {url.blockIsostasy ? (
+          <span
+            title="Crustal-block isostasy prototype enabled (#84) — remove ?iso=1 for the default kernel"
+            style={{ opacity: 0.6, color: '#c08de0' }}
+          >
+            iso
           </span>
         ) : null}
         {source === 'cache' ? (

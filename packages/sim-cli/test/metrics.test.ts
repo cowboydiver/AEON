@@ -66,6 +66,28 @@ describe('computeKeyframeMetrics', () => {
     expect(m.edgeToArea).toBe(0);
   });
 
+  it('counts land components against the dynamic sea level (#84)', () => {
+    const kf = emptyKeyframe(0);
+    kf.globals.seaLevelM = 50;
+    // Component A: a 2x2 emergent block on face 0.
+    for (const [r, c] of [
+      [MID, MID],
+      [MID, MID + 1],
+      [MID + 1, MID],
+      [MID + 1, MID + 1],
+    ] as const) {
+      kf.fields.elevation[faceRCToIndex(0, r, c, N)] = 100;
+    }
+    // Component B: a singleton exactly at sea level (>= counts as land).
+    kf.fields.elevation[faceRCToIndex(1, MID, MID, N)] = 50;
+    // Below the dynamic sea level but above the 0 m datum: NOT land.
+    kf.fields.elevation[faceRCToIndex(2, MID, MID, N)] = 20;
+
+    const m = metricsOf(kf);
+    expect(m.landComponents).toBe(2);
+    expect(m.largestLandCompFrac).toBeCloseTo(4 / 5, 10);
+  });
+
   it('computes land fraction and max plate fraction', () => {
     const kf = emptyKeyframe(0);
     const count = cellCount(N);
@@ -88,6 +110,8 @@ describe('summarizeMetrics', () => {
     contComponents: 10,
     largestCompFrac: 0.5,
     edgeToArea: 1,
+    landComponents: 12,
+    largestLandCompFrac: 0.4,
   });
 
   it('reports the longest monopoly window in sim time (first-to-last monopoly keyframe)', () => {
