@@ -270,8 +270,13 @@ export interface EncodedKeyframe {
   /** 0-based index in emission order (0 = initial state). */
   readonly index: number;
   readonly timeYears: number;
-  /** Fraction of cells above the 0 m datum — derived from elevation, same as
-   *  `PlanetState.globals.landFraction`, so the UI needn't decode to show it. */
+  /** Fraction of cells above the fixed 0 m datum — derived from elevation, so
+   *  the UI needn't decode to show it. NOTE: since #33 this is a *proxy* that no
+   *  longer equals `PlanetState.globals.landFraction` (now emergent from the
+   *  dynamic `seaLevelM`); the two diverge whenever `seaLevelM ≠ 0`. It stays on
+   *  the 0 m datum until `seaLevelM` enters the wire payload with the deferred
+   *  §1 stored-field-set / `HISTORY_FORMAT_VERSION` bump (the renderer can't draw
+   *  the moved shoreline without it either). */
   readonly landFraction: number;
   /** Codec container for this keyframe; a fresh ArrayBuffer, safe to transfer. */
   readonly payload: ArrayBuffer;

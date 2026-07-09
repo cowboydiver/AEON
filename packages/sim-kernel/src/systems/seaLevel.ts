@@ -17,7 +17,10 @@
  * Only ice on cells standing above sea level is *grounded* and locks water out;
  * floating **sea ice** (on cells below sea level) already displaces its own
  * water (Archimedes) and does not change the level — it whitens the albedo (#30)
- * but not the shoreline. The ocean-volume function is continuous and monotonic
+ * but not the shoreline. Grounded ice is capped at the total inventory (it can
+ * never lock more water than exists), so the water-mass invariant holds in every
+ * regime — a fully glaciated world runs the ocean dry rather than over-locking.
+ * The ocean-volume function is continuous and monotonic
  * in sea level, so the solve is a FIXED-count bisection (deterministic — never a
  * `while (!converged)`), and `landFraction` is recomputed as the emergent share
  * of cells standing above the solved level. Pure: a function of `elevation`, the
@@ -131,12 +134,17 @@ export function solveSeaLevelState(state: PlanetState): SeaLevelSolution {
   const prevSeaLevel = state.globals.seaLevelM;
 
   // Water-equivalent locked in GROUNDED ice (cells above the shoreline); sea
-  // ice floats and locks nothing.
+  // ice floats and locks nothing. Capped at the total inventory: ice can never
+  // lock more water than exists, so a runaway (all-glaciated) world runs the
+  // ocean dry rather than manufacturing phantom water — which keeps the
+  // water-mass invariant (ocean + locked = inventory) exact in every regime.
+  // The cap is a no-op at any physical ice load (locked ≪ inventory).
   let lockedSum = 0;
   for (let i = 0; i < count; i++) {
     if (elevation[i]! >= prevSeaLevel) lockedSum += iceFraction[i]! * ICE_SHEET_WATER_EQUIV_M;
   }
-  const lockedIceEquivM = lockedSum / count;
+  const rawLocked = lockedSum / count;
+  const lockedIceEquivM = rawLocked > state.globals.waterInventoryM ? state.globals.waterInventoryM : rawLocked;
   const targetOceanMean = state.globals.waterInventoryM - lockedIceEquivM;
 
   const seaLevelM = solveSeaLevel(elevation, count, targetOceanMean);

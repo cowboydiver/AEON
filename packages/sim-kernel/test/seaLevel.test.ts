@@ -140,11 +140,23 @@ describe('seaLevel: conservation and coupling (#33)', () => {
 
   it('locks water in proportion to the ice water-equivalent constant', () => {
     // A single fully-iced grounded cell locks ICE_SHEET_WATER_EQUIV_M / count.
+    // The inventory is comfortably above that, so the locked-ice cap is inert.
     const N = 4;
     const count = cellCount(N);
-    const state = bathyState(N, (i) => ({ elev: 500, ice: i === 0 ? 1 : 0 }), 0, 0);
+    const state = bathyState(N, (i) => ({ elev: 500, ice: i === 0 ? 1 : 0 }), 1000, 0);
     const sol = solveSeaLevelState(state);
     expect(sol.lockedIceEquivM).toBeCloseTo(ICE_SHEET_WATER_EQUIV_M / count, 6);
+  });
+
+  it('caps grounded ice at the inventory (a fully glaciated world runs the ocean dry)', () => {
+    // Inventory smaller than the ice would lock: locked is capped at the
+    // inventory, the ocean empties, and the water-mass invariant still closes.
+    const N = 4;
+    const state = bathyState(N, () => ({ elev: 500, ice: 1 }), 5, 0);
+    const sol = solveSeaLevelState(state);
+    expect(sol.lockedIceEquivM).toBeCloseTo(5, 6); // capped at the inventory
+    expect(sol.oceanEquivM).toBeCloseTo(0, 6); // no liquid ocean left
+    expect(sol.oceanEquivM + sol.lockedIceEquivM).toBeCloseTo(state.globals.waterInventoryM, 6);
   });
 
   it('is deterministic and does not mutate the input', () => {
