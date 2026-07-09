@@ -42,6 +42,7 @@ async function streamHistory(req: RunHistoryRequest): Promise<void> {
     seed: req.seed,
     gridN: req.gridN,
     keyframeIntervalYears: req.keyframeIntervalYears,
+    blockIsostasy: req.blockIsostasy,
   });
 
   let emitted = 0;

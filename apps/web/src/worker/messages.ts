@@ -16,6 +16,8 @@ export interface RunHistoryRequest {
   gridN: number;
   untilYears: number;
   keyframeIntervalYears: number;
+  /** Crustal-block isostasy prototype (#84), the default-off kernel param. */
+  blockIsostasy: boolean;
 }
 
 /** Main thread -> worker: stop the given in-flight request if still active. */
