@@ -137,8 +137,32 @@
  *     temperature values changed; both are regenerated. Water mass is conserved
  *     across evaporate/transport/precipitate (Σ precipitation = Σ evaporation to
  *     float tolerance — the invariant test pins it).
+ * 12 — Phase 3 sea level + ice sheets (#33): two new slow-reservoir/derived
+ *     systems, `ice` then `seaLevel`, run after `moisture`. `ice` integrates the
+ *     `iceFraction` field with dt from a mass balance (accumulation where cold +
+ *     wet, ablation where warm), the first field in the kernel that carries
+ *     genuine cross-step memory in the climate block. `seaLevel` solves the
+ *     global `seaLevelM` each step from a conserved water inventory minus the
+ *     grounded-ice-locked volume against the hypsometric curve (fixed-count
+ *     bisection), and `landFraction` becomes emergent from it. The ice-albedo
+ *     hook in the energy balance (#30) now reads real `iceFraction` — closing
+ *     the feedback that makes snowballs reachable — and `energyBalance`/
+ *     `moisture`/`erosion` read the previous step's `seaLevelM` for their
+ *     land/ocean tests (the same explicit lag the energy balance already uses
+ *     for ice/CO₂). At t=0 `seaLevelM = 0` (the inventory is calibrated from the
+ *     initial coastline) and `iceFraction = 0`, so every pre-existing field is
+ *     byte-identical at init; `iceFraction` first departs zero at step 1 and the
+ *     coupled fields (temperature via albedo, elevation via sea-level-shifted
+ *     erosion, then precipitation/winds downstream) depart from step 2, so the
+ *     10-step field goldens and the codec BYTE goldens are regenerated
+ *     deliberately in the same commit. The codec's stored-field SUBSET and
+ *     quantization are unchanged (`iceFraction` is dumpable from the full
+ *     keyframe and its render-time storage rides the deferred §1
+ *     HISTORY_FORMAT_VERSION 1→2 bump, as in bumps 10/11). Total water is
+ *     conserved (ocean liquid volume + grounded-ice water-equivalent = the
+ *     init inventory, to float tolerance — the invariant test pins it).
  */
-export const KERNEL_BEHAVIOR_VERSION = 11;
+export const KERNEL_BEHAVIOR_VERSION = 12;
 
 /** IUGG mean Earth radius, m. */
 export const EARTH_RADIUS_M = 6.371e6;
@@ -939,6 +963,106 @@ export const MOIST_PRECIP_SATURATION = 0.25;
 export const MOIST_RELAX_SWEEPS_AT_REF = 24;
 export const MOIST_RELAX_SWEEPS_REF_N = 128;
 export const MOIST_RELAX_SWEEPS_MIN = 6;
+
+// --- Sea level & ice sheets (#33, Phase 3) ----------------------------------
+
+/**
+ * Freezing point of water, K (0 °C) — the anchor of the ice mass balance. The
+ * equilibrium ice cover a cell relaxes toward is 0 at (and above) this
+ * temperature and grows as it cools below it; melt (ablation) acts above it.
+ */
+export const ICE_FREEZE_TEMP_K = 273.15;
+
+/**
+ * Temperature below freezing at which the equilibrium ice cover a cell relaxes
+ * toward reaches full (fraction 1), K. Crucially WIDE (not a sharp ice line):
+ * the target ramps `clamp((freeze − T)/this, 0, 1)`, so a cell 10 K below
+ * freezing equilibrates near 1/4 cover, not full white. Spreading the
+ * ice-albedo transition over tens of K is what keeps the ice-albedo feedback
+ * (#30) SUBCRITICAL at default Earth params — a sharp saturating ice line makes
+ * `d(albedo)/dT` large enough for a runaway, and measurably snowballs seeds
+ * {1,42,1337} by ~1 Gyr; this graded target instead settles to stable partial
+ * polar caps. A much colder perturbation (fainter star / low CO₂, #34) still
+ * drives the target toward 1 everywhere, so a snowball stays reachable — the
+ * bistability lives in the coupled feedback, not in a hard threshold here.
+ */
+export const ICE_FULL_COVER_BELOW_K = 40;
+
+/**
+ * Relaxation rate toward the (higher) equilibrium cover when a cell is growing
+ * ice, per year, at unit moisture supply. Sized so a cold, well-supplied cell
+ * closes most of its gap to equilibrium over ~15–25 Myr — gradual on the 10 Myr
+ * keyframe cadence (caps thicken/advance over several keyframes, not in a step),
+ * which keeps the explicit-lag feedback smooth rather than oscillatory.
+ * dt-correct: the per-step change uses `1 − exp(−rate·dt)`, so a coarser
+ * `stepYears` rescales the approach, not the trajectory.
+ */
+export const ICE_ACCUM_RATE_PER_YR = 7e-8;
+
+/**
+ * Precipitation giving unit snow supply on land, kg/m²/yr. Land ice growth is
+ * moisture-limited — the "wet" half of "cold + wet": a bone-dry cold interior
+ * (rain-shadow desert) grows ice slowly, a cold wet coast fast. Supply is
+ * `min(precip / ref, SUPPLY_MAX)` and scales the growth RATE (a dry cold cell
+ * still glaciates, just over far longer). Ocean cells sit over open water and
+ * are always saturated (supply fixed at 1), so sea ice is temperature-limited.
+ */
+export const ICE_ACCUM_PRECIP_REF = 500;
+
+/** Cap on the land moisture-supply factor, so a monsoon coast cannot grow ice
+ *  arbitrarily fast; ocean supply is fixed at 1 and unaffected by this. */
+export const ICE_ACCUM_SUPPLY_MAX = 1.5;
+
+/**
+ * Baseline retreat rate toward the (lower) equilibrium cover when a cell is
+ * losing ice, per year — sublimation / ice flow that lets a marginal cap recede
+ * even at sub-freezing air temperature. Comparable to the growth rate so caps
+ * breathe symmetrically over the timeline.
+ */
+export const ICE_MELT_RATE_PER_YR = 6e-8;
+
+/**
+ * Extra retreat rate per K above freezing, 1/(yr·K) — the positive degree-day
+ * melt law (ablation ∝ warmth). Added to `ICE_MELT_RATE_PER_YR` so a cell a few
+ * K above freezing sheds ice much faster than any plausible supply builds it,
+ * pinning the warm edge of the ice margin near the freezing isotherm and
+ * retreating caps briskly when the climate warms. dt-correct like growth.
+ */
+export const ICE_ABLATION_RATE_PER_YR_PER_K = 3e-8;
+
+/**
+ * Maximum change in `iceFraction` a single step may apply, per Myr of step —
+ * a stability rate-limit on the explicit-lag feedback (§5), converted to the
+ * actual step with `× dt`. Ice normally moves far slower than this; the cap
+ * only bites on a pathological transient (e.g. a huge coarse-grid step into a
+ * just-frozen ocean), preventing a 0→1 slam that would make the albedo
+ * feedback overshoot. Expressed per-Myr and scaled by dt so it stays
+ * dt-consistent across step sizes.
+ */
+export const ICE_MAX_FRACTION_CHANGE_PER_MYR = 0.25;
+
+/**
+ * Water-equivalent thickness of a fully ice-covered (`iceFraction = 1`) land
+ * cell, m — the lever that converts ice cover into locked ocean water and thus
+ * a sea-level drop. A grounded ice sheet of this thickness withdraws its water
+ * from the ocean (floating sea ice does not — Archimedes). 600 m over caps
+ * covering ~10–15% of the surface gives an LGM-scale (~100 m) sea-level swing,
+ * so the coastline visibly breathes without flooding/exposing implausibly.
+ * Only ice on cells above `seaLevelM` (grounded) counts; sea ice is buoyant.
+ */
+export const ICE_SHEET_WATER_EQUIV_M = 600;
+
+/**
+ * Fixed bisection iteration count for the sea-level solve. The hypsometric
+ * ocean-volume function is continuous and monotonic in sea level, so bisection
+ * over the elevation range converges geometrically; 40 iterations pin a
+ * ~20 km elevation bracket to ~2e-8 m — far below any physical or float32
+ * relevance, and each iteration is a full-cell sweep, so the count is kept as
+ * low as precision allows to stay inside the kernel's test-time budget. A FIXED
+ * count (not a convergence test) keeps the solve deterministic — same seed +
+ * params ⇒ bit-identical `seaLevelM` on every machine.
+ */
+export const SEA_LEVEL_SOLVE_ITERATIONS = 40;
 
 /** Default simulation step, years. Chosen so 10 steps fit one keyframe interval. */
 export const DEFAULT_STEP_YEARS = 1e6;

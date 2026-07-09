@@ -93,7 +93,7 @@ from it. All fields are `Float32Array` per cell.
 | `crustAge`      | yr         | 0 … sim age (+2 Gyr shield offset) | Age of crust: 0 at spreading centers, +dt per step everywhere. Initial ocean gets a depth-consistent age; initial continents start at 2 Gyr |
 | `temperature`   | K          | ≈ 205 … 305      | Mean surface air temperature from the Phase 3 zonal energy balance (#30): zonal EBM profile − lapse·elevation + bounded land continentality |
 | `precipitation` | kg/m²/yr   | 0 … ~8000 (mean ~1000) | Annual precipitation from moisture transport (#32): ocean evaporation advected along the #31 winds and rained out (base + orographic). Fast diagnostic, re-solved each step, no memory. Σ = Σ evaporation (water conserved). Wettest orographic cells can exceed 8000 at coarse N |
-| `iceFraction`   | 0–1        | 0                | Ice cover fraction (zeros until cryosphere)    |
+| `iceFraction`   | 0–1        | 0 … 1 (mean ~0.05–0.15) | Ice cover fraction from the #33 mass balance (accumulate where cold + wet, ablate where warm). A **slow** reservoir with cross-step memory; feeds the #30 ice-albedo term and, where grounded, locks ocean water to lower sea level. First departs 0 at step 1 (it advances/retreats over the timeline) |
 | `biome`         | index      | 0                | Biome class (zeros until biomes)               |
 | `plateId`       | index      | 0 … numPlates−1  | Owning plate, index into `PlanetState.plates`. Small integers stored in float32 (exact up to 2^24) |
 | `crustType`     | flag       | {0, 1}           | 0 = oceanic (subductable), 1 = continental (buoyant, never subducts) |
@@ -369,7 +369,7 @@ its stream every step, so a position/time hash is the deterministic
 equivalent (documented deviation). Euler-pole wander was considered and not
 implemented.
 
-### Erosion, energy balance, winds & moisture (#19, #65, #30, #31, #32)
+### Erosion, energy balance, winds, moisture, ice & sea level (#19, #65, #30, #31, #32, #33)
 
 `erosion` (after wilson): Jacobi diffusion of elevation over the 4-neighbor
 graph, continental-crust pairs only, flux ∝ height difference (slope) ×
@@ -408,15 +408,17 @@ replaced by the `moisture` system below. Erosion reads the previous step's
 `precipitation` — a one-step lag, since moisture runs after erosion in the
 pipeline — exactly as the energy balance reads the previous step's ice/CO₂.
 
-`energyBalance` (last, #30): the Phase 3 climate hub. A Budyko–Sellers **zonal
+`energyBalance` (#30): the Phase 3 climate hub. A Budyko–Sellers **zonal
 energy-balance model** solved on `ENERGY_BALANCE_BANDS` (90) equal-area
 latitude bands (uniform in sin φ). Per band: absorbed shortwave =
 annual-mean insolation × co-albedo, where insolation is
 `starLuminosity / (4π·d²)` shaped by the obliquity-dependent annual-mean
 latitudinal profile (a fixed function of `obliquityDeg`, memoized per run — no
 seasonal cycle, §7.2) and albedo is the cell-count mean of per-cell planetary
-albedo (ocean/land keyed off the sea-level datum, blended toward `ALBEDO_ICE`
-by `iceFraction` — the **#33 ice-albedo hook**, reading zeros until #33). This
+albedo (ocean/land keyed off the **dynamic sea level** `elevation ≥ seaLevelM`,
+blended toward `ALBEDO_ICE` by `iceFraction` — the **#33 ice-albedo feedback**,
+now reading the real ice field the `ice` system integrates, which is what makes
+snowball states reachable). This
 is balanced against a **linear OLR** closure `A + B·(T − 273.15)` whose
 intercept drops by `CO2_FORCING·ln(co2 / CO2_REFERENCE_PPM)` — the **#34
 greenhouse hook**, reading `globals.co2` (constant `initialCo2Ppm` until #34) —
@@ -429,7 +431,13 @@ precision** (the #30 invariant). The zonal profile maps to the per-cell
 `temperature` field as `zonal(lat) − lapse·max(0, elevation) +` a bounded land
 continentality term (land amplifies its departure from the global-mean zonal
 temperature, clamped to ±`CONTINENTALITY_MAX_K`); `globals.meanTemperatureK` is
-the cell-count-mean surface temperature (a diagnostic).
+the cell-count-mean surface temperature (a diagnostic). The **lapse keys off
+absolute altitude above the fixed 0 m datum, not `seaLevelM`** — atmospheric
+altitude tracks the solid surface, and keying it to a sea level that swings
+kilometres as ocean basins mature would spuriously cool/warm the whole planet;
+`seaLevelM` (#33) governs only the land/ocean **mask** here (which cells are land
+for albedo and the continentality term) and is read as the *previous* step's
+value, the same one-step lag as ice/CO₂.
 
 `winds` (after energyBalance, #31): the prevailing surface wind field
 `windU`/`windV`, a deterministic **band model** (not a fluid solve, §6). Two
@@ -458,7 +466,7 @@ by moisture transport (#32) and, in Phase 5, by cloud advection.
 
 `moisture` (after winds, #32): fills `precipitation` by an **evaporate → advect →
 precipitate** solve — rain shadows *emerge* from the transport, they are not
-painted on. Ocean cells (below the datum) inject an evaporation source scaled by
+painted on. Ocean cells (below the dynamic sea level) inject an evaporation source scaled by
 a Clausius–Clapeyron temperature factor (warm seas evaporate more); the moisture
 column is advected along `windU`/`windV` by a **conservative upwind donor
 scheme** — each cell sheds a wind-speed-scaled fraction to the neighbours the
@@ -477,17 +485,59 @@ wettest orographic cells can exceed the codec's future 0–8000 range at coarse 
 that saturates visually only and never reaches erosion, which caps at
 `EROSION_PRECIP_FACTOR_MAX`. The raw field is finite and non-negative.)
 
+`ice` (after moisture, #33): integrates `iceFraction` — the first climate
+reservoir with genuine **cross-step memory** (a *slow* reservoir, dt-integrated,
+not a fast diagnostic). Each cell relaxes toward a temperature-set **equilibrium
+cover** `coldFrac(T)` that ramps 0 → 1 over a deliberately WIDE band below
+freezing (`ICE_FULL_COVER_BELOW_K`): a sharp ice line (full white the instant a
+cell crosses freezing) makes the #30 ice-albedo feedback supercritical and
+snowballs the default planet by ~1 Gyr on all three golden seeds; grading the
+target over tens of K keeps `d(albedo)/dT` gentle enough for a **stable partial
+polar cap**, while a strong cold perturbation (fainter star / low CO₂, #34) still
+drives the target toward 1 everywhere so a snowball stays reachable — the
+bistability lives in the coupled feedback, not a hard threshold. Growth toward
+the target is gated by **moisture supply** (ocean cells are saturated; land is
+precipitation-limited — the "cold + wet" criterion), retreat by a baseline
+sublimation/flow rate plus a positive-degree-day **ablation** term ∝
+`max(0, T − freeze)` (the "warm" criterion). The step change is `(target − ice)·
+(1 − exp(−rate·dt))`, rate-limited and clamped to [0, 1]; dt-correct so a coarser
+`stepYears` rescales the approach, not the trajectory. Reads this step's
+temperature/precipitation and the previous step's `seaLevelM` (land/ocean mask);
+feeds `iceFraction` back to the energy balance (albedo) and to `seaLevel`.
+
+`seaLevel` (after ice, #33): re-solves the global sea level and land fraction —
+**derived**, holding no state of its own. The conserved quantity is
+`waterInventoryM` (calibrated at init from the initial coastline). Grounded ice
+(cells above the shoreline) withdraws its water-equivalent
+(`ICE_SHEET_WATER_EQUIV_M` per unit cover) from the ocean; floating **sea ice**
+(cells below the shoreline) already displaces its own water and locks nothing (it
+whitens albedo but not the coastline). Sea level is the level at which the
+remaining liquid fills the hypsometry — `oceanVolume(seaLevelM) =
+waterInventoryM − grounded-ice` — found by a **fixed-count bisection**
+(`SEA_LEVEL_SOLVE_ITERATIONS`, deterministic, never a `while (!converged)`) over
+the elevation range, and `landFraction` is recomputed as the emergent share of
+cells at or above it. Grounded ice is classified against the previous step's
+level (a one-step lag, like every other cross-system read). The **water-mass
+invariant** — liquid ocean + grounded ice = the init inventory — holds to
+bisection precision every step (tested over the golden seeds). Sea level also
+falls over early deep time as ocean basins mature to abyssal depth (the same
+conserved volume sits lower in a deeper container), then ice modulates it.
+
 **Timescale split & lag (§0/§3).** Temperature is a *fast* quasi-static
 diagnostic — every step re-solves it from the current boundary conditions, it
-carries no memory. The two *slow* reservoirs it reads (ice albedo, CO₂
-greenhouse) are consumed at the top of the step as their end-of-previous-step
-values; the #33/#34 systems that update them run later in the pipeline, closing
-the feedback with a one-step explicit lag rather than a per-step joint solve.
-The step order is `tectonics → wilson → erosion → energyBalance → winds →
-moisture`, extended by `ice → seaLevel → carbon → biome` as Phase 3 lands.
-`createInitialState` runs energy balance, then winds, then moisture once (after
-terrain/plates) so the t=0 keyframe already carries a physical temperature,
-prevailing-wind, and precipitation field.
+carries no memory. The *slow* reservoirs and the dynamic sea level it reads (ice
+albedo, `seaLevelM` land mask, CO₂ greenhouse) are consumed at the top of the
+step as their end-of-previous-step values; the #33/#34 systems that update them
+run later in the pipeline, closing the feedback with a one-step explicit lag
+rather than a per-step joint solve (erosion likewise reads the previous
+`seaLevelM` as its base level). The step order is `tectonics → wilson → erosion
+→ energyBalance → winds → moisture → ice → seaLevel`, extended by `carbon →
+biome` as Phase 3 lands. `createInitialState` runs energy balance, then winds,
+then moisture once (after terrain/plates) so the t=0 keyframe already carries a
+physical temperature, prevailing-wind, and precipitation field; the slow `ice`
+and derived `seaLevel` are deliberately **not** run at init (they carry memory
+and start empty — `iceFraction` 0, `seaLevelM` 0 — advancing from step 1), so the
+t=0 keyframe's pre-existing field bytes are identical to the pre-#33 kernel.
 
 ### Boundary classification (#14)
 
@@ -518,14 +568,22 @@ PlanetParams = { seed, radiusMeters, gridN, stepYears, keyframeIntervalYears,
                  numPlates,
                  starLuminosity, dayLengthHours, obliquityDeg,
                  initialCo2Ppm }   // immutable per run
-Globals     = { landFraction, co2, meanTemperatureK }
+Globals     = { landFraction, co2, meanTemperatureK, seaLevelM, waterInventoryM }
 ```
 
 `starLuminosity` (insolation) and `obliquityDeg` (annual-mean insolation
-profile) are activated by the #30 energy balance; `dayLengthHours` stays a
-placeholder until the #31 wind bands. `initialCo2Ppm` seeds `globals.co2`, the
-slow carbonate–silicate reservoir (constant until #34). `globals.co2` and
+profile) are activated by the #30 energy balance; `dayLengthHours` is activated
+by the #31 wind bands. `initialCo2Ppm` seeds `globals.co2`, the slow
+carbonate–silicate reservoir (constant until #34). `globals.co2` and
 `globals.meanTemperatureK` are maintained by the energy balance (#30).
+`globals.seaLevelM` (dynamic sea level) and `globals.waterInventoryM` (the
+conserved total-water global-equivalent layer thickness) are the #33 sea-level
+state: the inventory is calibrated once at init from the initial ocean volume at
+the 0 m datum (so t=0 sea level is exactly 0 and the ~30% tuned land fraction is
+preserved), then held constant while `seaLevel` re-solves `seaLevelM` each step.
+`globals.landFraction` is now emergent from `seaLevelM` (finalized by the
+`seaLevel` system — cells with `elevation ≥ seaLevelM`); at t=0, with `seaLevelM
+= 0`, it equals the 0 m-datum land share as before.
 
 A **system** is a pure function `(state, dtYears, ctx) => PlanetState` with a
 name, applied in a fixed order by `step()`:
@@ -610,17 +668,23 @@ verified against Phase 1 runs):
 Continuous fields use a linear float↔uint map (out-of-range clamps to the ends);
 **categorical fields (`plateId`, `crustType`) use an identity map and round-trip
 bit-exact — they must never be interpolated** (the GPU path holds/nearest-picks
-them). `boundaryStress` is derivable and visually unused, and `iceFraction`/
-`biome` are still zero — none are stored. `precipitation` is now dynamic
-(moisture transport, #32) and `windU`/`windV` (#31) are populated, but neither is
-stored yet: both are consumed in-kernel (erosion reads precipitation; moisture
-reads the winds) and dumpable from the full keyframe, so render-time storage
-waits for the single §1 stored-field-set bump (`HISTORY_FORMAT_VERSION` 1→2,
-adding the Phase 3 viz fields — precipitation, iceFraction, biome, windU, windV —
-together, with the temperature range widened to 330 K) that the goldens-labeled
-renderer-facing Phase 3 work carries; #32 regenerates the sim goldens (real
-precipitation replaces the proxy, changing erosion→elevation→temperature→winds)
-but leaves the codec's stored-field set and quantization untouched. Two versions gate reuse: `HISTORY_FORMAT_VERSION` (codec byte
+them). `boundaryStress` is derivable and visually unused, and `biome` is still
+zero — neither is stored. `precipitation` (moisture, #32), `windU`/`windV` (#31)
+and now `iceFraction` (the ice mass balance, #33) are populated but **not stored
+yet**: all are consumed in-kernel (erosion reads precipitation; moisture reads
+the winds; the energy balance reads ice) and dumpable from the full keyframe, so
+render-time storage waits for the single §1 stored-field-set bump
+(`HISTORY_FORMAT_VERSION` 1→2, adding the Phase 3 viz fields — precipitation,
+iceFraction, biome, windU, windV — together, with the temperature range widened
+to 330 K) that the goldens-labeled renderer-facing Phase 3 work carries. #32 and
+#33 regenerate the sim goldens (real precipitation replaces the proxy; the
+ice-albedo + sea-level feedbacks then change erosion→elevation→temperature→winds
+within the golden window) but leave the codec's stored-field set and quantization
+untouched — the byte goldens shift only because the stored elevation/temperature
+values changed. Note `EncodedKeyframe.landFraction` (a decode-free UI convenience)
+is still recomputed against the 0 m datum, so it lags `globals.landFraction` (now
+emergent from `seaLevelM`) until the deferred sea-level shoreline render lands.
+Two versions gate reuse: `HISTORY_FORMAT_VERSION` (codec byte
 layout) and `KERNEL_BEHAVIOR_VERSION` (sim behavior; see below); together with
 the run params they key the keyframe cache. Codec correctness is locked by
 byte-level goldens over encoded keyframes plus round-trip fidelity tests (Spike A

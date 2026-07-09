@@ -11,7 +11,11 @@ export const FIELDS = {
   crustAge: { unit: 'yr', description: 'Age of crust at the cell (all zero in Phase 0)' },
   temperature: { unit: 'K', description: 'Mean surface air temperature' },
   precipitation: { unit: 'kg/m^2/yr', description: 'Annual precipitation (all zero in Phase 0)' },
-  iceFraction: { unit: '1', description: 'Fraction of cell covered by ice, 0-1 (zero in Phase 0)' },
+  iceFraction: {
+    unit: '1',
+    description:
+      'Fraction of cell covered by ice, 0-1, from the #33 mass balance (accumulate where cold + wet, ablate where warm). A slow reservoir with memory; feeds the #30 ice-albedo term and, where grounded, locks ocean water to lower sea level',
+  },
   biome: { unit: 'index', description: 'Biome class index (all zero in Phase 0)' },
   plateId: {
     unit: 'index',

@@ -39,7 +39,9 @@ export interface PlanetParams {
 
 /** Scalar whole-planet quantities, updated by systems as they run. */
 export interface Globals {
-  /** Fraction of cells with elevation above the 0 m datum. */
+  /** Fraction of cells with elevation above `seaLevelM`. Emergent from the
+   *  dynamic sea level (#33): finalized by the `seaLevel` system each step
+   *  (at t=0 `seaLevelM` is 0, so it equals the 0 m-datum land share). */
   landFraction: number;
   /** Atmospheric CO₂, ppm — the slow carbonate–silicate reservoir (#34); the
    *  energy balance reads it as the greenhouse forcing. Constant at
@@ -48,6 +50,20 @@ export interface Globals {
   /** Global cell-count-mean surface temperature, K — a diagnostic for the
    *  report/HUD and the #34 snowball detector (#30). */
   meanTemperatureK: number;
+  /** Global sea level relative to the fixed 0 m crust datum, m (#33). Solved
+   *  each step by the `seaLevel` system from the conserved water inventory
+   *  minus grounded-ice-locked volume against the hypsometric curve; a cell is
+   *  ocean when `elevation < seaLevelM`. Read by `energyBalance`/`moisture`/
+   *  `erosion` as the previous step's value (the explicit climate lag). 0 at
+   *  t=0 by construction. */
+  seaLevelM: number;
+  /** Conserved total water inventory as a global-equivalent layer thickness, m
+   *  (#33) — ocean liquid + grounded ice water-equivalent, spread over the
+   *  whole sphere (cell-count mean). Set once at init from the initial ocean
+   *  volume at the 0 m datum (so t=0 sea level is exactly 0 and the ~30% tuned
+   *  initial land share is preserved), then held constant; the water-mass
+   *  invariant checks `oceanVolume(seaLevelM) + lockedIce = this`. */
+  waterInventoryM: number;
 }
 
 export interface PlanetState {
@@ -98,20 +114,48 @@ export function createInitialState(params: PlanetParams): PlanetState {
   const state: PlanetState = {
     timeYears: 0,
     params,
-    globals: { landFraction: 0, co2: params.initialCo2Ppm, meanTemperatureK: 0 },
+    globals: {
+      landFraction: 0,
+      co2: params.initialCo2Ppm,
+      meanTemperatureK: 0,
+      seaLevelM: 0,
+      waterInventoryM: 0,
+    },
     fields,
     plates: [],
     events: [],
     wilson: { contactSince: {} },
   };
-  // Terrain and plates first (they set the elevation/land mask the energy
-  // balance reads), then the energy balance so the t=0 keyframe already carries
-  // a physical temperature field and meanTemperatureK, then winds (#31) which
-  // read that temperature gradient, then moisture (#32) which advects ocean
-  // evaporation along the winds to fill `precipitation` — mirroring the step
-  // pipeline order, so the t=0 keyframe already carries physical precipitation
-  // (the erosion input, replacing the retired latitude proxy).
-  return applyMoisture(
-    applyWinds(applyEnergyBalance(applyInitialPlates(applyInitialTerrain(state)))),
-  );
+  // Terrain and plates first (they set the elevation/land mask the climate
+  // block reads).
+  const shaped = applyInitialPlates(applyInitialTerrain(state));
+
+  // Calibrate the conserved water inventory (#33) from the initial coastline:
+  // the ocean volume at the 0 m datum, as a global-equivalent layer thickness
+  // (cell-count mean of depth below the datum). This makes t=0 sea level
+  // exactly 0 and preserves the ~30% land fraction the initial terrain is tuned
+  // for, rather than imposing a free ocean-inventory constant that would
+  // generally place the initial shoreline away from that datum. The inventory
+  // is then held constant and the water-mass invariant checks it (§5).
+  const elevation = shaped.fields.elevation;
+  let oceanDepthSum = 0;
+  for (let i = 0; i < count; i++) {
+    const e = elevation[i]!;
+    if (e < 0) oceanDepthSum -= e;
+  }
+  const calibrated: PlanetState = {
+    ...shaped,
+    globals: { ...shaped.globals, seaLevelM: 0, waterInventoryM: oceanDepthSum / count },
+  };
+
+  // Then the energy balance (a physical temperature field + meanTemperatureK),
+  // winds (#31) from that temperature gradient, and moisture (#32) advecting
+  // ocean evaporation along the winds to fill `precipitation` — mirroring the
+  // step pipeline order so the t=0 keyframe already carries physical
+  // temperature/wind/precipitation (the erosion input). The slow reservoirs —
+  // `ice` (#33) and the derived `seaLevel` — are deliberately NOT run at init:
+  // they carry memory and start empty (iceFraction 0, seaLevelM 0), advancing
+  // over the timeline from step 1, so the t=0 keyframe's pre-existing fields
+  // stay byte-identical to the pre-#33 kernel.
+  return applyMoisture(applyWinds(applyEnergyBalance(calibrated)));
 }

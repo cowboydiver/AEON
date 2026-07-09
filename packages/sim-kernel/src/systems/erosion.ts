@@ -11,8 +11,8 @@
  * 2. Coastal sediment export (#65): a continental cell standing above sea
  *    level next to a submerged oceanic cell exports elevation across the
  *    coast — rivers grade to sea level, so the flux is proportional to the
- *    cell's height above the 0 m datum (base level), NOT to the full drop to
- *    the ocean floor (that gradient is what drowned coastlines planet-wide
+ *    cell's height above sea level (`seaLevelM`, base level — #33), NOT to the
+ *    full drop to the ocean floor (that gradient is what drowned coastlines
  *    before EROSION_SUBSEA_FACTOR existed). The exported volume leaves the
  *    continental budget and accumulates in the oceanic neighbor's sedimentM,
  *    which the age-depth relaxation (#15, tectonics.ts) adds to its target —
@@ -57,6 +57,9 @@ export const erosionSystem: System = {
     const count = cellCount(N);
     const nbTable = neighborTable(N);
     const { crustType, precipitation, crustAge } = state.fields;
+    // Previous step's sea level (the #33 explicit lag): base level for coastal
+    // export and the submerged/emergent split of the diffusion damping.
+    const seaLevel = state.globals.seaLevelM;
     const old = state.fields.elevation;
     const elevation = old.slice();
     const sedimentM = state.fields.sedimentM.slice();
@@ -77,27 +80,29 @@ export const erosionSystem: System = {
           if (j <= i) continue;
           // Base-level damping: flux involving a submerged cell is slow (the
           // coast is where rivers deposit). Symmetric, so still conservative.
-          const subsea = old[i]! < 0 || old[j]! < 0 ? EROSION_SUBSEA_FACTOR : 1;
+          const subsea = old[i]! < seaLevel || old[j]! < seaLevel ? EROSION_SUBSEA_FACTOR : 1;
           const flux = EROSION_RATE_PER_YR * dtYears * precipFactor * subsea * (old[i]! - old[j]!);
           elevation[i]! -= flux;
           elevation[j]! += flux;
         } else {
           // Coastal export (#65): only from subaerial continent to submerged
-          // ocean (an emergent arc neighbor above the datum receives nothing).
+          // ocean (an emergent arc neighbor above sea level receives nothing).
           // Each such pair has exactly one continental endpoint, so it is
           // visited exactly once — no index guard needed.
-          if (old[i]! <= 0 || old[j]! >= 0) continue;
+          if (old[i]! <= seaLevel || old[j]! >= seaLevel) continue;
           // The shelf's remaining capacity: how far the relaxation target
           // (age-depth curve + sediment) still sits below the fill ceiling.
           const room =
             SEDIMENT_SHELF_CEILING_M - (oceanicDepthForAge(crustAge[j]!) + sedimentM[j]!);
           if (room <= 0) continue;
           const flux = Math.min(
-            EROSION_RATE_PER_YR * dtYears * precipFactor * old[i]!,
+            // Rivers grade to base level (sea level, #33), so export scales with
+            // the cell's height ABOVE SEA LEVEL, not the full drop to the floor.
+            EROSION_RATE_PER_YR * dtYears * precipFactor * (old[i]! - seaLevel),
             room,
-            // Never draw a cell below the datum, whatever dt or how many
+            // Never draw a cell below sea level, whatever dt or how many
             // oceanic neighbors already drew from it this step.
-            Math.max(0, elevation[i]!),
+            Math.max(0, elevation[i]! - seaLevel),
           );
           elevation[i]! -= flux;
           sedimentM[j]! += flux;

@@ -109,7 +109,13 @@ describe('phase 1 invariants (#20)', () => {
 
   it('hypsometry stays bimodal at fixed checkpoints for all golden seeds', () => {
     for (const seed of SEEDS) {
-      const params = createPlanetParams({ seed, gridN: 32 });
+      // Bimodality is a structural (abyssal + platform) property robust to step
+      // size, so this coarse-steps at 3 Myr — the full Phase 3 climate stack
+      // (energy balance, winds, moisture, ice, sea level, #30–#33) now runs
+      // every step, and 1 Myr steps to 450 Myr × 3 seeds at N=32 blew the kernel
+      // suite's <30 s budget. Same time span and checkpoints, a third of the
+      // steps; the deep-time 4.5 Gyr invariant below likewise runs at 2 Myr.
+      const params = createPlanetParams({ seed, gridN: 32, stepYears: 3e6 });
       const ctx: SimContext = { rng: createRng(params.seed).fork('sim') };
       let state = createInitialState(params);
       expect(isBimodal(state.fields.elevation), `seed ${seed} t=0`).toBe(true);
@@ -169,6 +175,25 @@ describe('phase 1 invariants (#20)', () => {
         expect(s.globals.meanTemperatureK, `seed ${seed} step ${i}: mean T`).toBeGreaterThan(230);
         expect(s.globals.meanTemperatureK, `seed ${seed} step ${i}: mean T`).toBeLessThan(320);
         expect(Number.isFinite(s.globals.co2), `seed ${seed} step ${i}: co2 finite`).toBe(true);
+        // Ice + sea level bounds (#33): iceFraction is a physical fraction, and
+        // the ice-albedo feedback must NOT spuriously snowball on default params
+        // (no #34 CO₂ thermostat yet) — the mean-T floor above is the tripwire,
+        // and mean ice must stay well short of a frozen planet. Sea level is
+        // finite and land fraction (emergent from it) stays in a sane band.
+        let icemin = Infinity;
+        let icemax = -Infinity;
+        let iceSum = 0;
+        for (const f of s.fields.iceFraction) {
+          icemin = Math.min(icemin, f);
+          icemax = Math.max(icemax, f);
+          iceSum += f;
+        }
+        expect(icemin, `seed ${seed} step ${i}: iceFraction floor`).toBeGreaterThanOrEqual(0);
+        expect(icemax, `seed ${seed} step ${i}: iceFraction ceiling`).toBeLessThanOrEqual(1);
+        expect(iceSum / s.fields.iceFraction.length, `seed ${seed} step ${i}: mean ice (no spurious snowball)`).toBeLessThan(0.6);
+        expect(Number.isFinite(s.globals.seaLevelM), `seed ${seed} step ${i}: seaLevel finite`).toBe(true);
+        expect(s.globals.landFraction, `seed ${seed} step ${i}: emergent land`).toBeGreaterThan(0.1);
+        expect(s.globals.landFraction, `seed ${seed} step ${i}: emergent land`).toBeLessThan(0.75);
         // Max single-plate area fraction — the monopoly detector.
         const perPlate = new Array<number>(s.plates.length).fill(0);
         for (const p of s.fields.plateId) perPlate[p]!++;

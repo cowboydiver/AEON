@@ -71,7 +71,13 @@ function ridgeWorld(gridN: number, windUms: number, ridgePeakM = 3500): PlanetSt
   return {
     timeYears: 0,
     params,
-    globals: { landFraction: 0, co2: params.initialCo2Ppm, meanTemperatureK: 288 },
+    globals: {
+      landFraction: 0,
+      co2: params.initialCo2Ppm,
+      meanTemperatureK: 288,
+      seaLevelM: 0,
+      waterInventoryM: 0,
+    },
     fields,
     plates: [],
     events: [],
