@@ -1,11 +1,9 @@
 # Phase 5 candidate — On-globe debug views for the climate fields
 
-> **Status: unfiled GitHub issue.** Captured here because the GitHub connector
-> was unavailable when it was raised (during #36). File it into the
-> [Phase 5 milestone](https://github.com/cowboydiver/AEON/milestones) with the
-> `renderer` + `ui` + `phase-5` labels, then replace this note with the issue
-> link and add it to the Phase 5 list in `docs/PLAN.md`. Raised by the #36
-> acceptance review — see `PHASE_3_REPORT.md`.
+> **Status: filed as [#83](https://github.com/cowboydiver/AEON/issues/83)** in the
+> Phase 5 milestone (`renderer` + `ui` + `phase-5`). This doc is the working
+> draft; #83 is the tracked issue. Raised by the #36 acceptance review — see
+> `PHASE_3_REPORT.md`.
 
 ## Motivation
 

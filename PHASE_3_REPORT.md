@@ -232,4 +232,4 @@ unless noted (the standing-invariant Vitest runs at N=16 to keep the suite < 30 
   land at the same elevation carries several biome classes; a height-only ramp
   gives one). A Phase 5 field-overlay debug view (`?view=temperature|
   precipitation|wind`) would make the working systems directly visible in the
-  app — drafted in `docs/phase5-backlog/on-globe-climate-debug-views.md`.
+  app — filed as #83 (draft in `docs/phase5-backlog/on-globe-climate-debug-views.md`).
