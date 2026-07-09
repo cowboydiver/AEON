@@ -57,7 +57,14 @@ export {
 export { tectonicsSystem } from './systems/tectonics';
 export { erosionSystem } from './systems/erosion';
 export { wilsonSystem } from './systems/wilson';
-export { applyPrecipitationProxy, precipitationForLatitude } from './systems/climateProxy';
+export {
+  moistureSystem,
+  applyMoisture,
+  solveMoisture,
+  evaporationFactor,
+  relaxSweepCount,
+  type MoistureSolution,
+} from './systems/moisture';
 export {
   energyBalanceSystem,
   applyEnergyBalance,
@@ -77,4 +84,4 @@ export {
   windAtLatitude,
   type WindSolution,
 } from './systems/winds';
-export { cellCenterTable, neighborTable } from './grid';
+export { cellCenterTable, neighborTable, eastNorthTable } from './grid';

@@ -118,8 +118,27 @@
  *     HISTORY_FORMAT_VERSION 1→2, lands once with the goldens-labeled Phase 3
  *     work), so this bump costs one benign cache miss and can never serve
  *     stale bytes.
+ * 11 — Phase 3 moisture transport + orographic precipitation (#32): a new
+ *     `moisture` system replaces the static latitude precipitation proxy
+ *     (climateProxy, now deleted) with a real evaporate → advect → precipitate
+ *     solve. Ocean cells evaporate at a Clausius–Clapeyron temperature factor;
+ *     the moisture column is advected along the #31 wind field by a
+ *     conservative upwind donor scheme (a fixed-sweep Jacobi relaxation, cell
+ *     order fixed) and rained out by a base rate plus an orographic term
+ *     (windward ascent wrings moisture out; lee slopes go dry), so rain shadows
+ *     EMERGE from the transport. `precipitation` is now dynamic every step and
+ *     at t=0, which changes it directly and — because erosion reads it — changes
+ *     `elevation` (and `temperature` via the lapse term, `windU`/`windV` via the
+ *     gradient) within the 10-step golden window; field goldens regenerated
+ *     deliberately in the same commit. The codec's stored-field SUBSET and its
+ *     quantization are unchanged (precipitation is still not stored — the §1
+ *     stored-set growth + HISTORY_FORMAT_VERSION 1→2 remains deferred as in
+ *     bump 10), but the codec BYTE goldens shift because the stored elevation/
+ *     temperature values changed; both are regenerated. Water mass is conserved
+ *     across evaporate/transport/precipitate (Σ precipitation = Σ evaporation to
+ *     float tolerance — the invariant test pins it).
  */
-export const KERNEL_BEHAVIOR_VERSION = 10;
+export const KERNEL_BEHAVIOR_VERSION = 11;
 
 /** IUGG mean Earth radius, m. */
 export const EARTH_RADIUS_M = 6.371e6;
@@ -589,21 +608,10 @@ export const RIFT_OCEAN_SCAN_SAMPLES = 12;
  */
 export const RIFT_SUTURE_COOLDOWN_YEARS = 120e6;
 
-// --- Climate proxy & erosion (#19) ------------------------------------------
-
-/**
- * Latitude-band precipitation proxy (replaced by real moisture transport in
- * Phase 3): ITCZ peak at the equator + mid-latitude storm-track bumps over a
- * dry floor, giving the classic wet-equator / dry-30° / wetter-50° / dry-pole
- * profile. Amplitudes in kg/m^2/yr (= mm/yr): equator ~1700 (tropical),
- * subtropics ~200-350 (desert belts), mid-latitudes ~800, poles ~150.
- */
-export const PRECIP_ITCZ_PEAK = 1600;
-export const PRECIP_ITCZ_WIDTH_DEG = 12;
-export const PRECIP_STORMTRACK_PEAK = 700;
-export const PRECIP_STORMTRACK_LAT_DEG = 45;
-export const PRECIP_STORMTRACK_WIDTH_DEG = 16;
-export const PRECIP_FLOOR = 100;
+// --- Erosion (#19, #65) -----------------------------------------------------
+// (The static latitude precipitation proxy that used to live here was retired
+//  with climateProxy.ts when moisture transport (#32) took over `precipitation`;
+//  erosion now reads that real field. Its constants are in the moisture section.)
 
 /**
  * Erosion diffusion coefficient at reference precipitation, per year.
@@ -829,6 +837,108 @@ export const WIND_GRADIENT_FACTOR_MAX = 3;
  * guarantees a stored-field value can never fall outside the codec range.
  */
 export const WIND_MAX_M_PER_S = 60;
+
+// --- Moisture transport & orographic precipitation (#32, Phase 3) ------------
+
+/**
+ * Reference ocean evaporation flux, kg/m²/yr (= mm/yr), realized at
+ * `MOIST_EVAP_REF_TEMP_K`. Open-ocean evaporation is ~1000–2000 mm/yr; this is
+ * the source that feeds all precipitation. Because water mass is conserved
+ * (Σ precipitation = Σ evaporation), the global-mean precipitation is this
+ * times the ocean fraction (~0.7 ⇒ ~840 mm/yr, Earth-like) — land is watered
+ * only by what the wind carries in from the sea.
+ */
+export const MOIST_EVAP_REF_KG_PER_M2_YR = 1200;
+
+/**
+ * Temperature the reference evaporation is realized at, K. Ocean evaporation
+ * scales with saturation vapour pressure, so warm seas evaporate more; the
+ * factor is `exp(MOIST_EVAP_CC_PER_K·(T − ref))`, clamped. ~288 K is Earth's
+ * mean surface temperature, so Earth-like states sit near factor 1.
+ */
+export const MOIST_EVAP_REF_TEMP_K = 288;
+
+/**
+ * Clausius–Clapeyron fractional growth of evaporation with temperature, per K.
+ * Saturation vapour pressure rises ~7%/K near 288 K; 0.06/K is a slightly
+ * damped effective rate (not all of the C–C increase reaches the surface flux).
+ */
+export const MOIST_EVAP_CC_PER_K = 0.06;
+
+/** Clamp on the evaporation temperature factor: a cold ocean still evaporates a
+ *  little, a hot one is bounded so the precipitation stays inside its codec
+ *  range. `exp(0.06·ΔT)` hits these at ΔT ≈ −20 K and +13 K. */
+export const MOIST_EVAP_FACTOR_MIN = 0.3;
+export const MOIST_EVAP_FACTOR_MAX = 2.2;
+
+/**
+ * Transport weight per unit wind speed (dimensionless), the numerator of the
+ * upwind donor split: a cell sheds `q·MOIST_TRANSPORT_COEF·min(speed/ref, cap)`
+ * of its moisture column downwind each relaxation sweep, distributed to the
+ * neighbours the wind points toward. With `MOIST_PRECIP_BASE` below this sets
+ * the moisture fetch `≈ 1 + coef/base ≈ 13` cells at reference wind — the
+ * distance sea air penetrates inland before it has rained out, the mechanism
+ * behind dry continental interiors.
+ */
+export const MOIST_TRANSPORT_COEF = 1;
+
+/** Wind speed the transport weight is normalized by, m/s (near the #31 zonal
+ *  peak), and the cap on speed/ref so a jet cannot make transport unstable. */
+export const MOIST_TRANSPORT_REF_SPEED_M_PER_S = 8;
+export const MOIST_TRANSPORT_SPEED_CAP = 1.5;
+
+/**
+ * Base rain-out weight (dimensionless), the moisture fraction a cell precipitates
+ * per sweep independent of terrain — the drizzle that eventually returns all
+ * evaporated water to the surface and bounds the moisture column. Smaller ⇒
+ * longer fetch, wetter interiors.
+ */
+export const MOIST_PRECIP_BASE = 0.08;
+
+/**
+ * Orographic rain-out weight added when the wind blows toward higher ground.
+ * The forcing is the downwind-ward elevation rise (m) the wind climbs into,
+ * normalized by `MOIST_OROGRAPHIC_REF_M` and capped at `MOIST_OROGRAPHIC_MAX`:
+ * a windward slope gets a large extra rain-out weight (short local fetch — the
+ * air wrings out before cresting), leaving the lee side in the depleted air it
+ * left behind. This is what makes rain shadows EMERGE rather than being painted.
+ */
+export const MOIST_PRECIP_OROGRAPHIC = 0.6;
+
+/** Downwind rise (in land height above sea level) that yields a unit orographic
+ *  rain-out weight, m (a moderate mountain flank), and the cap in those units so
+ *  a cliff cannot drive the weight — and thus local precipitation — unboundedly
+ *  high. Tuned so windward rain spreads across a slope over a few cells rather
+ *  than dumping in the first one (which starves the rest of the windward face). */
+export const MOIST_OROGRAPHIC_REF_M = 600;
+export const MOIST_OROGRAPHIC_MAX = 3;
+
+/**
+ * Saturation rain-out weight, added where the air is too cold to hold its
+ * moisture — the "precipitate by saturation" pathway (#32), complementing the
+ * orographic "precipitate on ascent" term. Scaled by `max(0, 1 − capacity)`
+ * with `capacity = evaporationFactor(T)` (the same Clausius–Clapeyron curve the
+ * evaporation source uses): zero at or above `MOIST_EVAP_REF_TEMP_K` (warm air
+ * retains moisture) and growing as air cools, so moist air rains out as it moves
+ * poleward or is lifted (and lapse-cooled) over high terrain. Being a function
+ * of temperature only, it is exactly zero in an isothermal world, so it reshapes
+ * precipitation over real temperature gradients without perturbing the
+ * controlled uniform-temperature rain-shadow transect used in the tests.
+ */
+export const MOIST_PRECIP_SATURATION = 0.25;
+
+/**
+ * Fixed relaxation schedule for the steady moisture solve: the Jacobi sweep
+ * count at the reference grid, its reference grid N, and a floor. Sweeps scale
+ * `∝ N` (`round(AT_REF·N/REF_N)`, floored) so information propagates a
+ * resolution-independent physical distance — moisture must travel windward →
+ * crest → lee, which is more cells on a finer grid. A FIXED count (not a
+ * convergence test) keeps the solve deterministic; the exact water-closure
+ * (below) makes conservation hold regardless of how far it has converged.
+ */
+export const MOIST_RELAX_SWEEPS_AT_REF = 24;
+export const MOIST_RELAX_SWEEPS_REF_N = 128;
+export const MOIST_RELAX_SWEEPS_MIN = 6;
 
 /** Default simulation step, years. Chosen so 10 steps fit one keyframe interval. */
 export const DEFAULT_STEP_YEARS = 1e6;

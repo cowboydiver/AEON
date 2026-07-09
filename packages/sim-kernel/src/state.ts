@@ -12,9 +12,9 @@ import type { SimEvent } from './events';
 import { FIELD_NAMES, type Fields } from './fields';
 import { DEFAULT_GRID_N, cellCount } from './grid';
 import { applyInitialPlates, type PlateRecord } from './plates';
-import { applyPrecipitationProxy } from './systems/climateProxy';
 import { applyEnergyBalance } from './systems/energyBalance';
 import { applyInitialTerrain } from './systems/initialTerrain';
+import { applyMoisture } from './systems/moisture';
 import { applyWinds } from './systems/winds';
 
 /** Immutable per-run parameters. Same params + same seed => same history. */
@@ -105,11 +105,13 @@ export function createInitialState(params: PlanetParams): PlanetState {
     wilson: { contactSince: {} },
   };
   // Terrain and plates first (they set the elevation/land mask the energy
-  // balance reads), then the precipitation proxy (erosion input until #32),
-  // then the energy balance so the t=0 keyframe already carries a physical
-  // temperature field and meanTemperatureK, then winds (#31) which read that
-  // temperature gradient — mirroring the step pipeline order.
-  return applyWinds(
-    applyEnergyBalance(applyPrecipitationProxy(applyInitialPlates(applyInitialTerrain(state)))),
+  // balance reads), then the energy balance so the t=0 keyframe already carries
+  // a physical temperature field and meanTemperatureK, then winds (#31) which
+  // read that temperature gradient, then moisture (#32) which advects ocean
+  // evaporation along the winds to fill `precipitation` — mirroring the step
+  // pipeline order, so the t=0 keyframe already carries physical precipitation
+  // (the erosion input, replacing the retired latitude proxy).
+  return applyMoisture(
+    applyWinds(applyEnergyBalance(applyInitialPlates(applyInitialTerrain(state)))),
   );
 }

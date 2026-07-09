@@ -4,6 +4,7 @@ import { createRng, type Rng } from './rng';
 import { createInitialState, type PlanetState, type PlanetParams } from './state';
 import { energyBalanceSystem } from './systems/energyBalance';
 import { erosionSystem } from './systems/erosion';
+import { moistureSystem } from './systems/moisture';
 import { tectonicsSystem } from './systems/tectonics';
 import { wilsonSystem } from './systems/wilson';
 import { windsSystem } from './systems/winds';
@@ -33,11 +34,13 @@ export const identitySystem: System = {
  * Ordered system pipeline applied by every step: tectonics moves crust and
  * builds topography, wilson reorganizes plates, erosion redistributes relief,
  * then energyBalance re-solves the zonal temperature (#30) against the final
- * elevation and land mask, and winds derive the prevailing wind field (#31)
- * from rotation and that temperature gradient. The rest of the Phase 3 climate
- * block (moisture → ice → seaLevel → carbon → biome) extends this after winds
- * as it lands; the latitude-band precipitation proxy still fills `precipitation`
- * at init and feeds erosion until moisture transport (#32) retires it.
+ * elevation and land mask, winds derive the prevailing wind field (#31) from
+ * rotation and that temperature gradient, and moisture advects ocean
+ * evaporation along that wind to precipitate real, orographic precipitation
+ * (#32) — which erosion reads on the next step (a one-step lag, like the energy
+ * balance reads the previous step's ice/CO₂). The rest of the Phase 3 climate
+ * block (ice → seaLevel → carbon → biome) extends this after moisture as it
+ * lands.
  */
 export const SYSTEMS: readonly System[] = [
   tectonicsSystem,
@@ -45,6 +48,7 @@ export const SYSTEMS: readonly System[] = [
   erosionSystem,
   energyBalanceSystem,
   windsSystem,
+  moistureSystem,
 ];
 
 /** Advance the state by dtYears through the ordered system pipeline. */

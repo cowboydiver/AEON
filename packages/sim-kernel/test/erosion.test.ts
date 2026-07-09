@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  EROSION_PRECIP_REF,
   OROGENIC_ROOT_DECAY_TAU_YEARS,
   OROGENIC_ROOT_REFERENCE_M,
   SEDIMENT_SHELF_CEILING_M,
@@ -8,16 +9,23 @@ import { oceanicDepthForAge } from '../src/bathymetry';
 import { cellCount, directionToIndex, neighbors } from '../src/grid';
 import type { PlanetState } from '../src/state';
 import { erosionSystem } from '../src/systems/erosion';
-import { applyPrecipitationProxy, precipitationForLatitude } from '../src/systems/climateProxy';
 import { normalize3 } from '../src/vec';
 import { runSystems, twoPlateState } from './helpers';
 
 const N = 32;
 
-/** Static all-continental world with the precipitation proxy filled in. */
+/**
+ * Static all-continental world with a uniform reference precipitation field —
+ * erosion's precip factor is 1 everywhere, so these tests probe the diffusion /
+ * export / decay machinery independent of the climate model (moisture transport,
+ * #32, is exercised in its own suite). Tests that need a wet/dry contrast paint
+ * `precipitation` directly.
+ */
 function erosionWorld(): PlanetState {
   const s = twoPlateState(N, { pole: [0, 0, 1], omega: 0 }, { pole: [0, 1, 0], omega: 0 });
-  return applyPrecipitationProxy(s);
+  const precipitation = s.fields.precipitation.slice();
+  precipitation.fill(EROSION_PRECIP_REF);
+  return { ...s, fields: { ...s.fields, precipitation } };
 }
 
 /**
@@ -65,30 +73,6 @@ function sedimentSum(state: PlanetState): number {
   return fieldSum(state, state.fields.sedimentM, () => true);
 }
 
-describe('precipitation proxy (#19)', () => {
-  it('produces the wet-equator / dry-subtropics / wetter-midlat / dry-pole profile', () => {
-    const equator = precipitationForLatitude(0);
-    const subtropics = precipitationForLatitude(27);
-    const midlat = precipitationForLatitude(48);
-    const pole = precipitationForLatitude(88);
-    expect(equator).toBeGreaterThan(1500);
-    expect(subtropics).toBeLessThan(500);
-    expect(midlat).toBeGreaterThan(600);
-    expect(pole).toBeLessThan(250);
-    expect(equator).toBeGreaterThan(midlat);
-    expect(midlat).toBeGreaterThan(subtropics);
-    expect(subtropics).toBeGreaterThan(pole);
-  });
-
-  it('fills the field for every cell, in real units', () => {
-    const state = erosionWorld();
-    for (const p of state.fields.precipitation) {
-      expect(p).toBeGreaterThan(50);
-      expect(p).toBeLessThan(3000);
-    }
-  });
-});
-
 describe('erosion (#19)', () => {
   it('conserves continental elevation exactly in a landlocked world below the decay reference', () => {
     let state = erosionWorld();
@@ -129,14 +113,25 @@ describe('erosion (#19)', () => {
     expect(state.fields.elevation[peak]).toBeGreaterThan(0);
   });
 
-  it('erodes a wet-latitude peak faster than an identical dry-latitude peak', () => {
+  it('erodes a wet peak faster than an identical dry peak (precip drives the rate)', () => {
+    // Two identical 5 km peaks; the only difference is the precipitation painted
+    // on each and its neighbourhood (the diffusion flux reads the pair mean), so
+    // any difference in denudation is precipitation's doing — the coupling that
+    // erosion inherits for free once moisture transport (#32) fills the field.
     let state = erosionWorld();
-    const wet = directionToIndex(normalize3([0.95, 0.02, 0.3]), N); // ~1 deg lat: ITCZ
-    const dry = directionToIndex(normalize3([0.85, Math.sin((27 * Math.PI) / 180), 0.3]), N); // ~27 deg: desert belt
+    const wet = directionToIndex(normalize3([0.95, 0.02, 0.3]), N);
+    const dry = directionToIndex(normalize3([0.3, 0.9, 0.3]), N);
     const elevation = state.fields.elevation.slice();
-    elevation[wet] = 5000;
-    elevation[dry] = 5000;
-    state = { ...state, fields: { ...state.fields, elevation } };
+    const precipitation = state.fields.precipitation.slice();
+    for (const [cell, precip] of [
+      [wet, 2000],
+      [dry, 200],
+    ] as const) {
+      elevation[cell] = 5000;
+      precipitation[cell] = precip;
+      for (const nb of neighbors(cell, N)) precipitation[nb] = precip;
+    }
+    state = { ...state, fields: { ...state.fields, elevation, precipitation } };
     const end = runSystems(state, 20, [erosionSystem]);
     const wetDrop = 5000 - end.fields.elevation[wet]!;
     const dryDrop = 5000 - end.fields.elevation[dry]!;
