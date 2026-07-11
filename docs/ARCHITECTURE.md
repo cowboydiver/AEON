@@ -430,10 +430,62 @@ kernel (the goldens pin this); the flag-on path has its own goldens.
 `params.blockIsostasyOnsetYears` (default 0) keeps the system inert before
 that sim year: since it consumes no RNG, a flag-on run with onset Y is
 bit-identical to a flag-off run until Y, which is the **branched A/B**
-instrument (`pnpm sim -- --ab-block-isostasy <years>`) — paired keyframes
+instrument (`pnpm sim -- --ab <mechanism> --ab-branch <years>`;
+`--ab-block-isostasy <years>` is the original alias) — paired keyframes
 just after the branch measure the mechanism's direct effect, isolated from
 the chaotic whole-trajectory divergence that defeats plain on/off
 comparisons.
+
+The #84 A/B verdict (Δ land components ≈ 0: foundered splinters are
+replaced by the boundary processes at the same rate) motivated four further
+**default-off mechanism prototypes** (#88–#91), every one carrying the same
+`<name>` + `<name>OnsetYears` param pair and measurable with the same
+harness; flag-off runs are byte-identical to the pre-#88 kernel and each
+flag-on path has its own golden spine:
+
+- **`crustFates` (#88, its own system, after wilson):** attacks the
+  crustType lace directly. Labels components (shared `components.ts` BFS);
+  a component under `CRUST_FATE_SMALL_AREA_M2` (300k km²) within
+  `CRUST_FATE_MERGE_GAP_CELLS` (2) of ocean of a large component **docks**:
+  the strait flips to continental crust (lower endpoint's elevation, older
+  endpoint's age, suture-stamped weld) and the whole terrane transfers to
+  the large component's plate so advection carries it with the continent
+  (Wrangellia-style; `boundaryStress` is recomputed after a transfer — the
+  #55 rule). Out-of-range small components subside toward the founder level
+  at `CRUST_FATE_SUBSIDENCE_M_PER_YR` and, once the WHOLE component is at
+  or below it (already invisible in the land mask — no popping), the crust
+  record retires: crustType → 0, sutureYears → 0, elevation left for the
+  oceanic age-depth relaxation. Retirement is the kernel's one deliberate
+  crustal-area ledger debit; dock welds are the matching small credit. An
+  all-small world bails (no docking target; foundering everything would be
+  destruction, not consolidation).
+- **`compactArcs` (#89, arc-maturation gate in boundaries.ts):** a belt
+  maturation candidate also needs ≥ `COMPACT_ARC_MIN_CONT_NEIGHBORS` (2)
+  continental 4-neighbors in the pre-topography crust map, so creation
+  fills margin concavities (blobs) instead of stringing coast-parallel
+  chains — the #84-measured re-supply of the lace. Deliberately weaker than
+  the rejected #67 attachment gate (which required connectivity through
+  other mature-elevation arc cells and starved creation): a gated cell
+  stays an oceanic arc and can mature later once the continent grows
+  around it.
+- **`marinePlanation` (#90, erosion.ts):** the conservative erosion-side
+  lever. Components under `MARINE_PLANATION_AREA_M2` (strength ramps
+  linearly with smallness) get their subsea diffusion damping lifted toward
+  1 and a coastal export term that grades toward the shelf/founder level
+  (−200 m) at `MARINE_PLANATION_RATE_M_PER_YR` — wave attack neither scales
+  with precipitation nor stops at sea level (the asymptote that made
+  islands immortal). Mass moves into oceanic `sedimentM` under the usual
+  shelf-room cap, so the Σ(cont elevation) + Σ(`sedimentM`) invariant
+  extends over the new flux unchanged — planed and foundered platforms are
+  the same −200 m object downstream.
+- **`emergentArcTaper` (#91, arc growth in boundaries.ts):** arc elevation
+  growth above sea level (previous step's `seaLevelM`, the usual lag) is
+  scaled by `ARC_EMERGENT_GROWTH_FACTOR` (0.05), placing emergent growth in
+  the same band as `OCEAN_RELIEF_RELAX_M_PER_YR` decay — so herringbone-
+  flickering margins hold *submerged* arcs and only long-lived subduction
+  stands emergent +1 km chains. Margin age is integrated by dwell time; no
+  new field. Submarine growth and the −500 m maturation gate are untouched,
+  so the continental-creation budget is unaffected by construction.
 
 `energyBalance` (#30): the Phase 3 climate hub. A Budyko–Sellers **zonal
 energy-balance model** solved on `ENERGY_BALANCE_BANDS` (90) equal-area
