@@ -2,21 +2,21 @@
 
 exports[`codec byte goldens (#22) > seed 1: encoded keyframe byte hash 1`] = `
 {
-  "byteLength": 73900,
-  "hash": "bc6abb4a",
+  "byteLength": 67740,
+  "hash": "9e444e02",
 }
 `;
 
 exports[`codec byte goldens (#22) > seed 42: encoded keyframe byte hash 1`] = `
 {
-  "byteLength": 73900,
-  "hash": "34582379",
+  "byteLength": 67740,
+  "hash": "ac6cb67a",
 }
 `;
 
 exports[`codec byte goldens (#22) > seed 1337: encoded keyframe byte hash 1`] = `
 {
-  "byteLength": 73900,
-  "hash": "f274d7f3",
+  "byteLength": 67740,
+  "hash": "1d4c7ebb",
 }
 `;

@@ -62,7 +62,7 @@ export function hypsometricColor(elevation: number, min: number, max: number): R
  */
 // Keyed by plain string, not FieldName: plateId/boundaryStress land in the
 // kernel schema in later Phase 1 issues; hints for them are inert until then.
-const RENDER_HINTS: Record<string, 'hypsometric' | 'categorical' | 'sequentialReversed' | 'diverging' | 'precip' | 'ice' | 'biome' | undefined> = {
+const RENDER_HINTS: Record<string, 'hypsometric' | 'categorical' | 'sequentialReversed' | 'diverging' | 'precip' | 'ice' | 'biome' | 'life' | undefined> = {
   elevation: 'hypsometric',
   plateId: 'categorical',
   crustAge: 'sequentialReversed', // young crust = bright, per issue #11
@@ -82,6 +82,11 @@ const RENDER_HINTS: Record<string, 'hypsometric' | 'categorical' | 'sequentialRe
   // Whittaker biome class (#35): a fixed categorical palette matching the
   // renderer's, so a --dump biome PNG reads the same ecosystems the globe shows.
   biome: 'biome',
+  // Marine productivity (#37), 0..1: barren dark sea → productive teal-green, on
+  // a FIXED 0–1 scale so the ocean life story reads at the same brightness
+  // across a flipbook (all-dark before abiogenesis, greening as productivity
+  // spreads). Land is 0 → the darkest stop.
+  marineLife: 'life',
 };
 
 /**
@@ -163,6 +168,15 @@ const DIVERGING_STOPS = [
   [1, [200, 30, 30]],
 ] as const satisfies readonly (readonly [number, Rgb])[];
 
+/** Marine-productivity ramp over [0,1] (#37): near-black barren sea → deep teal
+ *  → bright chlorophyll green at peak productivity. */
+const LIFE_STOPS = [
+  [0, [8, 18, 28]],
+  [0.4, [16, 78, 92]],
+  [0.75, [40, 150, 120]],
+  [1, [120, 210, 90]],
+] as const satisfies readonly (readonly [number, Rgb])[];
+
 export interface FieldStats {
   min: number;
   max: number;
@@ -220,6 +234,8 @@ export function renderFieldPng(
         rgb = ramp(ICE_STOPS, Math.min(1, Math.max(0, value)));
       } else if (hint === 'biome') {
         rgb = biomeColor(value);
+      } else if (hint === 'life') {
+        rgb = ramp(LIFE_STOPS, Math.min(1, Math.max(0, value)));
       } else {
         const g = span > 0 ? ((value - min) / span) * 255 : 128;
         rgb = [g, g, g];

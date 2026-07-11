@@ -15,6 +15,10 @@ export const EVENT_KINDS = {
   plateSuture: 'plateSuture',
   /** A plate whose last cell was consumed by advection (fully subducted / overridden). */
   plateConsumed: 'plateConsumed',
+  /** Ocean life originates (sets `globals.abiogenesisYear`), #37. */
+  abiogenesis: 'abiogenesis',
+  /** `globals.oxygen` first crosses the oxidation threshold — the emergent Great Oxidation, #37. */
+  greatOxidation: 'greatOxidation',
 } as const;
 
 export type SimEventKind = (typeof EVENT_KINDS)[keyof typeof EVENT_KINDS];

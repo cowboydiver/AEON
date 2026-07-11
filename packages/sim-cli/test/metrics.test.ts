@@ -27,7 +27,7 @@ function emptyKeyframe(timeYears: number): Keyframe {
   fields.elevation.fill(-4000);
   // computeKeyframeMetrics reads only `.fields`; globals is required by the
   // Keyframe type but unused here, so a zeroed set suffices.
-  const globals = { landFraction: 0, co2: 0, meanTemperatureK: 0, seaLevelM: 0, waterInventoryM: 0 };
+  const globals = { landFraction: 0, co2: 0, meanTemperatureK: 0, seaLevelM: 0, waterInventoryM: 0, oxygen: 0, oxygenReductant: 0, abiogenesisYear: -1 };
   return { timeYears, fields, globals, events: [] };
 }
 

@@ -102,6 +102,7 @@ from it. All fields are `Float32Array` per cell.
 | `sedimentM`     | m          | 0 … shelf fill   | Sediment on oceanic crust exported from the continents by erosion (#65); the age-depth relaxation target adds it on top, saturating at `SEDIMENT_SHELF_CEILING_M` (−200 m). Crust property: advects with plate motion; always 0 on continental crust and fresh ocean (crust that matures/re-roots to continental consumes it). Appended last (codec wire-id constraint) |
 | `windU`         | m/s        | ≈ ±30 (bound ±60) | Prevailing zonal (east–west) surface wind, signed (+ eastward), from the #31 band model. Fast diagnostic: recomputed every step from rotation + temperature gradient, carries no memory. Appended last (codec wire-id constraint) |
 | `windV`         | m/s        | ≈ ±12 (bound ±60) | Prevailing meridional (north–south) surface wind, signed (+ northward), from the #31 band model. Fast diagnostic: recomputed every step, carries no memory. Appended last (codec wire-id constraint) |
+| `marineLife`    | 0–1        | 0 … 1 (0 on land) | Marine photosynthetic productivity over ocean cells (#37): 0 everywhere until the gated-stochastic abiogenesis onset, then `light × temperatureWindow × shelf-nutrient`. Fast diagnostic, re-solved each step, no memory (the O₂ *reservoir* holds the history); drives the O₂ source term and the render ocean tint (#38). Appended last (codec wire-id constraint) |
 
 ### Plates (Phase 1)
 
@@ -671,7 +672,9 @@ run later in the pipeline, closing the feedback with a one-step explicit lag
 rather than a per-step joint solve (erosion likewise reads the previous
 `seaLevelM` as its base level, and the energy balance the previous `co2`). The
 step order is `tectonics → wilson → erosion → energyBalance → winds → moisture →
-ice → seaLevel → carbon → biome`. `biome` (#35) runs **last** of all — a fast
+ice → seaLevel → carbon → marineLife → oxygen → biome` (the #37 biosphere block —
+`marineLife`/`oxygen` — inserts after `carbon`; see "Ocean life & oxygenation"
+below). `biome` (#35) runs **last** of all — a fast
 diagnostic classifying the fully-solved temperature/precipitation over the
 dynamic sea-level mask into the categorical `biome` field the renderer colours
 by; nothing downstream reads it, so it never perturbs another field (its golden
@@ -683,6 +686,52 @@ derived `seaLevel` and slow `carbon` reservoir are deliberately **not** run at
 init (they carry memory and start at their seeds — `iceFraction` 0, `seaLevelM`
 0, `co2 = initialCo2Ppm` — advancing from step 1), so the t=0 keyframe's
 slow-reservoir field bytes are identical to the pre-#33/#34 kernel.
+
+### Ocean life & oxygenation (#37, Phase 4)
+
+The biosphere block inserts two systems between `carbon` and `biome`, so the full
+step order becomes `… → carbon → marineLife → oxygen → biome`. Life reads this
+step's fully-solved climate and dynamic land mask; in this milestone it feeds back
+into **no** physical field (the albedo/weathering coupling arrives with vegetation,
+#39), so with the biosphere enabled every pre-existing field is byte-identical and
+the only new field bytes are `marineLife`. Both systems are identity when
+`params.biosphereEnabled` is false (the ablation switch, default true), and neither
+is run at init.
+
+- **`marineLife`** (fast diagnostic) does two things. First, **abiogenesis**: while
+  `abiogenesisYear < 0`, a per-step Bernoulli trial with probability
+  `(1 − exp(−abiogenesisRatePerYear·dt)) × oceanHabitableFraction` decides whether
+  life originates; on success it sets `abiogenesisYear` and emits `abiogenesis`.
+  The draw is `hash2(seed', quantizedTime)` — deterministic, seed-dependent, and
+  **independent of `ctx.rng`** (a fork inside a pure system would restart its
+  stream every step; and the biosphere must consume no sim PRNG so a
+  `biosphereEnabled=false` ablation is byte-identical), exactly the construction the
+  #18 rift decision uses. Second, once life exists, it fills the per-ocean-cell
+  productivity `light × temperatureWindow × shelf-nutrient` (0 on land), reusing the
+  #30 annual-mean insolation band profile for `light`.
+- **`oxygen`** (slow reservoir) integrates `globals.oxygen` with `dt`:
+  `grossSource = OXY_SOURCE · meanProductivity · BURIAL_FRACTION` minus a
+  volcanic-reductant sink (∝ tectonic activity) and an oxidative sink (∝ O₂), with a
+  **reductant buffer** (`globals.oxygenReductant`) that net-positive flux must
+  oxidize before O₂ can accumulate. The buffer is the physical origin of the
+  **anoxic latency**: O₂ stays pinned near zero after abiogenesis until the buffer
+  is spent, then rises over a few hundred Myr to a bounded plateau
+  (`net_source / OXY_OX_SINK`) — the Great-Oxidation S-curve. Its timing/shape vary
+  with the seed's climate and tectonic history, so the **Great Oxidation is
+  emergent, not scripted**: `greatOxidation` fires on the first crossing of
+  `GOE_THRESHOLD_PAL` (a threshold ~200× below the plateau, crossed once). The
+  **redox budget closes** (spec §5): `solveOxygen` returns every flux, and for its
+  solution `oxygen == clamp(prev + grossSource − volcanicSink − reductantAbsorbed −
+  oxidativeSink, 0, OXYGEN_MAX_PAL)` and `reductant == prevReductant −
+  reductantAbsorbed` — every PAL of atmospheric O₂ ties to organic carbon buried
+  minus the sinks. The reservoir is dt-correct (rates are per Myr, integrated with
+  `dt`), so a coarser `stepYears` rescales the increment, not the trajectory.
+
+Measured over the golden seeds (N=32, 4.5 Gyr): abiogenesis at 4–551 Myr and the
+Great Oxidation at 159–652 Myr — reliably completing on every seed yet
+seed-dependent, with an anoxic latency between the two — rising to a bounded
+~2 PAL plateau. (The absolute plateau is grid-sensitive, ~1.5 PAL at N=16 to
+~2.2 PAL at N=32/128, so tests key off relative thresholds; M0 caution 1.)
 
 ### Boundary classification (#14)
 
@@ -712,8 +761,14 @@ PlanetState = { timeYears, params: PlanetParams, globals: Globals, fields,
 PlanetParams = { seed, radiusMeters, gridN, stepYears, keyframeIntervalYears,
                  numPlates,
                  starLuminosity, dayLengthHours, obliquityDeg,
-                 initialCo2Ppm }   // immutable per run
-Globals     = { landFraction, co2, meanTemperatureK, seaLevelM, waterInventoryM }
+                 initialCo2Ppm,
+                 // mechanism toggles (#84/#88-#91): blockIsostasy, crustFates,
+                 //   compactArcs, marinePlanation, emergentArcTaper + *OnsetYears
+                 // biosphere (#37): biosphereEnabled (default true — the ablation
+                 //   switch), abiogenesisRatePerYear, initialOxygenPAL
+               }   // immutable per run
+Globals     = { landFraction, co2, meanTemperatureK, seaLevelM, waterInventoryM,
+                oxygen, oxygenReductant, abiogenesisYear }
 ```
 
 `starLuminosity` (insolation) and `obliquityDeg` (annual-mean insolation
@@ -731,6 +786,14 @@ preserved), then held constant while `seaLevel` re-solves `seaLevelM` each step.
 `globals.landFraction` is now emergent from `seaLevelM` (finalized by the
 `seaLevel` system — cells with `elevation ≥ seaLevelM`); at t=0, with `seaLevelM
 = 0`, it equals the 0 m-datum land share as before.
+`globals.oxygen` (atmospheric O₂, PAL), `globals.oxygenReductant` (the
+reduced-species buffer, PAL) and `globals.abiogenesisYear` (onset time or −1) are
+the #37 biosphere reservoirs, integrated by the `oxygen`/`marineLife` systems (see
+"Ocean life & oxygenation" below). Like the other slow reservoirs they are seeded
+at init (`oxygen = initialOxygenPAL`, `oxygenReductant = REDUCTANT_BUFFER_PAL`,
+`abiogenesisYear = −1`) and NOT advanced there, so they first depart their seed at
+step 1; being well-mixed globals (like `co2`) they cost no per-keyframe codec
+bytes and ride in `Keyframe.globals` for the HUD/narration to read.
 
 A **system** is a pure function `(state, dtYears, ctx) => PlanetState` with a
 name, applied in a fixed order by `step()`:
@@ -759,8 +822,10 @@ accumulation.
 SimEvent = { timeYears, kind: SimEventKind, data?: Record<string, number> }
 ```
 
-Discrete events (plate rifts/sutures/consumptions now; impacts, oxygenation
-later) are recorded in simulation order on `PlanetState.events`. Event kinds are a const
+Discrete events — plate rifts/sutures/consumptions, and the #37 biosphere events
+`abiogenesis` (life originates, sets `abiogenesisYear`) and `greatOxidation`
+(`oxygen` first crosses the oxidation threshold, the emergent Great Oxidation) —
+are recorded in simulation order on `PlanetState.events`. Event kinds are a const
 object in `events.ts` (`EVENT_KINDS`), single source of truth like `FIELDS`.
 Payloads are numbers only, so events are trivially deterministic and
 serializable. **Purity rule:** a system never mutates the list — it returns a
@@ -818,8 +883,7 @@ verified against Phase 1 runs):
 | precipitation | Uint8 | 0 … 8000 kg/m²/yr | ~31 kg/m²/yr |
 | iceFraction | Uint8 | 0 … 1 | ~1/255 |
 | biome | Uint8 | 0 … 255 exact | exact (asserts < 256) |
-| windU | Uint8 | −60 … +60 m/s | ~0.47 m/s |
-| windV | Uint8 | −60 … +60 m/s | ~0.47 m/s |
+| marineLife | Uint8 | 0 … 1 | ~1/255 |
 
 Continuous fields use a linear float↔uint map (out-of-range clamps to the ends);
 **categorical fields (`plateId`, `crustType`, `biome`) use an identity map and
@@ -831,9 +895,15 @@ stored set — the single §1 stored-field-set growth (`HISTORY_FORMAT_VERSION`
 hot-CO₂ states — because the renderer now needs them: `biome` drives the colour
 ramp, `iceFraction` whitens it, and the winds/precipitation ride along for Phase 5
 and `--dump`. New fields are **appended** so their on-wire `fieldId` (the
-`FIELD_NAMES` index) is stable and the header stays self-describing. Only
-`boundaryStress` (derivable, visually unused) and the crust-advected `sutureYears`
-/`sedimentM` stay out. Earlier Phase 3 bumps (#32/#33/#34) regenerated the sim
+`FIELD_NAMES` index) is stable and the header stays self-describing. As of #37
+(HISTORY_FORMAT_VERSION 2→3) `marineLife` joins the stored set (the ocean life
+story, render-tinted in #38) and — to hold the ~0.5 GB retained-history budget —
+`windU`/`windV` **drop back out** (unused at render, stored since #35 only for
+Phase 5 cloud advection; the sim still computes them and `--dump windU` reads them
+off the full keyframe). Net −1 stored field (12→11 B/cell), so the headline 4.5 Gyr
+@ 10 Myr @ N=128 history fits with room to spare. Only `boundaryStress`
+(derivable), the crust-advected `sutureYears`/`sedimentM`, and now `windU`/`windV`
+(recompute-at-render) stay out. Earlier Phase 3 bumps (#32/#33/#34) regenerated the sim
 goldens but left the stored set untouched, so their byte goldens shifted only
 because stored elevation/temperature values changed; #35 is the first to change
 the stored-field set and layout itself (new byte goldens over the grown

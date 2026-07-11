@@ -46,6 +46,11 @@ describe('codec container (#22)', () => {
     expect(decoded.fields.precipitation).toBeDefined();
     expect(decoded.fields.iceFraction).toBeDefined();
     expect(decoded.fields.biome).toBeDefined();
+    // #37: marineLife joins the stored set; windU/windV drop back out (unused at
+    // render, recompute-at-render per spec §7.6) to hold the history budget.
+    expect(decoded.fields.marineLife).toBeDefined();
+    expect(decoded.fields.windU).toBeUndefined();
+    expect(decoded.fields.windV).toBeUndefined();
   });
 
   it('holds continuous fields within half a quantization step', () => {

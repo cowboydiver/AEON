@@ -130,4 +130,19 @@ export {
   BIOME_INDICES,
   type BiomeName,
 } from './systems/biome';
+export {
+  marineLifeSystem,
+  applyMarineLife,
+  solveMarineLife,
+  oceanHabitableFraction,
+  abiogenesisProbability,
+  gaussianWindow,
+} from './systems/marineLife';
+export {
+  oxygenSystem,
+  applyOxygen,
+  solveOxygen,
+  meanMarineProductivity,
+  type OxygenSolution,
+} from './systems/oxygen';
 export { cellCenterTable, neighborTable, eastNorthTable } from './grid';

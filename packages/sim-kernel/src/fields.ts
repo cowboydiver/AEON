@@ -52,6 +52,11 @@ export const FIELDS = {
     description:
       'Prevailing meridional (north-south) surface wind, signed (+ northward). Diagnostic band model from rotation rate + temperature gradient (#31); recomputed every step, carries no memory. Appended last (codec wire-id constraint)',
   },
+  marineLife: {
+    unit: '1',
+    description:
+      'Marine photosynthetic productivity, 0-1, over ocean cells (0 on land). Zero everywhere until the gated-stochastic abiogenesis onset (#37); then a FAST diagnostic of local conditions (light × temperature window × shelf-nutrient proxy), recomputed every step with no memory — the O₂ reservoir (globals.oxygen) holds the history. Drives the O₂ source term and the render ocean tint (#38). Appended last (codec wire-id constraint)',
+  },
 } as const;
 
 export type FieldName = keyof typeof FIELDS;
