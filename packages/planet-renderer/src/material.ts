@@ -151,12 +151,17 @@ function biomePalette(biome: FloatNode): Vec3Node {
  * round-trip, so a half-unit threshold cleanly separates "same" from "different".
  */
 function plateBoundary(plateId: DataTexture, coord: ReturnType<typeof uv>, texel: number): FloatNode {
-  const c = texture(plateId, coord).r;
-  const dl = texture(plateId, coord.add(vec2(-texel, 0))).r;
-  const dr = texture(plateId, coord.add(vec2(texel, 0))).r;
-  const du = texture(plateId, coord.add(vec2(0, -texel))).r;
-  const dd = texture(plateId, coord.add(vec2(0, texel))).r;
-  const maxDiff = c.sub(dl).abs().max(c.sub(dr).abs()).max(c.sub(du).abs()).max(c.sub(dd).abs());
+  const center = texture(plateId, coord).r;
+  const left = texture(plateId, coord.add(vec2(-texel, 0))).r;
+  const right = texture(plateId, coord.add(vec2(texel, 0))).r;
+  const up = texture(plateId, coord.add(vec2(0, -texel))).r;
+  const down = texture(plateId, coord.add(vec2(0, texel))).r;
+  const maxDiff = center
+    .sub(left)
+    .abs()
+    .max(center.sub(right).abs())
+    .max(center.sub(up).abs())
+    .max(center.sub(down).abs());
   return select(maxDiff.greaterThan(0.5), float(1), float(0));
 }
 
@@ -173,6 +178,13 @@ export function createPlanetMaterial(
   // plate-boundary sampler steps to reach an adjacent cell centre.
   const texel = 1 / (gridN + 2);
 
+  // Categorical hold/nearest pick between the two keyframe sets: sample set A when
+  // blend < 0.5, else set B — NEVER lerp (a value between two class codes is
+  // meaningless; see ARCHITECTURE.md). The single site of that rule, shared by
+  // every categorical field (biome, plateId, crustType).
+  const sampleNearest = (fromA: DataTexture, fromB: DataTexture) =>
+    select(uniforms.blend.lessThan(0.5), texture(fromA, coord).r, texture(fromB, coord).r);
+
   // Continuous: blend the two keyframes' elevation. Vertex displacement and the
   // ocean depth tint both read this blended value, so relief interpolates smoothly.
   const elevation = mix(texture(a.elevation, coord).r, texture(b.elevation, coord).r, uniforms.blend);
@@ -186,7 +198,7 @@ export function createPlanetMaterial(
   // Whittaker palette — the from-orbit colour ramp. Ocean (class 0) instead takes
   // a depth-shaded blue from elevation, so the sea keeps its bathymetric gradient
   // and (because class 0 carries the sea-level mask) the shoreline tracks sea level.
-  const biome = select(uniforms.blend.lessThan(0.5), texture(a.biome, coord).r, texture(b.biome, coord).r);
+  const biome = sampleNearest(a.biome, b.biome);
   const biomeColor = biomePalette(biome);
   const depthT = clamp(elevation.div(-INITIAL_OCEAN_DEPTH_M), 0, 1);
   const oceanColor = mix(SHALLOW_OCEAN, DEEP_OCEAN, depthT);
@@ -195,7 +207,7 @@ export function createPlanetMaterial(
   // Categorical: nearest-pick the plate id (never lerp) and modulate the albedo
   // by a stable per-plate colour. A cosine palette maps the spread hue to RGB;
   // `plateTint` scales the modulation around 1.0 (so 0 leaves albedo untouched).
-  const plateId = select(uniforms.blend.lessThan(0.5), texture(a.plateId, coord).r, texture(b.plateId, coord).r);
+  const plateId = sampleNearest(a.plateId, b.plateId);
   const hueT = fract(plateId.mul(PLATE_HUE_STRIDE));
   const plateColor = cos(vec3(hueT, hueT.add(0.33), hueT.add(0.67)).mul(TAU)).mul(0.5).add(0.5);
   const plateFactor = mix(vec3(1, 1, 1), plateColor.mul(2), uniforms.plateTint);
@@ -210,8 +222,10 @@ export function createPlanetMaterial(
   // and draw plate boundaries as dark lines. Both the crust class and the boundary
   // come from the SAME nearest-picked keyframe (`blend < 0.5 ? A : B`) so the map
   // stays crisp; radial displacement and shading are kept so it reads on the globe.
-  const crustType = select(uniforms.blend.lessThan(0.5), texture(a.crustType, coord).r, texture(b.crustType, coord).r);
+  const crustType = sampleNearest(a.crustType, b.crustType);
   const crustColor = select(crustType.lessThan(0.5), OCEANIC_CRUST_COLOR, CONTINENTAL_CRUST_COLOR);
+  // Boundary mask from the same nearest-picked keyframe as plateId (a→b hold),
+  // so the lines and the crust classes agree across a keyframe boundary.
   const boundary = select(
     uniforms.blend.lessThan(0.5),
     plateBoundary(a.plateId, coord, texel),
