@@ -20,6 +20,55 @@ jobs:
   sync:
     runs-on: ubuntu-latest
     steps:
+      - name: Sync standing labels
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const { owner, repo } = context.repo;
+
+            // Standing labels + their descriptions (mirrors docs/LABELS.md).
+            // Descriptions are <= 100 chars (GitHub's limit). `color` is used
+            // only when a label must be created; an existing label keeps its
+            // current color and only has its description reconciled.
+            const labels = [
+              { name: 'spike',    color: 'fbca04', description: 'Time-boxed research/prototype to de-risk a decision before committing to an approach' },
+              { name: 'kernel',   color: '1d76db', description: 'Changes packages/sim-kernel — the deterministic, zero-dependency simulation' },
+              { name: 'renderer', color: '5319e7', description: 'Changes packages/planet-renderer — Three.js/WebGPU materials, meshes, keyframe blending' },
+              { name: 'ui',       color: '0e8a16', description: 'Changes apps/web — timeline UI, React/R3F app, worker host' },
+              { name: 'infra',    color: '006b75', description: 'Tooling, harness, planning, or phase-acceptance/report work — not a sim/renderer/UI feature' },
+              { name: 'goldens',  color: 'b60205', description: 'Touches deterministic kernel output — expect a deliberate golden-hash regeneration' },
+              { name: 'phase-1',  color: 'c5def5', description: 'Phase 1 — Tectonics (see docs/PLAN.md and milestone 1)' },
+              { name: 'phase-2',  color: 'c5def5', description: 'Phase 2 — Timeline scrubbing (see docs/PLAN.md and milestone 2)' },
+              { name: 'phase-3',  color: 'c5def5', description: 'Phase 3 — Climate, hydrology, biomes (see docs/PLAN.md and milestone 3)' },
+              { name: 'phase-4',  color: 'c5def5', description: 'Phase 4 — Biosphere & planetary story (see docs/PLAN.md and milestone 4)' },
+              { name: 'phase-5',  color: 'c5def5', description: 'Phase 5 — Presentation polish (see docs/PLAN.md and milestone 5)' },
+              { name: 'phase-6',  color: 'c5def5', description: 'Phase 6 — Surface exploration (see docs/PLAN.md and milestone 6)' },
+            ];
+
+            const existing = new Map((await github.paginate(
+              github.rest.issues.listLabelsForRepo, { owner, repo, per_page: 100 }))
+              .map(l => [l.name, l]));
+
+            let created = 0, updated = 0, unchanged = 0;
+            for (const l of labels) {
+              const cur = existing.get(l.name);
+              if (!cur) {
+                await github.rest.issues.createLabel(
+                  { owner, repo, name: l.name, color: l.color, description: l.description });
+                core.info(`created label ${l.name}`);
+                created++;
+              } else if ((cur.description || '') !== l.description) {
+                // description only — leaves the label's existing color untouched
+                await github.rest.issues.updateLabel(
+                  { owner, repo, name: l.name, description: l.description });
+                core.info(`updated description for ${l.name}`);
+                updated++;
+              } else {
+                unchanged++;
+              }
+            }
+            core.info(`labels: ${created} created, ${updated} updated, ${unchanged} unchanged`);
+
       - uses: actions/github-script@v7
         with:
           script: |
