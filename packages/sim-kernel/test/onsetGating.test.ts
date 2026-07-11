@@ -7,13 +7,24 @@ import { run, type Keyframe } from '../src/step';
 /**
  * The branched-A/B instrument contract (#84 → #88/#89/#90/#91), through the
  * FULL system pipeline: a flag-on run with onset Y is bit-identical to a
- * flag-off run until Y, for every default-off mechanism. None of the gated
+ * flag-off run until Y, for every gated mechanism. None of the gated
  * systems consumes RNG, so post-onset deltas in the paired harness are the
  * mechanism's direct effect, not seed-level trajectory divergence — this
  * test is what makes `pnpm sim -- --ab <mechanism>` a measurement rather
  * than a hope. (blockIsostasy has the same test in blockIsostasy.test.ts,
  * where the instrument was born.)
+ *
+ * Since the #88/#90 default-on promotion the mechanisms are isolated
+ * explicitly: the shared baseline turns all four off, and each arm turns on
+ * exactly one with an onset — same isolation as the per-mechanism goldens.
  */
+
+const ALL_OFF = {
+  crustFates: false,
+  compactArcs: false,
+  marinePlanation: false,
+  emergentArcTaper: false,
+} as const;
 
 const MECHANISMS: ReadonlyArray<Partial<PlanetParams>> = [
   { crustFates: true, crustFatesOnsetYears: 20e6 },
@@ -27,7 +38,7 @@ describe('onset gating (#88/#89/#90/#91 branched A/B)', () => {
   const onsetYears = 20e6;
   const collect = (partial: Partial<PlanetParams>): Keyframe[] => {
     const frames: Keyframe[] = [];
-    const params = createPlanetParams({ seed: 42, gridN: 32, ...partial });
+    const params = createPlanetParams({ seed: 42, gridN: 32, ...ALL_OFF, ...partial });
     run(params, untilYears, (kf) => frames.push(kf));
     return frames;
   };

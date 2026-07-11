@@ -37,21 +37,29 @@ Options:
                               dispersed-keyframe fraction, monopoly window)
   --block-isostasy            enable the crustal-block isostasy prototype (#84):
                               per-component elevation ceilings that founder
-                              small continental blocks (default off)
+                              small continental blocks (default off —
+                              superseded by crust-fates)
   --crust-fates               enable small-component crust fates + terrane
                               docking (#88): small components weld onto large
                               ones across short straits, isolated ones drown
-                              and have their crust record retired (default off)
+                              and have their crust record retired (default ON
+                              since the #88/#90 promotion)
   --compact-arcs              enable compact arc maturation (#89): belt arcs
                               mature only with >= 2 continental 4-neighbors,
-                              so creation grows blobs, not chains (default off)
+                              so creation grows blobs, not chains (default off
+                              — measured negative: starves continent creation)
   --marine-planation          enable marine planation for small components
                               (#90): wave attack planes small blocks toward
                               the shelf level, conservatively, into sedimentM
-                              (default off)
+                              (default ON since the #88/#90 promotion)
   --emergent-arc-taper        enable the emergent-arc growth taper (#91): only
                               long-lived subduction builds emergent +1 km arc
-                              chains; young margins stay submerged (default off)
+                              chains; young margins stay submerged (default off
+                              — measured negative: collapses land fraction)
+  --no-<mechanism>            disable a default-on mechanism for this run,
+                              e.g. --no-crust-fates --no-marine-planation;
+                              all five --no-* forms exist. Composable with the
+                              positive flags for any on/off combination.
   --ab <mechanism>            paired branched A/B (PR #87 instrument): run
                               flag-off and flag-on-with-onset arms that are
                               bit-identical until --ab-branch, then print
@@ -62,7 +70,10 @@ Options:
                               block-isostasy, crust-fates, compact-arcs,
                               marine-planation, emergent-arc-taper.
                               Mutually exclusive with the single-arm mechanism
-                              flags and --dump.
+                              flags and --dump. Since the #88-#91 promotion
+                              BOTH arms inherit the promoted defaults for the
+                              other mechanisms — the A/B measures the marginal
+                              effect against the shipped default world.
   --ab-branch <years>         branch year for --ab (both arms identical before
                               it; required with --ab)
   --ab-block-isostasy <years> alias for --ab block-isostasy --ab-branch <years>
@@ -90,6 +101,11 @@ const { values } = parseArgs({
     'compact-arcs': { type: 'boolean', default: false },
     'marine-planation': { type: 'boolean', default: false },
     'emergent-arc-taper': { type: 'boolean', default: false },
+    'no-block-isostasy': { type: 'boolean', default: false },
+    'no-crust-fates': { type: 'boolean', default: false },
+    'no-compact-arcs': { type: 'boolean', default: false },
+    'no-marine-planation': { type: 'boolean', default: false },
+    'no-emergent-arc-taper': { type: 'boolean', default: false },
     ab: { type: 'string' },
     'ab-branch': { type: 'string' },
     'ab-block-isostasy': { type: 'string' },
@@ -122,12 +138,14 @@ const gridN = numArg(values['grid-n'], 'grid-n');
 const dumpEvery = Math.max(1, Math.round(numArg(values['dump-every'], 'dump-every') ?? 1));
 
 /**
- * The default-off mechanism prototypes the branched A/B harness can measure
+ * The togglable mechanisms the branched A/B harness can measure
  * (#84/#88/#89/#90/#91): CLI name -> single-arm flag + the kernel params an
- * arm gets. Every mechanism has an onset param with the same contract
- * (bit-identical to flag-off before it, no RNG consumed — pinned by the
- * kernel's onset-gating tests), which is what makes the paired arms a
- * measurement.
+ * arm gets. crust-fates and marine-planation default ON since the #88/#90
+ * promotion (compact-arcs and emergent-arc-taper measured negative and stay
+ * off; block-isostasy stays off, superseded by crust-fates); each has an
+ * onset param with the same contract (bit-identical to flag-off before it,
+ * no RNG consumed — pinned by the kernel's onset-gating tests), which is
+ * what makes the paired arms a measurement.
  */
 const MECHANISMS: Record<string, (on: boolean, onsetYears: number) => Partial<PlanetParams>> = {
   'block-isostasy': (on, onset) => ({ blockIsostasy: on, blockIsostasyOnsetYears: onset }),
@@ -172,11 +190,18 @@ const params = createPlanetParams({
   ...(gridN !== undefined ? { gridN } : {}),
   ...(keyframeIntervalYears !== undefined ? { keyframeIntervalYears } : {}),
   // Single-arm mechanism flags compose (e.g. --block-isostasy --crust-fates
-  // measures the pair together); the paired --ab harness takes one at a time.
-  ...MECHANISM_FLAGS.reduce<Partial<PlanetParams>>(
-    (acc, flag) => (values[flag] ? { ...acc, ...MECHANISMS[flag]!(true, 0) } : acc),
-    {},
-  ),
+  // measures the pair together); --no-* forms disable a default-on mechanism.
+  // The paired --ab harness takes one at a time.
+  ...MECHANISM_FLAGS.reduce<Partial<PlanetParams>>((acc, flag) => {
+    const on = values[flag];
+    const off = values[`no-${flag}`];
+    if (on && off) {
+      console.error(`sim-cli: --${flag} and --no-${flag} are mutually exclusive`);
+      process.exit(2);
+    }
+    if (!on && !off) return acc; // kernel default rules
+    return { ...acc, ...MECHANISMS[flag]!(on, 0) };
+  }, {}),
 });
 
 // pnpm runs this script with cwd = packages/sim-cli; resolve --out relative

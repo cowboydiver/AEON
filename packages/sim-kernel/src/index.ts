@@ -57,6 +57,13 @@ export {
 export { tectonicsSystem } from './systems/tectonics';
 export { blockIsostasySystem, blockElevationCap } from './systems/blockIsostasy';
 export { crustFatesSystem } from './systems/crustFates';
+export {
+  MECHANISMS,
+  defaultMechanismToggles,
+  type MechanismInfo,
+  type MechanismKey,
+  type MechanismToggles,
+} from './mechanisms';
 export { labelContinentalComponents, type ContinentalComponents } from './components';
 export { erosionSystem } from './systems/erosion';
 export { wilsonSystem } from './systems/wilson';

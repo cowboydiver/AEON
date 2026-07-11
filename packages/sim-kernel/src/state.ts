@@ -61,8 +61,9 @@ export interface PlanetParams {
    * large component's plate — Wrangellia-style docking), and isolated small
    * components subside toward the founder level and have their crust record
    * retired (crustType → 0, the crustal-area ledger debited deliberately)
-   * once fully drowned. Default OFF — flag-off runs are byte-identical to
-   * the pre-#88 kernel; flip on via sim-cli --crust-fates.
+   * once fully drowned. Default ON (promoted after the branched-A/B campaign
+   * in ISSUE_88_91_FINDINGS.md); flip off for the pre-#88 kernel path, which
+   * stays pinned by the legacy all-mechanisms-off goldens.
    */
   crustFates: boolean;
   /** Sim year before which crustFates is inert even when enabled — the #88
@@ -74,8 +75,11 @@ export interface PlanetParams {
    * belt matures into continental crust only when it has at least
    * COMPACT_ARC_MIN_CONT_NEIGHBORS continental 4-neighbors, so creation
    * grows blobs attached to existing continent instead of manufacturing the
-   * island chains that become the next generation of lace. Default OFF;
-   * flip on via sim-cli --compact-arcs.
+   * island chains that become the next generation of lace. Default OFF —
+   * measured negative (it starves continental creation; see
+   * ISSUE_88_91_FINDINGS.md, and combined with emergentArcTaper it collapses
+   * the default world toward a waterworld), so it was NOT promoted with the
+   * #88-#91 batch. Togglable in the web sidebar / sim-cli --compact-arcs.
    */
   compactArcs: boolean;
   /** Sim year before which compactArcs is inert even when enabled — the #89
@@ -86,7 +90,8 @@ export interface PlanetParams {
    * small continental blocks toward the shelf/founder level, moving mass
    * into oceanic `sedimentM` (fully conservative, unlike the #84 founder)
    * and lifting the subsea erosion damping inside small components. Default
-   * OFF; flip on via sim-cli --marine-planation.
+   * ON (promoted after the branched-A/B campaign in ISSUE_88_91_FINDINGS.md;
+   * the legacy goldens pin the off path).
    */
   marinePlanation: boolean;
   /** Sim year before which marinePlanation is inert even when enabled — the
@@ -99,8 +104,11 @@ export interface PlanetParams {
    * margins hold submerged arcs and only long-lived subduction — sustained
    * enough to outpace the OCEAN_RELIEF_RELAX decay — builds emergent
    * Japan/Aleutians-style chains. The maturation gate (−500 m) sits below
-   * sea level, so the continental-creation budget is untouched. Default
-   * OFF; flip on via sim-cli --emergent-arc-taper.
+   * sea level, so the continental-creation budget is untouched. Default OFF —
+   * measured negative (N=128 land minimum collapses to 3.6% alone, and
+   * combined with compactArcs the default world ends near-waterworld; see
+   * ISSUE_88_91_FINDINGS.md), so it was NOT promoted with the #88-#91 batch.
+   * Togglable in the web sidebar / sim-cli --emergent-arc-taper.
    */
   emergentArcTaper: boolean;
   /** Sim year before which emergentArcTaper is inert even when enabled —
@@ -177,11 +185,11 @@ export function createPlanetParams(partial: Partial<PlanetParams> & { seed: numb
     initialCo2Ppm: INITIAL_CO2_PPM,
     blockIsostasy: false,
     blockIsostasyOnsetYears: 0,
-    crustFates: false,
+    crustFates: true,
     crustFatesOnsetYears: 0,
     compactArcs: false,
     compactArcsOnsetYears: 0,
-    marinePlanation: false,
+    marinePlanation: true,
     marinePlanationOnsetYears: 0,
     emergentArcTaper: false,
     emergentArcTaperOnsetYears: 0,

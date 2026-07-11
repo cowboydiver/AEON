@@ -248,3 +248,34 @@ Ship all four default-off, as measurement substrate (same posture as #84):
   N=128 — land min 3.6%). They stay in the tree as documented negative
   results with the harness wired, so any retune is a one-flag
   re-measurement.
+
+## Post-verdict: the default-on promotion (KERNEL_BEHAVIOR_VERSION 15)
+
+The promotion decision was made after this campaign, with fresh combined
+measurements (all runs 4.5 Gyr from formation, mechanisms on from t=0):
+
+| config | N | seed | land min | final land | notes |
+| --- | --- | --- | --- | --- | --- |
+| all four ON | 64 | 1 | 2.0% | 2.1% | near-waterworld, cont crust 0.063 |
+| all four ON | 64 | 42 | 4.9% | 5.1% | cont crust 0.111 |
+| all four ON | 128 | 42 | 5.3% | 5.3% | confirms at product grid |
+| crustFates+marinePlanation | 64 | 1 | 16.4% | 20.3% | cont crust 0.192 |
+| crustFates+marinePlanation | 64 | 42 | 15.8% | 15.8% | final largest land comp 0.565 |
+| crustFates+marinePlanation | 128 | 42 | 11.4% | 14.3% | ~20 cont comps past 1 Gyr; healthy flipbook |
+
+The two measured-negative mechanisms **compound**: compactArcs starves arc
+maturation while emergentArcTaper suppresses the emergent relief that would
+otherwise survive as latent continental crust, and the default world
+collapses far below the standing 10% land-sanity floor (the phase-1
+invariant catches it — at N=16, seed 1 spends 20/45 checkpoints under the
+floor). The combination was therefore rejected for defaults.
+
+**Promoted: `crustFates` + `marinePlanation`** — the pair measures
+*healthier* than the pre-promotion baseline (baseline N=64 seed 42 land
+min 14.0%; the pair 15.8–16.4%) while consolidating the crust map, which
+was the point of the whole series. `compactArcs` and `emergentArcTaper`
+remain default-off togglables (web sidebar / CLI flags), preserved as
+documented negative results with the harness wired. Main + codec goldens
+were regenerated deliberately for the new defaults; the pre-promotion
+kernel path stays pinned by the legacy all-mechanisms-off goldens, whose
+hashes are the old main goldens' values carried over verbatim.

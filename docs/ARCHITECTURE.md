@@ -438,10 +438,24 @@ comparisons.
 
 The #84 A/B verdict (Δ land components ≈ 0: foundered splinters are
 replaced by the boundary processes at the same rate) motivated four further
-**default-off mechanism prototypes** (#88–#91), every one carrying the same
+**mechanism prototypes** (#88–#91), every one carrying the same
 `<name>` + `<name>OnsetYears` param pair and measurable with the same
-harness; flag-off runs are byte-identical to the pre-#88 kernel and each
-flag-on path has its own golden spine:
+harness. After the ISSUE_88_91_FINDINGS.md campaign, **`crustFates` and
+`marinePlanation` were promoted to default-ON** (KERNEL_BEHAVIOR_VERSION 15;
+main goldens regenerated deliberately) — the promoted pair measures
+healthier than the old baseline over full 4.5 Gyr histories (N=128 seed 42:
+land min 11.4%, final land 14.3%, ~20 consolidated continental components
+vs 275 baseline). `compactArcs` and `emergentArcTaper` **stay default-off**:
+measured together at default-on they starve continental creation into a
+near-waterworld (N=64 final land 2–5%, N=128 land min 5.3% — far below the
+standing 10% land-sanity floor). The pre-promotion kernel path is pinned
+unchanged by the legacy all-mechanisms-off goldens, and each mechanism's
+isolated flag-on path has its own golden spine. The mechanism registry
+(`sim-kernel/src/mechanisms.ts`, exported as `MECHANISMS` +
+`defaultMechanismToggles()`) is the single source of truth UIs use for
+mechanism toggles — the web app's sidebar reads labels and live default
+states from it, and folds non-default toggle states into the history-cache
+key:
 
 - **`crustFates` (#88, its own system, after wilson):** attacks the
   crustType lace directly. Labels components (shared `components.ts` BFS);
