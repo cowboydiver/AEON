@@ -320,5 +320,33 @@ export function summarizePairedMetrics(
       `, Δ largest cont comp ${dContLargest >= 0 ? '+' : ''}${dContLargest.toFixed(3)}` +
       `, Δ cont crust ${dContFrac >= 0 ? '+' : ''}${dContFrac.toFixed(2)} pts of sphere`,
   );
+  // Net crust production per 100 Myr bucket (#89): the paired difference in
+  // how much continental-crust STOCK each arm gained over each 100 Myr of
+  // the window — net creation minus consumption, the closest observable to
+  // the issue's "arc-crust production totals" without a kernel counter. A
+  // gate that merely RESHAPES creation holds these near zero; one that
+  // STARVES it goes monotonically negative. Dispersal is paired the same
+  // way ("dispersal/liveness unchanged" is an acceptance clause).
+  const bucketDeltas: string[] = [];
+  for (let start = 0; start + 1 < window.length; ) {
+    const t0 = window[start]!.off.timeYears;
+    let end = start;
+    while (end + 1 < window.length && window[end + 1]!.off.timeYears - t0 <= 100e6) end++;
+    if (end === start) {
+      start++;
+      continue;
+    }
+    const gOff = (window[end]!.off.contFrac - window[start]!.off.contFrac) * 100;
+    const gOn = (window[end]!.on.contFrac - window[start]!.on.contFrac) * 100;
+    const d = gOn - gOff;
+    bucketDeltas.push(`${d >= 0 ? '+' : ''}${d.toFixed(2)}`);
+    start = end;
+  }
+  const dispersedOff = window.filter((w) => w.off.maxPlateFrac < DISPERSED_MAX_PLATE_FRAC).length;
+  const dispersedOn = window.filter((w) => w.on.maxPlateFrac < DISPERSED_MAX_PLATE_FRAC).length;
+  rows.push(
+    `ab: Δ net crust production per 100 Myr (pts of sphere): ${bucketDeltas.join(' / ')}` +
+      `; dispersed in window ${((dispersedOff / window.length) * 100).toFixed(0)}% -> ${((dispersedOn / window.length) * 100).toFixed(0)}%`,
+  );
   return rows.join('\n');
 }

@@ -150,10 +150,12 @@ export const crustFatesSystem: System = {
       }
 
       if (bestBridge !== -1) {
-        // --- Dock. Walk the bridge back to the large component.
+        // --- Dock. Walk the bridge back to the large component. bestBridge
+        // is oceanic, so its dist is >= 1 and the walk always ends on the
+        // dist-0 large-component cell the last bridge cell points to.
         const bridge: number[] = [];
         for (let c = bestBridge; dist[c]! > 0; c = parent[c]!) bridge.push(c);
-        const largeEnd = bridge.length > 0 ? parent[bridge[bridge.length - 1]!]! : bestBridge;
+        const largeEnd = parent[bridge[bridge.length - 1]!]!;
         elevation ??= pre.elevation.slice();
         crustType ??= pre.crustType.slice();
         crustAge ??= pre.crustAge.slice();
