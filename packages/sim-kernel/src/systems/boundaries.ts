@@ -15,10 +15,12 @@ import { oceanicDepthForAge } from '../bathymetry';
 import {
   ACTIVE_MARGIN_STRESS_M_PER_YR,
   ARC_CREATION_REFERENCE_GRID_N,
+  ARC_EMERGENT_GROWTH_FACTOR,
   ARC_GROWTH_RATE_M_PER_YR,
   ARC_MATURATION_ELEVATION_M,
   ARC_MAX_ELEVATION_M,
   COLLISION_WIDTH_CELLS,
+  COMPACT_ARC_MIN_CONT_NEIGHBORS,
   OROGENY_MAX_ELEVATION_M,
   OROGENY_RATE_M_PER_YR,
   OROGENY_STRESS_REF_M_PER_YR,
@@ -186,6 +188,18 @@ export function applyConvergentTopography(
   const arcGrowthRate =
     ARC_GROWTH_RATE_M_PER_YR * Math.max(1, N / ARC_CREATION_REFERENCE_GRID_N);
   const beltRadius = Math.max(1, Math.round(N / ARC_CREATION_REFERENCE_GRID_N));
+  // Emergent-arc growth taper (#91, default-off): above sea level, arc
+  // growth is scaled by ARC_EMERGENT_GROWTH_FACTOR so only long-lived
+  // subduction builds emergent chains (see the constant's comment). Reads
+  // the previous step's sea level — the same explicit lag erosion uses.
+  const emergentTaper =
+    state.params.emergentArcTaper && state.timeYears >= state.params.emergentArcTaperOnsetYears;
+  const seaLevel = state.globals.seaLevelM;
+  // Compact arc maturation (#89, default-off): a belt candidate matures only
+  // with >= COMPACT_ARC_MIN_CONT_NEIGHBORS continental 4-neighbors in the
+  // pre-topography crust map, so creation grows blobs instead of chains.
+  const compactArcs =
+    state.params.compactArcs && state.timeYears >= state.params.compactArcsOnsetYears;
   // Arc cells that reached maturation elevation this step (#67): maturation
   // is decided in one attachment pass after the margin loop, not inline —
   // see below.
@@ -216,7 +230,23 @@ export function applyConvergentTopography(
       if (myType === 1) {
         seeds.push({ cell: i, amount: OROGENY_RATE_M_PER_YR * dtYears * norm, width: OROGENY_WIDTH_CELLS });
       } else {
-        elevation[i] = Math.min(elevation[i]! + arcGrowthRate * dtYears * norm, ARC_MAX_ELEVATION_M);
+        if (emergentTaper) {
+          // #91: full-rate submarine construction, tapered subaerial growth.
+          // Growth that would land above sea level is split at the surface:
+          // the submerged portion applies in full (the −500 m maturation
+          // gate is reached exactly as without the taper), the emergent
+          // remainder is scaled by ARC_EMERGENT_GROWTH_FACTOR.
+          const e = elevation[i]!;
+          const full = arcGrowthRate * dtYears * norm;
+          let grown = e + full;
+          if (grown > seaLevel) {
+            const submerged = Math.max(0, seaLevel - e);
+            grown = Math.max(e, seaLevel) + (full - submerged) * ARC_EMERGENT_GROWTH_FACTOR;
+          }
+          elevation[i] = Math.min(grown, ARC_MAX_ELEVATION_M);
+        } else {
+          elevation[i] = Math.min(elevation[i]! + arcGrowthRate * dtYears * norm, ARC_MAX_ELEVATION_M);
+        }
         if (elevation[i]! >= ARC_MATURATION_ELEVATION_M) matureCandidates.push(i);
       }
     } else {
@@ -277,7 +307,22 @@ export function applyConvergentTopography(
       frontier = next;
     }
     for (const i of matureCandidates) {
-      if (belt[i] === 1) crustType[i] = 1;
+      if (belt[i] !== 1) continue;
+      if (compactArcs) {
+        // #89: mature only against a concave stretch of continent (>= 2
+        // continental 4-neighbors in the PRE-topography map — immutable
+        // this step, so scan order cannot leak). A coast-parallel chain
+        // cell has 1 and stays an oceanic arc; it can mature in a later
+        // step once the continent grows around it. Creation is reshaped
+        // toward blobs, not throttled to enclosed holes (the measured-fatal
+        // #67 attachment-gate trap used connectivity through other arcs).
+        let contNb = 0;
+        for (let k = 0; k < 4; k++) {
+          if (preCrust[nbTable[i * 4 + k]!] === 1) contNb++;
+        }
+        if (contNb < COMPACT_ARC_MIN_CONT_NEIGHBORS) continue;
+      }
+      crustType[i] = 1;
     }
   }
 

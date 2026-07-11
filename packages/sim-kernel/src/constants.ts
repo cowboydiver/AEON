@@ -512,6 +512,107 @@ export const BLOCK_FULL_OROGENY_AREA_M2 = 2e12;
  */
 export const BLOCK_ISOSTASY_RELAX_M_PER_YR = 1e-3;
 
+// --- Small-component crust fates & terrane docking (#88) ---------------------
+
+/**
+ * Continental-component area below which the component is "small" for the
+ * #88 crust-fate pass — eligible to dock onto a large component or, failing
+ * that, to founder as a crust record, m². Same physical premise and value as
+ * BLOCK_FOUNDER_AREA_M2 (300k km² — below Madagascar, above the
+ * collision-debris / rifted-sliver scale the boundary processes strand):
+ * the two mechanisms attack the same population of blocks, #84 through the
+ * land mask (elevation) and #88 through the crust map (crustType).
+ * Deliberately a separate constant so the two prototypes can be tuned apart
+ * during measurement.
+ */
+export const CRUST_FATE_SMALL_AREA_M2 = 3e11;
+
+/**
+ * Maximum ocean gap, in cells, across which a small component docks onto a
+ * large one (#88 static half). 2 cells is the issue's spec: at N=64 that is
+ * ~300 km of strait — the scale of the suture zones bounding real docked
+ * terranes (Wrangellia and friends are welded across tens to a few hundred
+ * km). Beyond it the fragment keeps drifting until plate motion delivers it
+ * (the transport half: dock-on-arrival is what makes this consolidation
+ * dynamics, not just cleanup of lucky proximity).
+ */
+export const CRUST_FATE_MERGE_GAP_CELLS = 2;
+
+/**
+ * Rate at which an isolated small component's relief subsides toward the
+ * founder level before its crust record retires, m/yr (#88). Same
+ * gravitational-collapse timescale argument as BLOCK_ISOSTASY_RELAX_M_PER_YR
+ * (a 9 km splinter drowns in ~9 Myr — several sim steps, no single-step
+ * cliff). The crustType → 0 flip itself fires only once the whole component
+ * already sits at or below the founder level, so the visible land mask never
+ * pops: retirement is bookkeeping on a block that is already underwater, and
+ * the ordinary oceanic age-depth relaxation takes the platform down from
+ * there at its own bounded rate.
+ */
+export const CRUST_FATE_SUBSIDENCE_M_PER_YR = 1e-3;
+
+// --- Compact arc maturation (#89) ---------------------------------------------
+
+/**
+ * Minimum continental 4-neighbors (in the pre-topography crust map) for an
+ * arc cell in the accretionary belt to mature into continental crust when
+ * params.compactArcs is on (#89). 2 makes creation grow blobs: a cell on a
+ * straight coast-parallel arc line has 1 continental neighbor and stays an
+ * oceanic arc (it can mature in a later step once the continent grows
+ * around it), while a bay/concavity cell has 2+ and fills in — so new
+ * continent compacts the margin instead of stringing chains along it that
+ * become the next generation of lace. 1 would be the old belt-only gate;
+ * 3+ restricts creation to enclosed holes only, the measured-fatal #67
+ * attachment-gate starvation trap.
+ */
+export const COMPACT_ARC_MIN_CONT_NEIGHBORS = 2;
+
+// --- Marine planation for small components (#90) -------------------------------
+
+/**
+ * Continental-component area below which marine planation acts, m² (#90).
+ * A block this small is all coastline — every interior cell within reach of
+ * wave attack. The strength ramps linearly from 1 at zero area to 0 here,
+ * so a growing component feels no cliff as it crosses the threshold. Same
+ * 300k km² scale as the #84/#88 thresholds — the same population of blocks,
+ * attacked through the erosion ledger this time (transport into sedimentM,
+ * fully conservative, unlike the #84 founder's subsidence).
+ */
+export const MARINE_PLANATION_AREA_M2 = 3e11;
+
+/**
+ * Peak marine-planation export rate (at zero component area), m/yr (#90).
+ * Wave truncation of a volcanic island to a submerged flat-topped platform
+ * takes ~1–10 Myr (guyot formation timescale); 1e-3 m/yr planes a 1 km
+ * island in ~1 Myr and a 9 km splinter peak in ~9 Myr — the same
+ * no-keyframe-popping bound as BLOCK_ISOSTASY_RELAX_M_PER_YR. Unlike river
+ * erosion the rate does not scale with precipitation (wave energy, not
+ * runoff) and does not vanish at the coastline: planation grades toward the
+ * shelf/founder level (MICROCONTINENT_FOUNDER_ELEVATION_M, coinciding with
+ * SEDIMENT_SHELF_CEILING_M at −200 m), so a planed platform and a foundered
+ * platform are the same object downstream.
+ */
+export const MARINE_PLANATION_RATE_M_PER_YR = 1e-3;
+
+// --- Emergent-arc growth taper (#91) -------------------------------------------
+
+/**
+ * Factor applied to oceanic-arc elevation growth above sea level when
+ * params.emergentArcTaper is on (#91). Submarine arc construction stays at
+ * the full rate — the −500 m maturation gate is reached exactly as before,
+ * so the continental-creation budget is untouched — but breaching the
+ * surface takes sustained subduction: emergent relief is the slow subaerial
+ * tip of the edifice. 0.05 puts tapered emergent growth (0.05 × the
+ * N-scaled arc rate ≈ 6e-5..2.5e-4 m/yr at N=32..128, × the stress norm) in
+ * the same band as OCEAN_RELIEF_RELAX_M_PER_YR (2e-4), so a margin that
+ * flickers off a cell (the herringbone does this constantly) loses emergent
+ * relief about as fast as it builds it — only long-lived, consistently
+ * convergent margins stand +1 km Japan/Aleutians-style chains. Margin age
+ * is thereby the integrator: the cap on emergent relief IS the dwell time
+ * of active subduction on the cell, with no new field to advect.
+ */
+export const ARC_EMERGENT_GROWTH_FACTOR = 0.05;
+
 // --- Wilson cycles (#18) -----------------------------------------------------
 
 /**

@@ -108,6 +108,90 @@ exports[`golden field hashes > seed 1337: initial state and after 10 steps 1`] =
 }
 `;
 
+exports[`golden field hashes: #88-#91 mechanism prototypes on > compactArcs on, seed 42: after 10 steps 1`] = `
+{
+  "after10Steps": {
+    "biome": "ef814d05",
+    "boundaryStress": "9a4c27d4",
+    "crustAge": "135f1f7a",
+    "crustType": "87b24a28",
+    "elevation": "af140829",
+    "iceFraction": "dbe0e446",
+    "plateId": "af509a9b",
+    "precipitation": "f7736d9b",
+    "sedimentM": "546f7aaf",
+    "sutureYears": "b0549dc5",
+    "temperature": "5c6ac1b5",
+    "timeYears": 10000000,
+    "windU": "8d4cb315",
+    "windV": "ed49cff5",
+  },
+}
+`;
+
+exports[`golden field hashes: #88-#91 mechanism prototypes on > crustFates on, seed 42: after 10 steps 1`] = `
+{
+  "after10Steps": {
+    "biome": "b129b048",
+    "boundaryStress": "e5a1b483",
+    "crustAge": "1b6fdaec",
+    "crustType": "47774d85",
+    "elevation": "30ab9ddb",
+    "iceFraction": "c360f407",
+    "plateId": "b7762ad5",
+    "precipitation": "7b643463",
+    "sedimentM": "9c67def1",
+    "sutureYears": "61f1d94b",
+    "temperature": "f4521044",
+    "timeYears": 10000000,
+    "windU": "291ea125",
+    "windV": "e62aca05",
+  },
+}
+`;
+
+exports[`golden field hashes: #88-#91 mechanism prototypes on > emergentArcTaper on, seed 42: after 10 steps 1`] = `
+{
+  "after10Steps": {
+    "biome": "a327b035",
+    "boundaryStress": "a65207ca",
+    "crustAge": "589465cb",
+    "crustType": "574f4975",
+    "elevation": "cfca0b45",
+    "iceFraction": "2111bded",
+    "plateId": "8cbb4ce5",
+    "precipitation": "6f883ad2",
+    "sedimentM": "35008121",
+    "sutureYears": "b0549dc5",
+    "temperature": "e8d8ffd4",
+    "timeYears": 10000000,
+    "windU": "d9fce145",
+    "windV": "664bed95",
+  },
+}
+`;
+
+exports[`golden field hashes: #88-#91 mechanism prototypes on > marinePlanation on, seed 42: after 10 steps 1`] = `
+{
+  "after10Steps": {
+    "biome": "ff3c0be5",
+    "boundaryStress": "3470f23d",
+    "crustAge": "5df42012",
+    "crustType": "8383c658",
+    "elevation": "27a19c3d",
+    "iceFraction": "e784ff7e",
+    "plateId": "830343d2",
+    "precipitation": "cd985816",
+    "sedimentM": "628d0119",
+    "sutureYears": "b0549dc5",
+    "temperature": "a7f1bedd",
+    "timeYears": 10000000,
+    "windU": "3ffed615",
+    "windV": "22bcf035",
+  },
+}
+`;
+
 exports[`golden field hashes: blockIsostasy on (#84) > seed 1: after 10 steps 1`] = `
 {
   "after10Steps": {

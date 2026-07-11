@@ -30,6 +30,24 @@
  *    because orogeny out-injects the decay by ~20×. Deliberately NOT
  *    conservative: root loss is subsidence, not transport.
  *
+ * 4. Marine planation for small components (#90, default-off behind
+ *    params.marinePlanation): the #84 recap pinned island immortality on
+ *    this module — interior diffusion needs continental pairs, cross-coast
+ *    flux is damped ×EROSION_SUBSEA_FACTOR, and coastal export vanishes at
+ *    sea level, so a small block's peaks outlive the planet. For components
+ *    smaller than MARINE_PLANATION_AREA_M2 (strength ramps linearly with
+ *    smallness), wave attack (a) lifts the subsea damping on the block's
+ *    internal diffusion, and (b) exports elevation across the coast toward
+ *    the shelf/founder level (MICROCONTINENT_FOUNDER_ELEVATION_M) at
+ *    MARINE_PLANATION_RATE_M_PER_YR — a rate that neither scales with
+ *    precipitation (wave energy, not runoff) nor vanishes at the coastline,
+ *    so it planes islands to submerged platform where ordinary export
+ *    asymptotes. The removed mass moves into the neighbor's sedimentM under
+ *    the same shelf-room cap as (2) — the conservation invariant
+ *    Σ(cont elevation) + Σ(sedimentM) extends over this flux unchanged,
+ *    the designed contrast with the #84 founder's non-conservative
+ *    subsidence.
+ *
  * Scope: oceanic ELEVATION is never written (it is isostatic, a function of
  * crustAge — #15); export writes oceanic sedimentM only. Fluxes are computed
  * Jacobi-style from the pre-step elevation; the export deposit cap reads the
@@ -37,12 +55,16 @@
  */
 
 import { oceanicDepthForAge } from '../bathymetry';
+import { labelContinentalComponents } from '../components';
 import {
   EROSION_PRECIP_FACTOR_MAX,
   EROSION_PRECIP_FACTOR_MIN,
   EROSION_PRECIP_REF,
   EROSION_RATE_PER_YR,
   EROSION_SUBSEA_FACTOR,
+  MARINE_PLANATION_AREA_M2,
+  MARINE_PLANATION_RATE_M_PER_YR,
+  MICROCONTINENT_FOUNDER_ELEVATION_M,
   OROGENIC_ROOT_DECAY_TAU_YEARS,
   OROGENIC_ROOT_REFERENCE_M,
   SEDIMENT_SHELF_CEILING_M,
@@ -64,6 +86,27 @@ export const erosionSystem: System = {
     const elevation = old.slice();
     const sedimentM = state.fields.sedimentM.slice();
 
+    // Marine planation (#90): per-cell wave-attack strength, 1 − area/ref
+    // clamped to [0, 1] — full attack on a speck, none at/above the
+    // threshold, no cliff as a component grows across it. null when off, and
+    // every flag-off code path below is byte-identical to the pre-#90 kernel.
+    let planation: Float32Array | null = null;
+    if (state.params.marinePlanation && state.timeYears >= state.params.marinePlanationOnsetYears) {
+      const { componentOf, areasM2 } = labelContinentalComponents(
+        crustType,
+        N,
+        state.params.radiusMeters,
+      );
+      const strength = areasM2.map((a) => Math.max(0, 1 - a / MARINE_PLANATION_AREA_M2));
+      if (strength.some((s) => s > 0)) {
+        planation = new Float32Array(count);
+        for (let i = 0; i < count; i++) {
+          const comp = componentOf[i]!;
+          if (comp !== -1) planation[i] = strength[comp]!;
+        }
+      }
+    }
+
     for (let i = 0; i < count; i++) {
       if (crustType[i] !== 1) continue;
       for (let k = 0; k < 4; k++) {
@@ -80,7 +123,15 @@ export const erosionSystem: System = {
           if (j <= i) continue;
           // Base-level damping: flux involving a submerged cell is slow (the
           // coast is where rivers deposit). Symmetric, so still conservative.
-          const subsea = old[i]! < seaLevel || old[j]! < seaLevel ? EROSION_SUBSEA_FACTOR : 1;
+          let subsea = old[i]! < seaLevel || old[j]! < seaLevel ? EROSION_SUBSEA_FACTOR : 1;
+          // #90: wave attack keeps a small block's interior draining — the
+          // damping lifts toward 1 with the pair's larger planation strength
+          // (both endpoints are continental, so almost always one component).
+          // Still symmetric per pair, so still conservative.
+          if (planation !== null && subsea < 1) {
+            const s = Math.max(planation[i]!, planation[j]!);
+            if (s > 0) subsea += (1 - subsea) * s;
+          }
           const flux = EROSION_RATE_PER_YR * dtYears * precipFactor * subsea * (old[i]! - old[j]!);
           elevation[i]! -= flux;
           elevation[j]! += flux;
@@ -89,23 +140,48 @@ export const erosionSystem: System = {
           // ocean (an emergent arc neighbor above sea level receives nothing).
           // Each such pair has exactly one continental endpoint, so it is
           // visited exactly once — no index guard needed.
-          if (old[i]! <= seaLevel || old[j]! >= seaLevel) continue;
-          // The shelf's remaining capacity: how far the relaxation target
-          // (age-depth curve + sediment) still sits below the fill ceiling.
-          const room =
-            SEDIMENT_SHELF_CEILING_M - (oceanicDepthForAge(crustAge[j]!) + sedimentM[j]!);
-          if (room <= 0) continue;
-          const flux = Math.min(
-            // Rivers grade to base level (sea level, #33), so export scales with
-            // the cell's height ABOVE SEA LEVEL, not the full drop to the floor.
-            EROSION_RATE_PER_YR * dtYears * precipFactor * (old[i]! - seaLevel),
-            room,
-            // Never draw a cell below sea level, whatever dt or how many
-            // oceanic neighbors already drew from it this step.
-            Math.max(0, elevation[i]! - seaLevel),
-          );
-          elevation[i]! -= flux;
-          sedimentM[j]! += flux;
+          if (old[j]! >= seaLevel) continue;
+          if (old[i]! > seaLevel) {
+            // The shelf's remaining capacity: how far the relaxation target
+            // (age-depth curve + sediment) still sits below the fill ceiling.
+            const room =
+              SEDIMENT_SHELF_CEILING_M - (oceanicDepthForAge(crustAge[j]!) + sedimentM[j]!);
+            if (room > 0) {
+              const flux = Math.min(
+                // Rivers grade to base level (sea level, #33), so export scales
+                // with the cell's height ABOVE SEA LEVEL, not the full drop to
+                // the floor.
+                EROSION_RATE_PER_YR * dtYears * precipFactor * (old[i]! - seaLevel),
+                room,
+                // Never draw a cell below sea level, whatever dt or how many
+                // oceanic neighbors already drew from it this step.
+                Math.max(0, elevation[i]! - seaLevel),
+              );
+              elevation[i]! -= flux;
+              sedimentM[j]! += flux;
+            }
+          }
+          // Marine planation export (#90): wave attack grades a small
+          // component's coast toward the shelf/founder level — it does NOT
+          // stop at sea level, which is exactly the asymptote that made
+          // islands immortal. Same deposit ledger and shelf-room cap as
+          // ordinary export (the room re-reads sedimentM[j], which the flux
+          // above may just have raised), so conservation is unchanged.
+          if (planation !== null && planation[i]! > 0) {
+            if (old[i]! <= MICROCONTINENT_FOUNDER_ELEVATION_M) continue;
+            const room =
+              SEDIMENT_SHELF_CEILING_M - (oceanicDepthForAge(crustAge[j]!) + sedimentM[j]!);
+            if (room <= 0) continue;
+            const flux = Math.min(
+              MARINE_PLANATION_RATE_M_PER_YR * dtYears * planation[i]!,
+              room,
+              // Never plane below the founder level, whatever dt or how many
+              // oceanic neighbors drew from the cell this step.
+              Math.max(0, elevation[i]! - MICROCONTINENT_FOUNDER_ELEVATION_M),
+            );
+            elevation[i]! -= flux;
+            sedimentM[j]! += flux;
+          }
         }
       }
     }

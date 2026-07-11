@@ -60,3 +60,33 @@ describe('golden field hashes: blockIsostasy on (#84)', () => {
     });
   }
 });
+
+/**
+ * Flag-on spines for the #88/#89/#90/#91 prototypes, same rationale as the
+ * #84 block above: default-off keeps the main goldens byte-identical, but
+ * each flag-on path needs its own pin against silent drift (and a baseline
+ * for any future default-on promotion). One seed per mechanism keeps the
+ * suite's step budget flat; the onset-gating tests cover the param plumbing
+ * on the others.
+ */
+describe('golden field hashes: #88-#91 mechanism prototypes on', () => {
+  const MECHS = [
+    ['crustFates', { crustFates: true }],
+    ['compactArcs', { compactArcs: true }],
+    ['marinePlanation', { marinePlanation: true }],
+    ['emergentArcTaper', { emergentArcTaper: true }],
+  ] as const;
+  for (const [name, partial] of MECHS) {
+    it(`${name} on, seed 42: after 10 steps`, () => {
+      const params = createPlanetParams({ seed: 42, ...partial });
+      const ctx: SimContext = { rng: createRng(params.seed).fork('sim') };
+      let stepped = createInitialState(params);
+      for (let i = 0; i < 10; i++) {
+        stepped = step(stepped, params.stepYears, ctx);
+      }
+      expect({
+        after10Steps: { timeYears: stepped.timeYears, ...fieldHashes(stepped) },
+      }).toMatchSnapshot();
+    });
+  }
+});
