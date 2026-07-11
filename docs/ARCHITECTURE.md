@@ -966,22 +966,26 @@ strategy; the material in `material.ts` carries the sampling rule):
   cracks open mid-blend. `elevation` drives the radial vertex displacement and the
   ocean depth tint; `iceFraction` (#33) whitens the surface toward ice so caps
   breathe smoothly across a boundary.
-- **Categorical** (`plateId`, `biome`): picked hold/nearest with `blend < 0.5 ? A
-  : B`, filtered **nearest**, and **never lerped** — a lerp between plate ids 3 and
-  7 (or biome classes 2 and 6) is meaningless. Categorical borders take the
-  neighbor code (not a mean) and categorical corners the own corner cell, so codes
-  stay valid. `biome` (#35) drives the base colour; `plateId` drives a subtle
-  per-plate tint gated by the `plateTint` uniform (0 = pure biome colour). The
-  codec's bit-exact categorical round-trip (#22) is what makes this crispness
-  possible.
+- **Categorical** (`plateId`, `crustType`, `biome`): picked hold/nearest with
+  `blend < 0.5 ? A : B`, filtered **nearest**, and **never lerped** — a lerp
+  between plate ids 3 and 7 (or biome classes 2 and 6, or crust types 0 and 1) is
+  meaningless. Categorical borders take the neighbor code (not a mean) and
+  categorical corners the own corner cell, so codes stay valid. `biome` (#35)
+  drives the base colour; `plateId` drives a subtle per-plate tint gated by the
+  `plateTint` uniform (0 = pure biome colour); `crustType` (0 = oceanic, 1 =
+  continental) colours the plate-debug view. The codec's bit-exact categorical
+  round-trip (#22) is what makes this crispness possible.
 
 A **plate-debug toggle** (web app checkbox → `plateDebug` uniform, 0/1) swaps the
-biome surface for a flat per-plate colour so the tectonic partition is
-legible at a glance. Each plate's hue comes from `fract(id · φ⁻¹)` (golden-ratio
-stride, so consecutive ids get well-separated hues) run through a cosine palette;
-the pick is the same nearest `plateId` sample, so plate regions stay crisp and the
-overlay costs a single uniform flip (no re-upload). Radial displacement and
-Lambert shading are kept, so the plates read on the 3D globe.
+biome surface for a **tectonic map**: the surface is coloured by `crustType` (cool
+teal-blue oceanic vs warm tan continental) and the **plate boundaries** are drawn
+over it as dark lines. Boundaries are derived on the GPU from the same nearest
+`plateId` sample — a fragment is on a boundary iff a ±1-texel 4-neighbour sample
+carries a different id, exactly the kernel's boundary definition ("Boundary
+classification" above); the (N+2) seam border already holds the cross-face
+neighbour ids, so boundary lines stay continuous across cube seams. The overlay
+costs a single uniform flip (no re-upload); radial displacement and Lambert
+shading are kept, so the map reads on the 3D globe.
 
 ### Biome colour ramp (Phase 3, #35)
 

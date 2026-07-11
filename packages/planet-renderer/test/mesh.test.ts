@@ -136,6 +136,28 @@ describe('uploadKeyframe', () => {
     }
   });
 
+  it('packs crustType nearest with exact interior flags (categorical, 0 or 1)', () => {
+    const textures = uploaded();
+    const src = state.fields.crustType;
+    for (let face = 0; face < 6; face++) {
+      const tex = textures.crustType[face]!;
+      // Crust type is categorical: filtered nearest so the 0/1 classes never smear.
+      expect(tex.magFilter).toBe(NearestFilter);
+      expect(tex.minFilter).toBe(NearestFilter);
+      const data = tex.image.data as Uint16Array;
+      for (const [row, col] of [
+        [0, 0],
+        [N - 1, N - 1],
+        [5, 9],
+      ] as const) {
+        const flag = src[faceRCToIndex(face, row, col, N)]!;
+        expect(flag === 0 || flag === 1, 'crust flag is 0 or 1').toBe(true);
+        // Small integers round-trip bit-exact through the R16F container.
+        expect(data[(row + 1) * W + col + 1]).toBe(half(flag));
+      }
+    }
+  });
+
   it('categorical corners hold the own corner cell, not a fabricated mean', () => {
     const textures = uploaded();
     const src = state.fields.plateId;

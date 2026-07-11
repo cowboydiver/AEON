@@ -12,6 +12,7 @@ import {
   texture,
   uniform,
   uv,
+  vec2,
   vec3,
 } from 'three/tsl';
 import { INITIAL_OCEAN_DEPTH_M } from 'sim-kernel';
@@ -37,9 +38,13 @@ import { INITIAL_OCEAN_DEPTH_M } from 'sim-kernel';
  *     biome colour toward ice so polar caps and sea ice read and breathe over
  *     the timeline.
  *   - **plateId** is CATEGORICAL: picked hold/nearest, driving a subtle per-plate
- *     tint gated by `plateTint` (0 = pure biome colour) and — when `plateDebug`
- *     is 1 — a full-strength debug overlay painting each plate its own flat
- *     colour so the tectonic partition stays legible at a glance.
+ *     tint gated by `plateTint` (0 = pure biome colour). When `plateDebug` is 1 it
+ *     also derives the tectonic **plate boundaries** — a texel is a boundary iff a
+ *     4-neighbour texel carries a different id, the SAME rule the kernel uses
+ *     (ARCHITECTURE.md "Boundary classification") — and paints them as dark lines.
+ *   - **crustType** is CATEGORICAL (0 = oceanic, 1 = continental): picked
+ *     hold/nearest and, under the `plateDebug` overlay, colours the whole surface
+ *     by crust class (cool oceanic vs warm continental) beneath the boundary lines.
  *
  * Uniforms are shared by all six face materials.
  */
@@ -54,7 +59,8 @@ export function createPlanetUniforms() {
     blend: uniform(0),
     /** Per-plate tint strength over the hypsometric ramp (0 = elevation only). */
     plateTint: uniform(0.12),
-    /** Debug plate map: 0 = normal hypsometric surface, 1 = flat per-plate colours. */
+    /** Debug tectonic map: 0 = normal biome surface, 1 = crust-type colours
+     *  (oceanic vs continental) with plate boundaries drawn as dark lines. */
     plateDebug: uniform(0),
   };
 }
@@ -65,6 +71,7 @@ export type PlanetUniforms = ReturnType<typeof createPlanetUniforms>;
 export interface FaceTextures {
   elevation: DataTexture;
   plateId: DataTexture;
+  crustType: DataTexture;
   biome: DataTexture;
   iceFraction: DataTexture;
 }
@@ -75,6 +82,15 @@ const SHALLOW_OCEAN = vec3(0.2, 0.45, 0.68);
 
 // Slightly blue-white ice, the colour `iceFraction` whitens cells toward.
 const ICE_COLOR = vec3(0.9, 0.93, 0.97);
+
+// Plate-debug crust palette: the surface is coloured by crust CLASS, not height.
+// Oceanic crust (subductable) reads cool teal-blue; continental crust (buoyant,
+// never subducts) reads warm tan. Both are saturated so the two classes — and
+// the boundaries drawn over them — stay legible from orbit.
+const OCEANIC_CRUST_COLOR = vec3(0.09, 0.32, 0.55);
+const CONTINENTAL_CRUST_COLOR = vec3(0.76, 0.6, 0.32);
+// Plate boundaries: near-black cartographic lines, high-contrast on both crusts.
+const PLATE_BOUNDARY_COLOR = vec3(0.02, 0.02, 0.03);
 
 // The general TSL node types (`Node<"vec3">` / `Node<"float">`), named via the
 // return of `select` instantiated at each — a `vec3(...)` anchor (a VarNode) and
@@ -124,14 +140,50 @@ function biomePalette(biome: FloatNode): Vec3Node {
   return color;
 }
 
+/**
+ * Plate-boundary mask from a plate-id texture: 1.0 where the nearest cell's
+ * `plateId` differs from any 4-neighbour cell, 0.0 in a plate interior — exactly
+ * the kernel's boundary definition (ARCHITECTURE.md "Boundary classification"),
+ * reproduced on the GPU. `texel` is one cell's width in UV (1 / (N+2)); a ±1
+ * texel NEAREST sample lands on the adjacent cell centre, and the (N+2) seam
+ * border already holds the cross-face neighbour ids, so boundaries stay
+ * continuous across cube seams. Ids are integers exact through the R16F/codec
+ * round-trip, so a half-unit threshold cleanly separates "same" from "different".
+ */
+function plateBoundary(plateId: DataTexture, coord: ReturnType<typeof uv>, texel: number): FloatNode {
+  const center = texture(plateId, coord).r;
+  const left = texture(plateId, coord.add(vec2(-texel, 0))).r;
+  const right = texture(plateId, coord.add(vec2(texel, 0))).r;
+  const up = texture(plateId, coord.add(vec2(0, -texel))).r;
+  const down = texture(plateId, coord.add(vec2(0, texel))).r;
+  const maxDiff = center
+    .sub(left)
+    .abs()
+    .max(center.sub(right).abs())
+    .max(center.sub(up).abs())
+    .max(center.sub(down).abs());
+  return select(maxDiff.greaterThan(0.5), float(1), float(0));
+}
+
 export function createPlanetMaterial(
   a: FaceTextures,
   b: FaceTextures,
   uniforms: PlanetUniforms,
   radiusMeters: number,
+  gridN: number,
 ): MeshBasicNodeMaterial {
   const material = new MeshBasicNodeMaterial();
   const coord = uv();
+  // One cell's width in the (N+2)-wide face texture's UV space; the offset the
+  // plate-boundary sampler steps to reach an adjacent cell centre.
+  const texel = 1 / (gridN + 2);
+
+  // Categorical hold/nearest pick between the two keyframe sets: sample set A when
+  // blend < 0.5, else set B — NEVER lerp (a value between two class codes is
+  // meaningless; see ARCHITECTURE.md). The single site of that rule, shared by
+  // every categorical field (biome, plateId, crustType).
+  const sampleNearest = (fromA: DataTexture, fromB: DataTexture) =>
+    select(uniforms.blend.lessThan(0.5), texture(fromA, coord).r, texture(fromB, coord).r);
 
   // Continuous: blend the two keyframes' elevation. Vertex displacement and the
   // ocean depth tint both read this blended value, so relief interpolates smoothly.
@@ -146,7 +198,7 @@ export function createPlanetMaterial(
   // Whittaker palette — the from-orbit colour ramp. Ocean (class 0) instead takes
   // a depth-shaded blue from elevation, so the sea keeps its bathymetric gradient
   // and (because class 0 carries the sea-level mask) the shoreline tracks sea level.
-  const biome = select(uniforms.blend.lessThan(0.5), texture(a.biome, coord).r, texture(b.biome, coord).r);
+  const biome = sampleNearest(a.biome, b.biome);
   const biomeColor = biomePalette(biome);
   const depthT = clamp(elevation.div(-INITIAL_OCEAN_DEPTH_M), 0, 1);
   const oceanColor = mix(SHALLOW_OCEAN, DEEP_OCEAN, depthT);
@@ -155,7 +207,7 @@ export function createPlanetMaterial(
   // Categorical: nearest-pick the plate id (never lerp) and modulate the albedo
   // by a stable per-plate colour. A cosine palette maps the spread hue to RGB;
   // `plateTint` scales the modulation around 1.0 (so 0 leaves albedo untouched).
-  const plateId = select(uniforms.blend.lessThan(0.5), texture(a.plateId, coord).r, texture(b.plateId, coord).r);
+  const plateId = sampleNearest(a.plateId, b.plateId);
   const hueT = fract(plateId.mul(PLATE_HUE_STRIDE));
   const plateColor = cos(vec3(hueT, hueT.add(0.33), hueT.add(0.67)).mul(TAU)).mul(0.5).add(0.5);
   const plateFactor = mix(vec3(1, 1, 1), plateColor.mul(2), uniforms.plateTint);
@@ -166,10 +218,24 @@ export function createPlanetMaterial(
   const ice = clamp(mix(texture(a.iceFraction, coord).r, texture(b.iceFraction, coord).r, uniforms.blend), 0, 1);
   const iced = mix(tinted, ICE_COLOR, ice);
 
-  // Debug plate map: swap the biome surface for the flat per-plate colour (each
-  // plate one crisp hue), keeping the radial displacement and shading so the
-  // partition reads on the 3D globe. `plateDebug` is 0/1 so this is a clean swap.
-  const surface = mix(iced, plateColor, uniforms.plateDebug);
+  // Debug tectonic map: colour the surface by CRUST TYPE (oceanic vs continental)
+  // and draw plate boundaries as dark lines. Both the crust class and the boundary
+  // come from the SAME nearest-picked keyframe (`blend < 0.5 ? A : B`) so the map
+  // stays crisp; radial displacement and shading are kept so it reads on the globe.
+  const crustType = sampleNearest(a.crustType, b.crustType);
+  const crustColor = select(crustType.lessThan(0.5), OCEANIC_CRUST_COLOR, CONTINENTAL_CRUST_COLOR);
+  // Boundary mask from the same nearest-picked keyframe as plateId (a→b hold),
+  // so the lines and the crust classes agree across a keyframe boundary.
+  const boundary = select(
+    uniforms.blend.lessThan(0.5),
+    plateBoundary(a.plateId, coord, texel),
+    plateBoundary(b.plateId, coord, texel),
+  );
+  const debugSurface = mix(crustColor, PLATE_BOUNDARY_COLOR, boundary);
+
+  // `plateDebug` is 0/1, so this is a clean swap between the biome surface and the
+  // crust-type + boundary map (a single uniform flip, no texture re-upload).
+  const surface = mix(iced, debugSurface, uniforms.plateDebug);
 
   // Lambert-ish: geometric (radial) normal against the sun uniform + ambient.
   const nDotL = normalWorld.dot(uniforms.sunDirection).max(0);

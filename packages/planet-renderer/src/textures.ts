@@ -21,9 +21,10 @@ import { faceRCToIndex, neighbors, type Fields } from 'sim-kernel';
  *     filtering of 32-bit float behind the optional `float32-filterable`
  *     feature, while half-float filtering is universal. Elevation spans
  *     ±~6500 m, where half precision resolves ~4 m: invisible at display scale.
- *   - **Categorical** (`plateId`, `biome`): filtered NEAREST and picked
- *     hold/nearest (`blend < 0.5 ? A : B`) — NEVER interpolated. A lerp between
- *     plate ids 3 and 7 (or biome classes 2 and 6) is a meaningless in-between,
+ *   - **Categorical** (`plateId`, `crustType`, `biome`): filtered NEAREST and
+ *     picked hold/nearest (`blend < 0.5 ? A : B`) — NEVER interpolated. A lerp
+ *     between plate ids 3 and 7 (or biome classes 2 and 6, or crust types 0 and
+ *     1) is a meaningless in-between,
  *     and even linear *filtering within one set* would smear classes across cell
  *     boundaries. Small integer codes (≤ 255) are exact in half-float, so the
  *     R16F container round-trips them losslessly.
@@ -42,8 +43,13 @@ export interface PlanetFieldTextures {
   gridN: number;
   /** Continuous elevation, one (N+2)² R16F texture per face 0..5 (linear). */
   elevation: DataTexture[];
-  /** Categorical plate id, one (N+2)² R16F texture per face 0..5 (nearest). */
+  /** Categorical plate id, one (N+2)² R16F texture per face 0..5 (nearest).
+   *  The plate-debug view also derives boundaries from it (a texel is a
+   *  boundary iff a 4-neighbour texel carries a different id). */
   plateId: DataTexture[];
+  /** Categorical crust type (0 = oceanic, 1 = continental), per face (nearest).
+   *  Colours the plate-debug view; never lerped (a half-integer is meaningless). */
+  crustType: DataTexture[];
   /** Categorical Whittaker biome class (#35), per face (nearest). Drives the
    *  from-orbit colour ramp. */
   biome: DataTexture[];
@@ -53,7 +59,7 @@ export interface PlanetFieldTextures {
 }
 
 /** The fields a set can hold; extend (temperature, crustAge) as views need them. */
-export type BlendFieldName = keyof Pick<Fields, 'elevation' | 'plateId' | 'biome' | 'iceFraction'>;
+export type BlendFieldName = keyof Pick<Fields, 'elevation' | 'plateId' | 'crustType' | 'biome' | 'iceFraction'>;
 
 interface FieldSpec {
   name: BlendFieldName;
@@ -63,6 +69,7 @@ interface FieldSpec {
 const FIELD_SPECS: readonly FieldSpec[] = [
   { name: 'elevation', categorical: false },
   { name: 'plateId', categorical: true },
+  { name: 'crustType', categorical: true },
   { name: 'biome', categorical: true },
   { name: 'iceFraction', categorical: false },
 ];
@@ -82,6 +89,7 @@ export function createPlanetTextures(gridN: number): PlanetFieldTextures {
     gridN,
     elevation: makeFaceTextures(size, LinearFilter),
     plateId: makeFaceTextures(size, NearestFilter),
+    crustType: makeFaceTextures(size, NearestFilter),
     biome: makeFaceTextures(size, NearestFilter),
     iceFraction: makeFaceTextures(size, LinearFilter),
   };
