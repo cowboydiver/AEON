@@ -5,6 +5,7 @@ import { createInitialState, type Globals, type PlanetState, type PlanetParams }
 import { biomeSystem } from './systems/biome';
 import { blockIsostasySystem } from './systems/blockIsostasy';
 import { carbonSystem } from './systems/carbon';
+import { crustFatesSystem } from './systems/crustFates';
 import { energyBalanceSystem } from './systems/energyBalance';
 import { erosionSystem } from './systems/erosion';
 import { iceSystem } from './systems/ice';
@@ -58,6 +59,11 @@ export const identitySystem: System = {
 export const SYSTEMS: readonly System[] = [
   tectonicsSystem,
   wilsonSystem,
+  // Crust fates + terrane docking (#88, default-off prototype): after wilson
+  // so it consolidates the post-reorg crust map (and never hands wilson a
+  // plateId/boundaryStress pair from different partitions), before erosion
+  // so welded/retired crust erodes as what it now is. Identity when off.
+  crustFatesSystem,
   erosionSystem,
   // Crustal-block isostasy (#84, default-off prototype): after erosion so it
   // caps the fully-reworked relief, before the climate stack so temperature/

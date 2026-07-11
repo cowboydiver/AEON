@@ -54,6 +54,59 @@ export interface PlanetParams {
    * ISSUE_84_PROTOTYPE_FINDINGS.md. Default 0: active from the start.
    */
   blockIsostasyOnsetYears: number;
+  /**
+   * Enable small-component crust fates + terrane docking (#88): small
+   * continental components within a short ocean gap of a large component
+   * weld onto it (gap cells flip continental, the terrane transfers to the
+   * large component's plate — Wrangellia-style docking), and isolated small
+   * components subside toward the founder level and have their crust record
+   * retired (crustType → 0, the crustal-area ledger debited deliberately)
+   * once fully drowned. Default OFF — flag-off runs are byte-identical to
+   * the pre-#88 kernel; flip on via sim-cli --crust-fates.
+   */
+  crustFates: boolean;
+  /** Sim year before which crustFates is inert even when enabled — the #88
+   *  branched-A/B onset, same contract as blockIsostasyOnsetYears (the
+   *  system consumes no RNG). Default 0. */
+  crustFatesOnsetYears: number;
+  /**
+   * Enable compact arc maturation (#89): an arc cell in the accretionary
+   * belt matures into continental crust only when it has at least
+   * COMPACT_ARC_MIN_CONT_NEIGHBORS continental 4-neighbors, so creation
+   * grows blobs attached to existing continent instead of manufacturing the
+   * island chains that become the next generation of lace. Default OFF;
+   * flip on via sim-cli --compact-arcs.
+   */
+  compactArcs: boolean;
+  /** Sim year before which compactArcs is inert even when enabled — the #89
+   *  branched-A/B onset, same contract as blockIsostasyOnsetYears. Default 0. */
+  compactArcsOnsetYears: number;
+  /**
+   * Enable marine planation for small components (#90): wave attack grades
+   * small continental blocks toward the shelf/founder level, moving mass
+   * into oceanic `sedimentM` (fully conservative, unlike the #84 founder)
+   * and lifting the subsea erosion damping inside small components. Default
+   * OFF; flip on via sim-cli --marine-planation.
+   */
+  marinePlanation: boolean;
+  /** Sim year before which marinePlanation is inert even when enabled — the
+   *  #90 branched-A/B onset, same contract as blockIsostasyOnsetYears.
+   *  Default 0. */
+  marinePlanationOnsetYears: number;
+  /**
+   * Enable the emergent-arc growth taper (#91): oceanic arc growth above sea
+   * level is scaled by ARC_EMERGENT_GROWTH_FACTOR, so young or flickering
+   * margins hold submerged arcs and only long-lived subduction — sustained
+   * enough to outpace the OCEAN_RELIEF_RELAX decay — builds emergent
+   * Japan/Aleutians-style chains. The maturation gate (−500 m) sits below
+   * sea level, so the continental-creation budget is untouched. Default
+   * OFF; flip on via sim-cli --emergent-arc-taper.
+   */
+  emergentArcTaper: boolean;
+  /** Sim year before which emergentArcTaper is inert even when enabled —
+   *  the #91 branched-A/B onset, same contract as blockIsostasyOnsetYears.
+   *  Default 0. */
+  emergentArcTaperOnsetYears: number;
 }
 
 /** Scalar whole-planet quantities, updated by systems as they run. */
@@ -124,6 +177,14 @@ export function createPlanetParams(partial: Partial<PlanetParams> & { seed: numb
     initialCo2Ppm: INITIAL_CO2_PPM,
     blockIsostasy: false,
     blockIsostasyOnsetYears: 0,
+    crustFates: false,
+    crustFatesOnsetYears: 0,
+    compactArcs: false,
+    compactArcsOnsetYears: 0,
+    marinePlanation: false,
+    marinePlanationOnsetYears: 0,
+    emergentArcTaper: false,
+    emergentArcTaperOnsetYears: 0,
     ...partial,
   };
 }

@@ -38,6 +38,7 @@
  * byte-identical to the pre-#84 kernel.
  */
 
+import { labelContinentalComponents } from '../components';
 import {
   BLOCK_FOUNDER_AREA_M2,
   BLOCK_FULL_OROGENY_AREA_M2,
@@ -45,7 +46,7 @@ import {
   MICROCONTINENT_FOUNDER_ELEVATION_M,
   OROGENY_MAX_ELEVATION_M,
 } from '../constants';
-import { cellCount, cellSolidAngleTable, neighborTable } from '../grid';
+import { cellCount } from '../grid';
 import type { System } from '../step';
 
 /**
@@ -75,44 +76,17 @@ export const blockIsostasySystem: System = {
 
     const N = state.params.gridN;
     const count = cellCount(N);
-    const nbTable = neighborTable(N);
-    const { crustType } = state.fields;
-    const R = state.params.radiusMeters;
-    // True per-cell areas: the warp leaves ±35% residual area distortion, so
-    // a component's area — which sets its ceiling — sums real solid angles
-    // rather than counting cells × the mean. Accumulation order is BFS
-    // discovery order, which is deterministic (fixed scan + neighbor order).
-    const solidAngle = cellSolidAngleTable(N);
+    // Component labels + true solid-angle areas (see components.ts — the
+    // shared #84/#88/#90 labeling; the warp's ±35% residual per-cell area
+    // distortion is why areas are summed, not counted).
+    const { componentOf, areasM2 } = labelContinentalComponents(
+      state.fields.crustType,
+      N,
+      state.params.radiusMeters,
+    );
+    if (areasM2.length === 0) return state;
 
-    // Label 4-connected continental components, iterative BFS in ascending
-    // cell order (recursion would overflow on a supercontinent at N=128).
-    const componentOf = new Int32Array(count).fill(-1);
-    const queue = new Int32Array(count);
-    const componentOmega: number[] = [];
-    for (let i = 0; i < count; i++) {
-      if (crustType[i] !== 1 || componentOf[i] !== -1) continue;
-      const comp = componentOmega.length;
-      let omega = 0;
-      let head = 0;
-      let tail = 0;
-      queue[tail++] = i;
-      componentOf[i] = comp;
-      while (head < tail) {
-        const c = queue[head++]!;
-        omega += solidAngle[c]!;
-        for (let k = 0; k < 4; k++) {
-          const nb = nbTable[c * 4 + k]!;
-          if (crustType[nb] === 1 && componentOf[nb] === -1) {
-            componentOf[nb] = comp;
-            queue[tail++] = nb;
-          }
-        }
-      }
-      componentOmega.push(omega);
-    }
-    if (componentOmega.length === 0) return state;
-
-    const caps = componentOmega.map((omega) => blockElevationCap(omega * R * R));
+    const caps = areasM2.map((area) => blockElevationCap(area));
 
     // Rate-bounded subsidence toward the cap; never raises. The elevation
     // array is copied lazily so an all-continents-huge step (caps inert)

@@ -56,6 +56,8 @@ export {
 } from './step';
 export { tectonicsSystem } from './systems/tectonics';
 export { blockIsostasySystem, blockElevationCap } from './systems/blockIsostasy';
+export { crustFatesSystem } from './systems/crustFates';
+export { labelContinentalComponents, type ContinentalComponents } from './components';
 export { erosionSystem } from './systems/erosion';
 export { wilsonSystem } from './systems/wilson';
 export {
