@@ -202,6 +202,33 @@
  *     `temperature`'s codec max widens 320→330 K, bumping HISTORY_FORMAT_VERSION
  *     1→2. That is a codec-layout change (new byte goldens) but touches no
  *     simulation bytes; both version integers move together this once.
+ * 16 — Phase 4 ocean life & oxygenation (#37): the biosphere block's first two
+ *     systems, `marineLife` then `oxygen`, run after `carbon` (so life reads
+ *     this step's fully-solved climate and land mask) and before `biome`.
+ *     `marineLife` is a new FAST diagnostic field (appended after `windV`):
+ *     zero everywhere until a gated-stochastic abiogenesis onset fires (a
+ *     hash-based per-step Bernoulli, keyed on (seed, quantized time) and gated
+ *     on the liquid-ocean habitable fraction — deterministic and independent of
+ *     any other system's PRNG consumption, exactly like the #18 rift draw), then
+ *     per-ocean-cell photosynthetic productivity (light × temperature window ×
+ *     shelf-nutrient proxy). `oxygen` integrates the well-mixed atmospheric O₂
+ *     reservoir (a new `Globals` scalar, PAL) from mean marine productivity ×
+ *     organic burial minus a volcanic-reductant sink and an oxidative sink ∝ O₂,
+ *     through a `oxygenReductant` buffer (a second new global) that must be
+ *     oxidized before O₂ can rise — the physical origin of the anoxic latency,
+ *     so the Great Oxidation emerges as an S-curve, not a scripted date. Onset
+ *     time is recorded in the `abiogenesisYear` global; the block emits the
+ *     `abiogenesis` and `greatOxidation` events. The biosphere is inert at
+ *     `biosphereEnabled=false` (the ablation switch, default true) and — in this
+ *     milestone — feeds back into NO physical field (albedo/weathering coupling
+ *     arrives with vegetation, #39), so with the biosphere enabled every
+ *     pre-existing field's bytes are byte-identical to bump 15; the field-golden
+ *     diff is purely the new `marineLife` entry (all-zero on any seed whose
+ *     abiogenesis onset lands after the 10-step golden window). Deliberate
+ *     regeneration owing this bump. Paired with it, `marineLife` joins the codec
+ *     stored set so the ocean life story is `--dump`-able and render-visible
+ *     (#38), bumping HISTORY_FORMAT_VERSION 2→3; the O₂/abiogenesis globals ride
+ *     in `Keyframe.globals` at no per-keyframe byte cost, as `co2` already does.
  * 15 — `crustFates` (#88) and `marinePlanation` (#90) promoted to
  *     default-on (onsets stay 0 — active from formation). The default
  *     planet's history changes wholesale: small-component crust docks or
@@ -219,7 +246,7 @@
  *     carried). `blockIsostasy` (#84) stays default-off, superseded by
  *     crustFates.
  */
-export const KERNEL_BEHAVIOR_VERSION = 15;
+export const KERNEL_BEHAVIOR_VERSION = 16;
 
 /** IUGG mean Earth radius, m. */
 export const EARTH_RADIUS_M = 6.371e6;
@@ -1461,6 +1488,138 @@ export const BIOME_TEMPERATE_FOREST_MIN_PRECIP = 600;
  * perhumid rainforest.
  */
 export const BIOME_TROPICAL_FOREST_MIN_PRECIP = 1500;
+
+// --- Biosphere: ocean life & oxygenation (#37, Phase 4) ---------------------
+// The first life systems. Abiogenesis is a gated-stochastic onset (a seeded
+// Bernoulli trial per step, conditional on a liquid-ocean temperature window),
+// so *when* life starts is seed/climate-dependent; everything after is
+// deterministic reservoir dynamics (spec §7.2). Marine photosynthetic
+// productivity (`marineLife`, a fast per-ocean-cell diagnostic) drives a
+// well-mixed atmospheric O₂ reservoir (`globals.oxygen`, in present-atmospheric-
+// level units) that accumulates only as fast as productivity × organic burial
+// outpaces oxidative sinks, and only after a reduced-species buffer
+// (`globals.oxygenReductant`) is oxidized — an anoxic latency then an S-curve,
+// so the **Great Oxidation emerges** (the `oxygen` crossing of
+// GOE_THRESHOLD_PAL) rather than being scripted. The starting values below are
+// the Milestone-0 recommendations (docs/spikes/PHASE_4_SPIKES.md), which
+// measured this model over the golden seeds to 4.5 Gyr: an emergent,
+// seed-dependent, reliably-completing S-curve; a stable coupled loop (O₂
+// bounded, no runaway); and visibly different life stories per seed. Rates are
+// per Myr, so at the default 1 Myr step they are per-step increments (dt-correct
+// — a coarser `stepYears` rescales the increment, not the trajectory).
+
+/**
+ * Anoxic starting O₂, in present-atmospheric-level (PAL) units — a fraction of
+ * the modern O₂ partial pressure. ~0 (Archean-like): the atmosphere is reducing
+ * until photosynthesis and the reductant buffer let O₂ accumulate. Seeds
+ * `globals.oxygen` at init (the `initialOxygenPAL` param default).
+ */
+export const INITIAL_OXYGEN_PAL = 1e-6;
+
+/**
+ * Abiogenesis onset hazard, per year — the per-year rate of the gated Bernoulli
+ * trial, converted to a per-step probability `1 − exp(−rate·dt)` and multiplied
+ * by the liquid-ocean habitable fraction. 8e-9/yr puts expected onset on a
+ * ~10²-Myr scale on a warm ocean world, so life reliably originates well inside
+ * deep time yet its timing varies with each seed's early climate. Seeds the
+ * `abiogenesisRatePerYear` param default; tests raise it to force prompt onset.
+ */
+export const ABIOGENESIS_RATE_PER_YR = 8e-9;
+
+/**
+ * Gross photosynthetic O₂ produced per unit mean marine productivity, PAL/Myr.
+ * The source term's scale: at typical productivity Π≈0.2 the gross source is
+ * `0.1·0.2 = 0.02 PAL/Myr`, of which BURIAL_FRACTION survives respiration.
+ */
+export const OXY_SOURCE_PAL_PER_MYR = 0.1;
+
+/**
+ * Fraction of photosynthetic organic carbon that is BURIED (net O₂ that survives
+ * aerobic respiration/remineralization). Photosynthesis `CO₂ + H₂O → CH₂O + O₂`
+ * only leaves free O₂ behind when the reduced carbon is sequestered; the rest
+ * back-reacts. 0.3 is the net-burial fraction the O₂ budget keys off (spec §5
+ * redox invariant: accumulated O₂ ties to organic carbon buried). NOTE: #37
+ * tracks only the O₂ side of this pair — the matching CO₂ drawdown of the buried
+ * carbon is NOT subtracted from `globals.co2` (the carbon thermostat is
+ * unchanged), so the O₂ budget is self-contained; wiring organic burial back into
+ * the carbon cycle is deferred beyond this milestone.
+ */
+export const BURIAL_FRACTION = 0.3;
+
+/**
+ * Volcanic/mantle reductant draw on O₂ at the reference tectonic activity,
+ * PAL/Myr — reduced volcanic gases (H₂, CO, H₂S) that consume O₂. Scaled by the
+ * tectonic-activity ratio (`tectonicActivity / CO2_OUTGAS_ACTIVITY_REF_M_PER_YR`,
+ * the #34 outgassing proxy), so a vigorous world degasses more reductant. This
+ * is the sink the gross source must outpace before net O₂ is positive — the
+ * seed-dependent lever on GOE timing.
+ */
+export const OXY_VOLC_SINK_PAL_PER_MYR = 0.002;
+
+/**
+ * Oxidative-sink rate, per Myr — O₂ removal proportional to O₂ itself
+ * (oxidative weathering of crust, the dominant modern sink). It sets the
+ * plateau: at steady state `oxygen ≈ net_source / OXY_OX_SINK_PER_MYR`. NOTE
+ * (M0 caution 1): mean productivity Π — hence the plateau — is grid-sensitive
+ * (a cell-count mean over ocean cells: ~1.5 PAL at N=16, ~2.2 PAL at N=32/128),
+ * so the absolute plateau runs ~2× modern; raise this toward ~0.008 to centre
+ * it near 1 PAL if an Earth-like absolute O₂ level matters. It does not affect
+ * the qualitative S-curve or the events, which key off relative thresholds.
+ */
+export const OXY_OX_SINK_PER_MYR = 0.004;
+
+/**
+ * Reduced-species buffer to oxidize before atmospheric O₂ can rise, PAL — the
+ * reservoir `globals.oxygenReductant` starts at. Net positive O₂ flux first
+ * fills the atmosphere's oxygen demand of the reduced early crust/mantle
+ * (banded-iron-formation-scale sinks); only once this buffer is spent does O₂
+ * accumulate. This is the physical origin of the anoxic latency BETWEEN
+ * abiogenesis and the Great Oxidation (M0 Q1) — without it O₂ would rise the
+ * instant life appears, collapsing the S-curve into a step. NOT a param: a fixed
+ * planetary property for Phase 4.
+ */
+export const REDUCTANT_BUFFER_PAL = 1.0;
+
+/**
+ * Defensive upper bound on the O₂ reservoir, PAL — a runaway tripwire, not a
+ * physical target. The oxidative sink holds O₂ near ~2 PAL on default params
+ * (M0: max ~2.35, never near this), so this clamp only guards a pathological
+ * parameterization from producing a non-representable value. Mirrors the
+ * `CO2_MAX_PPM` defensive ceiling.
+ */
+export const OXYGEN_MAX_PAL = 5;
+
+/**
+ * Great Oxidation threshold, PAL: the `oxygen` level whose first crossing emits
+ * the `greatOxidation` event. 0.01 (≈1% PAL) is the order of the real GOE's
+ * atmospheric step (from <10⁻⁵ PAL to ~10⁻²–10⁻¹ PAL, ~2.4 Ga). Well below the
+ * ~2 PAL plateau, so the reservoir crosses it once, monotonically, on the way
+ * up (the reductant buffer guarantees a clean one-way rise), firing the event
+ * exactly once.
+ */
+export const GOE_THRESHOLD_PAL = 0.01;
+
+/**
+ * Marine photosynthetic productivity temperature window (a Gaussian in surface
+ * temperature, zeroed outside [MIN, MAX]), K. Life needs liquid water and peaks
+ * in warm-but-not-scalding seas: optimum ~20 °C, width ~22 K, cut off below
+ * freezing and above ~50 °C. Shapes the per-cell `marineLife` diagnostic and,
+ * via the [MIN, MAX] band, the ocean-habitability gate on abiogenesis onset.
+ */
+export const PROD_TEMP_OPT_K = 293;
+export const PROD_TEMP_WIDTH_K = 22;
+export const PROD_TEMP_MIN_K = 273;
+export const PROD_TEMP_MAX_K = 323;
+
+/**
+ * Shelf/upwelling nutrient proxy for marine productivity (spec §6: a simplified
+ * proxy, not a closed nutrient cycle). Productivity is nutrient-limited and
+ * richest over shallow continental shelves, so the proxy ramps from
+ * MARINE_NUTRIENT_MIN in the deep abyss (depth ≥ SHELF_DEPTH_M below sea level)
+ * to 1 at the coastline: `nutrient = clamp(1 − depth/SHELF_DEPTH_M, MIN, 1)`.
+ */
+export const MARINE_NUTRIENT_SHELF_DEPTH_M = 6000;
+export const MARINE_NUTRIENT_MIN = 0.25;
 
 /** Default simulation step, years. Chosen so 10 steps fit one keyframe interval. */
 export const DEFAULT_STEP_YEARS = 1e6;

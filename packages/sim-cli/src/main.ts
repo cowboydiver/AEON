@@ -252,7 +252,7 @@ function reportEvents(keyframe: Keyframe): void {
 function report(keyframe: Keyframe): void {
   if (!printedHeader) {
     console.log(
-      ['time'.padStart(12), 'land%'.padStart(7), 'min elev'.padStart(10), 'mean elev'.padStart(10), 'max elev'.padStart(10), 'cont elev'.padStart(10), 'mean T'.padStart(8), 'CO2 ppm'.padStart(9), 'checksums (fnv1a32 per field)'].join('  '),
+      ['time'.padStart(12), 'land%'.padStart(7), 'min elev'.padStart(10), 'mean elev'.padStart(10), 'max elev'.padStart(10), 'cont elev'.padStart(10), 'mean T'.padStart(8), 'CO2 ppm'.padStart(9), 'O2 PAL'.padStart(8), 'checksums (fnv1a32 per field)'].join('  '),
     );
     printedHeader = true;
   }
@@ -289,6 +289,7 @@ function report(keyframe: Keyframe): void {
       contMean.toFixed(0).padStart(10),
       `${keyframe.globals.meanTemperatureK.toFixed(1)}K`.padStart(8),
       keyframe.globals.co2.toFixed(0).padStart(9),
+      keyframe.globals.oxygen.toFixed(3).padStart(8),
       checksums,
     ].join('  '),
   );

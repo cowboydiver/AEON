@@ -39,8 +39,20 @@ import { keyframes } from './step';
  *     widens 320→330 K for hot-CO₂ states. The container is self-describing (the
  *     range table travels in the header) so this is purely a cache-buster, not a
  *     format rewrite; old histories miss and re-simulate.
+ * 3 — Phase 4 ocean life (#37): `marineLife` (0…1 marine productivity) joins the
+ *     stored set so the ocean life story is render-visible (the #38 ocean tint
+ *     reads it from history), and — to hold the ~0.5 GB retained-history budget
+ *     (§1 field-budget note / spec §7.6) — `windU`/`windV` DROP back out of the
+ *     stored set to recompute-at-render (they are unused at render today, stored
+ *     since bump 2 purely for Phase 5 cloud advection; the sim still computes
+ *     them and `--dump windU` still works off the full keyframe). Net −1 stored
+ *     field (12→11 B/cell at N=128), so 4.5 Gyr @ 10 Myr @ N=128 now fits the
+ *     budget with room to spare. Another self-describing cache-buster; the
+ *     O₂/abiogenesis state rides in `Keyframe.globals`, not the codec, at no
+ *     per-keyframe byte cost. Land colonization (#39) will append `vegetation` to
+ *     the stored set (back to 12 B/cell) under a later bump.
  */
-export const HISTORY_FORMAT_VERSION = 2;
+export const HISTORY_FORMAT_VERSION = 3;
 
 /** Wire codes for the per-field quantized element type. */
 const FORMAT_U8 = 0;
@@ -79,8 +91,13 @@ export const QUANT_TABLE = {
   precipitation: { format: 'u8', min: 0, max: 8000, categorical: false },
   iceFraction: { format: 'u8', min: 0, max: 1, categorical: false },
   biome: { format: 'u8', min: 0, max: LEVELS_U8, categorical: true },
-  windU: { format: 'u8', min: -60, max: 60, categorical: false },
-  windV: { format: 'u8', min: -60, max: 60, categorical: false },
+  // windU/windV were stored at bump 2 for Phase 5 cloud advection but are unused
+  // at render; #37 drops them back to recompute-at-render (spec §7.6) to make
+  // room for marineLife under the ~0.5 GB retained-history budget. The sim still
+  // computes them (they remain in FIELDS and in --dump); they just leave the wire.
+  // Marine productivity (#37), continuous 0…1: the ocean life story, dumped and
+  // (from #38) tinting the ocean at render. Appended last (codec wire-id).
+  marineLife: { format: 'u8', min: 0, max: 1, categorical: false },
 } as const satisfies Partial<Record<FieldName, FieldQuant>>;
 
 export type StoredFieldName = keyof typeof QUANT_TABLE;

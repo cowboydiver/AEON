@@ -1,4 +1,5 @@
 import {
+  ABIOGENESIS_RATE_PER_YR,
   DEFAULT_KEYFRAME_INTERVAL_YEARS,
   DEFAULT_NUM_PLATES,
   DEFAULT_STEP_YEARS,
@@ -6,6 +7,8 @@ import {
   EARTH_OBLIQUITY_DEG,
   EARTH_RADIUS_M,
   INITIAL_CO2_PPM,
+  INITIAL_OXYGEN_PAL,
+  REDUCTANT_BUFFER_PAL,
   SOLAR_LUMINOSITY_W,
 } from './constants';
 import type { SimEvent } from './events';
@@ -115,6 +118,28 @@ export interface PlanetParams {
    *  the #91 branched-A/B onset, same contract as blockIsostasyOnsetYears.
    *  Default 0. */
   emergentArcTaperOnsetYears: number;
+  /**
+   * Enable the biosphere (#37, Phase 4): ocean life, oxygenation, and — from
+   * #39 — land vegetation. The ablation switch, **default `true`** (the
+   * biosphere is a shipped feature, not a prototype). When `false` the life
+   * systems are inert: `marineLife` stays 0, `globals.oxygen` holds its
+   * `initialOxygenPAL` seed, `abiogenesisYear` stays −1, no biosphere events
+   * fire, and — once #39 lands — the albedo/weathering hooks fall back to their
+   * life-free form. Goldens run with the default; the "disable biosphere"
+   * done-criterion is a separate parameterized run (mirroring Phase 3's
+   * faint-star snowball test), so it does not perturb the golden hash space.
+   * Unlike the #84/#88 mechanism toggles it defaults ON and needs no
+   * `OnsetYears` gate — abiogenesis provides the temporal onset.
+   */
+  biosphereEnabled: boolean;
+  /** Per-year abiogenesis onset hazard for the gated Bernoulli trial (#37),
+   *  converted to a per-step probability via `dt` and gated on the liquid-ocean
+   *  habitable fraction, so onset timing is seed/climate-dependent but reliably
+   *  occurs within deep time. Default `ABIOGENESIS_RATE_PER_YR`. */
+  abiogenesisRatePerYear: number;
+  /** Anoxic starting atmospheric O₂ that seeds `globals.oxygen`, PAL (#37).
+   *  Default `INITIAL_OXYGEN_PAL` (≈0). */
+  initialOxygenPAL: number;
 }
 
 /** Scalar whole-planet quantities, updated by systems as they run. */
@@ -146,6 +171,27 @@ export interface Globals {
    *  initial land share is preserved), then held constant; the water-mass
    *  invariant checks `oceanVolume(seaLevelM) + lockedIce = this`. */
   waterInventoryM: number;
+  /** Atmospheric O₂ as a fraction of the present atmospheric level, PAL — the
+   *  slow biosphere reservoir (#37). The `oxygen` system integrates it each step
+   *  from net photosynthetic O₂ flux (mean marine productivity × organic burial)
+   *  minus oxidative sinks (reduced volcanic gases, oxidative crustal
+   *  weathering), through the `oxygenReductant` buffer. Seeded near-zero
+   *  (anoxic) at `initialOxygenPAL`; the **Great Oxidation** is its emergent
+   *  crossing of `GOE_THRESHOLD_PAL`. Well-mixed, so a global (like `co2`), not
+   *  a per-cell field. Not run at init: first departs its seed at step 1. */
+  oxygen: number;
+  /** Remaining reduced-species buffer, PAL (#37) — reduced early crust/mantle
+   *  (banded-iron-formation-scale sinks) that must be oxidized before
+   *  atmospheric `oxygen` can rise. Net positive O₂ flux first draws this down;
+   *  only once it is spent does O₂ accumulate. The physical origin of the anoxic
+   *  latency between abiogenesis and the Great Oxidation (M0 Q1). Seeded at
+   *  `REDUCTANT_BUFFER_PAL`; monotonically non-increasing. */
+  oxygenReductant: number;
+  /** Sim time at which ocean life originated, yr, or −1 until it has (#37). Set
+   *  once by the gated-stochastic abiogenesis onset (which also emits the
+   *  `abiogenesis` event) and thereafter read-only — the gate that switches
+   *  `marineLife` on and a marker for the report/HUD/narration. */
+  abiogenesisYear: number;
 }
 
 export interface PlanetState {
@@ -193,6 +239,9 @@ export function createPlanetParams(partial: Partial<PlanetParams> & { seed: numb
     marinePlanationOnsetYears: 0,
     emergentArcTaper: false,
     emergentArcTaperOnsetYears: 0,
+    biosphereEnabled: true,
+    abiogenesisRatePerYear: ABIOGENESIS_RATE_PER_YR,
+    initialOxygenPAL: INITIAL_OXYGEN_PAL,
     ...partial,
   };
 }
@@ -212,6 +261,13 @@ export function createInitialState(params: PlanetParams): PlanetState {
       meanTemperatureK: 0,
       seaLevelM: 0,
       waterInventoryM: 0,
+      // Biosphere reservoirs (#37): anoxic O₂ seed, the full reductant buffer,
+      // and no life yet. Like ice/seaLevel/carbon the biosphere systems are NOT
+      // run at init — these seeds first depart at step 1, so every pre-existing
+      // field stays byte-identical to the pre-Phase-4 kernel at t=0.
+      oxygen: params.initialOxygenPAL,
+      oxygenReductant: REDUCTANT_BUFFER_PAL,
+      abiogenesisYear: -1,
     },
     fields,
     plates: [],

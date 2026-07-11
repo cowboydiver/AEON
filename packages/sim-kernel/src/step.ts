@@ -9,7 +9,9 @@ import { crustFatesSystem } from './systems/crustFates';
 import { energyBalanceSystem } from './systems/energyBalance';
 import { erosionSystem } from './systems/erosion';
 import { iceSystem } from './systems/ice';
+import { marineLifeSystem } from './systems/marineLife';
 import { moistureSystem } from './systems/moisture';
+import { oxygenSystem } from './systems/oxygen';
 import { seaLevelSystem } from './systems/seaLevel';
 import { tectonicsSystem } from './systems/tectonics';
 import { wilsonSystem } from './systems/wilson';
@@ -54,7 +56,12 @@ export const identitySystem: System = {
  * one-step explicit lag rather than a joint solve. Finally biome (#35) runs last
  * of all, classifying the fully-solved temperature/precipitation over the
  * dynamic sea-level mask into the categorical `biome` field the renderer colours
- * the planet by; nothing downstream reads it.
+ * the planet by; nothing downstream reads it. Between carbon and biome the Phase 4
+ * biosphere block runs — marineLife (abiogenesis + marine productivity) then
+ * oxygen (the O₂ reservoir + the emergent Great Oxidation) — so life reads this
+ * step's fully-solved climate and land mask; in this milestone (#37) it feeds back
+ * into no physical field (the albedo/weathering coupling arrives with vegetation,
+ * #39), and both systems are identity when `biosphereEnabled` is false.
  */
 export const SYSTEMS: readonly System[] = [
   tectonicsSystem,
@@ -75,6 +82,12 @@ export const SYSTEMS: readonly System[] = [
   iceSystem,
   seaLevelSystem,
   carbonSystem,
+  // Biosphere block (#37): abiogenesis + marine productivity, then the O₂
+  // reservoir + Great Oxidation. After carbon (reads the fully-solved climate),
+  // before biome (which stays terminal and climate-only). Identity when the
+  // biosphere is disabled.
+  marineLifeSystem,
+  oxygenSystem,
   biomeSystem,
 ];
 
