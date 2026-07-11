@@ -408,6 +408,23 @@ replaced by the `moisture` system below. Erosion reads the previous step's
 `precipitation` — a one-step lag, since moisture runs after erosion in the
 pipeline — exactly as the energy balance reads the previous step's ice/CO₂.
 
+`blockIsostasy` (#84, **default-off prototype** behind `params.blockIsostasy`;
+after erosion, before the climate stack): small continental blocks cannot hold
+high topography. Each step it labels the 4-connected components of
+`crustType == 1` (fixed-order iterative BFS) and relaxes elevation standing
+above the component's area-dependent ceiling toward it at
+`BLOCK_ISOSTASY_RELAX_M_PER_YR` (never a hard-set, never raises). The ceiling
+is `MICROCONTINENT_FOUNDER_ELEVATION_M` below `BLOCK_FOUNDER_AREA_M2`
+(300k km² — the block founders as submerged platform; `crustType` untouched,
+so the crustal-area ledger is untouched and the block can re-accrete), rises
+as sqrt of normalized area, and reaches `OROGENY_MAX_ELEVATION_M` at
+`BLOCK_FULL_OROGENY_AREA_M2` (2 Mkm²), above which the system is inert. It
+generalizes the one-cell founder clamp in tectonics to the 2+-cell splinters
+every other repair pass misses — the #60 "tall-island confetti" residual.
+Non-conservative by design (subsidence, not transport), same justification
+as orogenic root decay. Flag-off runs are byte-identical to the pre-#84
+kernel (the goldens pin this).
+
 `energyBalance` (#30): the Phase 3 climate hub. A Budyko–Sellers **zonal
 energy-balance model** solved on `ENERGY_BALANCE_BANDS` (90) equal-area
 latitude bands (uniform in sin φ). Per band: absorbed shortwave =

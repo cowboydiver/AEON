@@ -29,6 +29,9 @@ Options:
                               measurement harness: continental components,
                               largest-component fraction, edge/area,
                               dispersed-keyframe fraction, monopoly window)
+  --block-isostasy            enable the crustal-block isostasy prototype (#84):
+                              per-component elevation ceilings that founder
+                              small continental blocks (default off)
   --dump <fields>             comma-separated fields to dump as PNGs (e.g. elevation,temperature)
   --dump-every <k>            only dump every k-th keyframe (plus the final one);
                               default 1 = every keyframe. Use for long-run flipbooks.
@@ -48,6 +51,7 @@ const { values } = parseArgs({
     'grid-n': { type: 'string' },
     report: { type: 'boolean', default: false },
     metrics: { type: 'boolean', default: false },
+    'block-isostasy': { type: 'boolean', default: false },
     dump: { type: 'string' },
     'dump-every': { type: 'string' },
     out: { type: 'string', default: 'tmp' },
@@ -92,6 +96,7 @@ const params = createPlanetParams({
   seed,
   ...(gridN !== undefined ? { gridN } : {}),
   ...(keyframeIntervalYears !== undefined ? { keyframeIntervalYears } : {}),
+  ...(values['block-isostasy'] ? { blockIsostasy: true } : {}),
 });
 
 // pnpm runs this script with cwd = packages/sim-cli; resolve --out relative
