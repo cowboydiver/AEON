@@ -8,6 +8,8 @@
  * keyframes, so both are honored within one keyframe's step budget.
  */
 
+import type { MechanismToggles } from 'sim-kernel';
+
 /** Main thread -> worker: generate the full history for a seed. */
 export interface RunHistoryRequest {
   type: 'runHistory';
@@ -16,8 +18,9 @@ export interface RunHistoryRequest {
   gridN: number;
   untilYears: number;
   keyframeIntervalYears: number;
-  /** Crustal-block isostasy prototype (#84), the default-off kernel param. */
-  blockIsostasy: boolean;
+  /** On/off state for every togglable mechanism (#84, #88-#91) — the
+   *  sidebar's toggle record, applied verbatim to `createPlanetParams`. */
+  mechanisms: MechanismToggles;
 }
 
 /** Main thread -> worker: stop the given in-flight request if still active. */

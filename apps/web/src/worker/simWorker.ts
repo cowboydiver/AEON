@@ -42,7 +42,9 @@ async function streamHistory(req: RunHistoryRequest): Promise<void> {
     seed: req.seed,
     gridN: req.gridN,
     keyframeIntervalYears: req.keyframeIntervalYears,
-    blockIsostasy: req.blockIsostasy,
+    // Mechanism toggles (#84, #88-#91): the sidebar state, keys are the
+    // kernel's own boolean params.
+    ...req.mechanisms,
   });
 
   let emitted = 0;

@@ -1,7 +1,14 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Canvas } from '@react-three/fiber';
 import { WebGPURenderer } from 'three/webgpu';
-import { DEFAULT_GRID_N, planHistory } from 'sim-kernel';
+import {
+  DEFAULT_GRID_N,
+  MECHANISMS,
+  defaultMechanismToggles,
+  planHistory,
+  type MechanismKey,
+  type MechanismToggles,
+} from 'sim-kernel';
 import { PlanetScene } from './PlanetScene';
 import { usePlanetWorker } from './usePlanetWorker';
 
@@ -15,8 +22,8 @@ const DEFAULT_KEYFRAME_INTERVAL_YEARS = 10e6;
 
 /** Optional URL knobs: `?seed=N` deep-links a planet, `?until=Y` shortens the
  *  history span (years) — handy for a quick look and for a fast cache e2e —
- *  and `?iso=1` enables the crustal-block isostasy prototype (#84) for
- *  side-by-side visual inspection against the default kernel. */
+ *  and `?iso=1` starts with the crustal-block isostasy prototype (#84) toggled
+ *  on (kept for old links; the mechanism sidebar is the live control now). */
 function readUrlParams(): { seed: number; untilYears: number; blockIsostasy: boolean } {
   const fallback = { seed: DEFAULT_SEED, untilYears: DEFAULT_UNTIL_YEARS, blockIsostasy: false };
   if (typeof window === 'undefined') return fallback;
@@ -34,9 +41,19 @@ export function App() {
   const webgpuAvailable = typeof navigator !== 'undefined' && 'gpu' in navigator;
   const url = useMemo(readUrlParams, []);
   const [seedInput, setSeedInput] = useState(String(url.seed));
+  // The seed of the currently requested history; a mechanism toggle re-runs
+  // this seed (not whatever half-typed number sits in the input box).
+  const [activeSeed, setActiveSeed] = useState(url.seed);
   const [ready, setReady] = useState(false);
   // Debug view: colour-code the individual tectonic plates instead of terrain.
   const [plateDebug, setPlateDebug] = useState(false);
+  // Mechanism toggle states (#84, #88-#91): seeded from the kernel defaults
+  // so the sidebar always shows what is actually simulating; `?iso=1` links
+  // start with the #84 prototype on.
+  const [mechanisms, setMechanisms] = useState<MechanismToggles>(() => ({
+    ...defaultMechanismToggles(),
+    ...(url.blockIsostasy ? { blockIsostasy: true } : {}),
+  }));
   // Clamp the request to the memory budget before streaming: a tight budget
   // coarsens the keyframe interval rather than dropping the tail of history.
   const plan = useMemo(
@@ -48,19 +65,31 @@ export function App() {
       gridN: DEFAULT_GRID_N,
       untilYears: plan.untilYears,
       keyframeIntervalYears: plan.keyframeIntervalYears,
-      blockIsostasy: url.blockIsostasy,
+      mechanisms,
     });
 
+  // Re-runs whenever the active seed changes OR `generate` is re-armed by a
+  // mechanism toggle (its identity folds in `mechanisms`), so the view always
+  // shows the sidebar's mechanism set.
   useEffect(() => {
-    if (webgpuAvailable) generate(url.seed);
-  }, [webgpuAvailable, generate, url.seed]);
+    if (webgpuAvailable) generate(activeSeed);
+  }, [webgpuAvailable, generate, activeSeed]);
 
   const regenerate = useCallback(() => {
     const seed = Number(seedInput);
     if (!Number.isFinite(seed)) return;
     setReady(false);
-    generate(Math.trunc(seed));
-  }, [seedInput, generate]);
+    const next = Math.trunc(seed);
+    // Same seed: the effect won't re-fire on state identity, so run directly
+    // (a completed history simply re-hydrates from the cache).
+    if (next === activeSeed) generate(next);
+    else setActiveSeed(next);
+  }, [seedInput, generate, activeSeed]);
+
+  const toggleMechanism = useCallback((key: MechanismKey, on: boolean) => {
+    setReady(false);
+    setMechanisms((prev) => ({ ...prev, [key]: on }));
+  }, []);
 
   const streaming = progress !== null && !done;
 
@@ -152,14 +181,6 @@ export function App() {
               : `${((progress.currentYears / progress.untilYears) * 100).toFixed(0)}%`}
           </span>
         ) : null}
-        {url.blockIsostasy ? (
-          <span
-            title="Crustal-block isostasy prototype enabled (#84) — remove ?iso=1 for the default kernel"
-            style={{ opacity: 0.6, color: '#c08de0' }}
-          >
-            iso
-          </span>
-        ) : null}
         {source === 'cache' ? (
           <span
             title="Hydrated from the IndexedDB history cache — no re-simulation"
@@ -179,12 +200,83 @@ export function App() {
         ) : null}
       </div>
 
+      <MechanismSidebar toggles={mechanisms} onToggle={toggleMechanism} streaming={streaming} />
+
       <Timeline
         keyframeCount={keyframeCount}
         pinnedPosition={pinnedPosition}
         currentYears={blend?.timeYears ?? 0}
         onScrub={select}
       />
+    </div>
+  );
+}
+
+interface MechanismSidebarProps {
+  toggles: MechanismToggles;
+  onToggle: (key: MechanismKey, on: boolean) => void;
+  streaming: boolean;
+}
+
+/** Sidebar listing every togglable kernel mechanism with its live on/off
+ *  state — the single place to see which mechanisms shaped the planet on
+ *  screen. Toggling re-simulates immediately (an in-flight stream is
+ *  superseded by the new run; completed histories re-hydrate from the
+ *  cache). States that differ from the kernel default are marked, so a
+ *  non-standard world is always visibly non-standard. */
+function MechanismSidebar({ toggles, onToggle, streaming }: MechanismSidebarProps) {
+  const defaults = useMemo(defaultMechanismToggles, []);
+  return (
+    <div
+      data-mechanism-sidebar
+      style={{
+        position: 'absolute',
+        top: 12,
+        right: 12,
+        width: 240,
+        display: 'flex',
+        flexDirection: 'column',
+        gap: 8,
+        background: 'rgba(10, 14, 24, 0.75)',
+        padding: '10px 12px',
+        borderRadius: 8,
+        fontSize: 13,
+      }}
+    >
+      <div style={{ fontWeight: 600, opacity: 0.85 }}>Mechanisms</div>
+      {MECHANISMS.map((m) => {
+        const nonDefault = toggles[m.key] !== defaults[m.key];
+        return (
+          <label
+            key={m.key}
+            title={m.summary}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 6,
+              cursor: 'pointer',
+              userSelect: 'none',
+            }}
+          >
+            <input
+              type="checkbox"
+              data-mechanism={m.key}
+              checked={toggles[m.key]}
+              onChange={(e) => onToggle(m.key, e.target.checked)}
+            />
+            <span style={{ color: nonDefault ? '#e0b050' : 'inherit' }}>
+              {m.label}
+              {nonDefault ? ' *' : ''}
+            </span>
+            <span style={{ opacity: 0.5, marginLeft: 'auto' }}>#{m.issue}</span>
+          </label>
+        );
+      })}
+      <div style={{ opacity: 0.55, fontSize: 11 }}>
+        {streaming
+          ? 'Toggling restarts the running simulation.'
+          : 'Toggling re-simulates the planet. * = non-default.'}
+      </div>
     </div>
   );
 }

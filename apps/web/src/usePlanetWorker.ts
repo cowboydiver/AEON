@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { decodeKeyframe, type FieldName } from 'sim-kernel';
+import { decodeKeyframe, type FieldName, type MechanismToggles } from 'sim-kernel';
 import { historyCache, historyCacheKey } from './history/historyCache';
 import type { RunHistoryRequest, WorkerRequest, WorkerResponse } from './worker/messages';
 
@@ -45,8 +45,10 @@ export interface PlanetWorkerConfig {
   gridN: number;
   untilYears: number;
   keyframeIntervalYears: number;
-  /** Crustal-block isostasy prototype (#84), default-off kernel param. */
-  blockIsostasy: boolean;
+  /** On/off state for every togglable mechanism (#84, #88-#91) — the
+   *  sidebar's toggle record. A new record identity re-arms `generate`, so
+   *  pass a stable object (state), not a fresh literal per render. */
+  mechanisms: MechanismToggles;
 }
 
 /**
@@ -62,7 +64,7 @@ export function usePlanetWorker({
   gridN,
   untilYears,
   keyframeIntervalYears,
-  blockIsostasy,
+  mechanisms,
 }: PlanetWorkerConfig) {
   const workerRef = useRef<Worker | null>(null);
   const requestIdRef = useRef(0);
@@ -189,7 +191,7 @@ export function usePlanetWorker({
       setProgress(null);
       setDone(false);
       setSource(null);
-      const key = historyCacheKey({ seed, gridN, untilYears, keyframeIntervalYears, blockIsostasy });
+      const key = historyCacheKey({ seed, gridN, untilYears, keyframeIntervalYears, mechanisms });
       writeKeyRef.current = key;
 
       // Try the cache first; a completed history hydrates instantly with no
@@ -231,13 +233,13 @@ export function usePlanetWorker({
           gridN,
           untilYears,
           keyframeIntervalYears,
-          blockIsostasy,
+          mechanisms,
         };
         const message: WorkerRequest = request;
         worker.postMessage(message);
       })();
     },
-    [gridN, untilYears, keyframeIntervalYears, blockIsostasy, buildBlend],
+    [gridN, untilYears, keyframeIntervalYears, mechanisms, buildBlend],
   );
 
   /** Pin the view to a fractional keyframe position, or null to follow live. */
