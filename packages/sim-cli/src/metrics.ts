@@ -278,7 +278,7 @@ export function summarizePairedMetrics(
   const fmt = (o: number, n2: number, digits: number): string =>
     `${o.toFixed(digits)} -> ${n2.toFixed(digits)}`;
   rows.push(
-    ['t', 'land comps', 'largest land comp', 'land%'].map((h, i) => (i === 0 ? h.padStart(10) : h.padStart(22))).join('  '),
+    ['t', 'land comps', 'largest land comp', 'land%', 'cont comps'].map((h, i) => (i === 0 ? h.padStart(10) : h.padStart(22))).join('  '),
   );
   for (let i = 0; i < window.length; i++) {
     if (i % stride !== 0 && i !== window.length - 1) continue;
@@ -289,6 +289,7 @@ export function summarizePairedMetrics(
         fmt(a.landComponents, b.landComponents, 0).padStart(22),
         fmt(a.largestLandCompFrac, b.largestLandCompFrac, 3).padStart(22),
         fmt(a.landFrac * 100, b.landFrac * 100, 1).padStart(22),
+        fmt(a.contComponents, b.contComponents, 0).padStart(22),
       ].join('  '),
     );
   }
@@ -304,6 +305,20 @@ export function summarizePairedMetrics(
       `, Δ largest land comp ${dLargest >= 0 ? '+' : ''}${dLargest.toFixed(3)}` +
       `, Δ land ${dLand >= 0 ? '+' : ''}${dLand.toFixed(2)} pts` +
       `; land min (on) ${minLandOn.toFixed(1)}%`,
+  );
+  // Crust-map deltas — the #88 (crust fates) and #89 (compact maturation)
+  // acceptance axes: the land rows above are blind to crustType by design,
+  // and Δ cont crust doubles as the #89 creation-budget check (a gate that
+  // STARVES creation shows up as a steadily negative Δ, one that reshapes
+  // it holds Δ near zero while cont components fall).
+  const dContComps = mean(window.map((w) => w.on.contComponents - w.off.contComponents));
+  const dContLargest = mean(window.map((w) => w.on.largestCompFrac - w.off.largestCompFrac));
+  const dContFrac = mean(window.map((w) => (w.on.contFrac - w.off.contFrac) * 100));
+  rows.push(
+    `ab: crust window means:` +
+      ` Δ cont components ${dContComps >= 0 ? '+' : ''}${dContComps.toFixed(1)}` +
+      `, Δ largest cont comp ${dContLargest >= 0 ? '+' : ''}${dContLargest.toFixed(3)}` +
+      `, Δ cont crust ${dContFrac >= 0 ? '+' : ''}${dContFrac.toFixed(2)} pts of sphere`,
   );
   return rows.join('\n');
 }

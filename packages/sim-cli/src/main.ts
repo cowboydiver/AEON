@@ -10,6 +10,7 @@ import {
   run,
   type FieldName,
   type Keyframe,
+  type PlanetParams,
   type SimEvent,
 } from 'sim-kernel';
 import {
@@ -37,13 +38,34 @@ Options:
   --block-isostasy            enable the crustal-block isostasy prototype (#84):
                               per-component elevation ceilings that founder
                               small continental blocks (default off)
-  --ab-block-isostasy <years> paired branched A/B (#84): run flag-off and
-                              flag-on-with-onset arms that are bit-identical
-                              until <years>, then print per-keyframe land-shape
-                              deltas — the mechanism's direct effect, before
-                              chaotic trajectory divergence swamps it. Trust
-                              the first few hundred Myr after the branch most.
-                              Mutually exclusive with --block-isostasy/--dump.
+  --crust-fates               enable small-component crust fates + terrane
+                              docking (#88): small components weld onto large
+                              ones across short straits, isolated ones drown
+                              and have their crust record retired (default off)
+  --compact-arcs              enable compact arc maturation (#89): belt arcs
+                              mature only with >= 2 continental 4-neighbors,
+                              so creation grows blobs, not chains (default off)
+  --marine-planation          enable marine planation for small components
+                              (#90): wave attack planes small blocks toward
+                              the shelf level, conservatively, into sedimentM
+                              (default off)
+  --emergent-arc-taper        enable the emergent-arc growth taper (#91): only
+                              long-lived subduction builds emergent +1 km arc
+                              chains; young margins stay submerged (default off)
+  --ab <mechanism>            paired branched A/B (PR #87 instrument): run
+                              flag-off and flag-on-with-onset arms that are
+                              bit-identical until --ab-branch, then print
+                              per-keyframe shape deltas — the mechanism's
+                              direct effect, before chaotic trajectory
+                              divergence swamps it. Trust the first few
+                              hundred Myr after the branch most. Mechanisms:
+                              block-isostasy, crust-fates, compact-arcs,
+                              marine-planation, emergent-arc-taper.
+                              Mutually exclusive with the single-arm mechanism
+                              flags and --dump.
+  --ab-branch <years>         branch year for --ab (both arms identical before
+                              it; required with --ab)
+  --ab-block-isostasy <years> alias for --ab block-isostasy --ab-branch <years>
   --dump <fields>             comma-separated fields to dump as PNGs (e.g. elevation,temperature)
   --dump-every <k>            only dump every k-th keyframe (plus the final one);
                               default 1 = every keyframe. Use for long-run flipbooks.
@@ -64,6 +86,12 @@ const { values } = parseArgs({
     report: { type: 'boolean', default: false },
     metrics: { type: 'boolean', default: false },
     'block-isostasy': { type: 'boolean', default: false },
+    'crust-fates': { type: 'boolean', default: false },
+    'compact-arcs': { type: 'boolean', default: false },
+    'marine-planation': { type: 'boolean', default: false },
+    'emergent-arc-taper': { type: 'boolean', default: false },
+    ab: { type: 'string' },
+    'ab-branch': { type: 'string' },
     'ab-block-isostasy': { type: 'string' },
     dump: { type: 'string' },
     'dump-every': { type: 'string' },
@@ -92,7 +120,40 @@ const untilYears = numArg(values.until, 'until')!;
 const keyframeIntervalYears = numArg(values['keyframe-interval'], 'keyframe-interval');
 const gridN = numArg(values['grid-n'], 'grid-n');
 const dumpEvery = Math.max(1, Math.round(numArg(values['dump-every'], 'dump-every') ?? 1));
-const abBranchYears = numArg(values['ab-block-isostasy'], 'ab-block-isostasy');
+
+/**
+ * The default-off mechanism prototypes the branched A/B harness can measure
+ * (#84/#88/#89/#90/#91): CLI name -> single-arm flag + the kernel params an
+ * arm gets. Every mechanism has an onset param with the same contract
+ * (bit-identical to flag-off before it, no RNG consumed — pinned by the
+ * kernel's onset-gating tests), which is what makes the paired arms a
+ * measurement.
+ */
+const MECHANISMS: Record<string, (on: boolean, onsetYears: number) => Partial<PlanetParams>> = {
+  'block-isostasy': (on, onset) => ({ blockIsostasy: on, blockIsostasyOnsetYears: onset }),
+  'crust-fates': (on, onset) => ({ crustFates: on, crustFatesOnsetYears: onset }),
+  'compact-arcs': (on, onset) => ({ compactArcs: on, compactArcsOnsetYears: onset }),
+  'marine-planation': (on, onset) => ({ marinePlanation: on, marinePlanationOnsetYears: onset }),
+  'emergent-arc-taper': (on, onset) => ({ emergentArcTaper: on, emergentArcTaperOnsetYears: onset }),
+};
+const MECHANISM_FLAGS = Object.keys(MECHANISMS) as ReadonlyArray<
+  'block-isostasy' | 'crust-fates' | 'compact-arcs' | 'marine-planation' | 'emergent-arc-taper'
+>;
+
+// --ab-block-isostasy <years> predates --ab and is kept as its alias.
+const abMechanism = values.ab ?? (values['ab-block-isostasy'] !== undefined ? 'block-isostasy' : undefined);
+const abBranchYears =
+  values.ab !== undefined
+    ? numArg(values['ab-branch'], 'ab-branch')
+    : numArg(values['ab-block-isostasy'], 'ab-block-isostasy');
+if (abMechanism !== undefined && !(abMechanism in MECHANISMS)) {
+  console.error(`sim-cli: unknown --ab mechanism "${abMechanism}" (known: ${Object.keys(MECHANISMS).join(', ')})`);
+  process.exit(2);
+}
+if (values.ab !== undefined && abBranchYears === undefined) {
+  console.error('sim-cli: --ab requires --ab-branch <years>');
+  process.exit(2);
+}
 
 const dumpFields: FieldName[] = (values.dump ?? '')
   .split(',')
@@ -110,7 +171,12 @@ const params = createPlanetParams({
   seed,
   ...(gridN !== undefined ? { gridN } : {}),
   ...(keyframeIntervalYears !== undefined ? { keyframeIntervalYears } : {}),
-  ...(values['block-isostasy'] ? { blockIsostasy: true } : {}),
+  // Single-arm mechanism flags compose (e.g. --block-isostasy --crust-fates
+  // measures the pair together); the paired --ab harness takes one at a time.
+  ...MECHANISM_FLAGS.reduce<Partial<PlanetParams>>(
+    (acc, flag) => (values[flag] ? { ...acc, ...MECHANISMS[flag]!(true, 0) } : acc),
+    {},
+  ),
 });
 
 // pnpm runs this script with cwd = packages/sim-cli; resolve --out relative
@@ -254,28 +320,29 @@ function reportTempo(events: readonly SimEvent[], simulatedYears: number): void 
 }
 
 /**
- * Paired branched A/B (#84): both arms share the seed and every pre-branch
- * byte (the flag-on arm's onset makes blockIsostasy inert until the branch,
- * and the system consumes no RNG), so post-branch deltas are the mechanism's
- * direct effect — the measurement the whole-history on/off comparison in
- * ISSUE_84_PROTOTYPE_FINDINGS.md could not make.
+ * Paired branched A/B (#84, generalized for #88-#91): both arms share the
+ * seed and every pre-branch byte (the flag-on arm's onset makes the
+ * mechanism inert until the branch, and no gated system consumes RNG), so
+ * post-branch deltas are the mechanism's direct effect — the measurement
+ * the whole-history on/off comparison in ISSUE_84_PROTOTYPE_FINDINGS.md
+ * could not make.
  */
-if (abBranchYears !== undefined) {
-  if (values['block-isostasy'] || dumpFields.length > 0) {
-    console.error('sim-cli: --ab-block-isostasy runs its own two arms; drop --block-isostasy/--dump');
+if (abMechanism !== undefined && abBranchYears !== undefined) {
+  if (MECHANISM_FLAGS.some((flag) => values[flag]) || dumpFields.length > 0) {
+    console.error('sim-cli: --ab runs its own two arms; drop the single-arm mechanism flags/--dump');
     process.exit(2);
   }
   if (abBranchYears < 0 || abBranchYears >= untilYears) {
-    console.error(`sim-cli: --ab-block-isostasy branch must be in [0, --until): ${abBranchYears}`);
+    console.error(`sim-cli: --ab branch must be in [0, --until): ${abBranchYears}`);
     process.exit(2);
   }
-  const runArm = (blockIsostasy: boolean): { series: KeyframeMetrics[]; preBranchElev: string[] } => {
+  const mechanismParams = MECHANISMS[abMechanism]!;
+  const runArm = (on: boolean): { series: KeyframeMetrics[]; preBranchElev: string[] } => {
     const armParams = createPlanetParams({
       seed,
       ...(gridN !== undefined ? { gridN } : {}),
       ...(keyframeIntervalYears !== undefined ? { keyframeIntervalYears } : {}),
-      blockIsostasy,
-      blockIsostasyOnsetYears: abBranchYears,
+      ...mechanismParams(on, abBranchYears),
     });
     const series: KeyframeMetrics[] = [];
     const preBranchElev: string[] = [];
@@ -287,9 +354,9 @@ if (abBranchYears !== undefined) {
     });
     return { series, preBranchElev };
   };
-  console.log(`ab: arm A (blockIsostasy off), seed ${seed}, until ${(untilYears / 1e6).toFixed(0)} Myr ...`);
+  console.log(`ab: arm A (${abMechanism} off), seed ${seed}, until ${(untilYears / 1e6).toFixed(0)} Myr ...`);
   const armOff = runArm(false);
-  console.log(`ab: arm B (blockIsostasy on from ${(abBranchYears / 1e6).toFixed(0)} Myr) ...`);
+  console.log(`ab: arm B (${abMechanism} on from ${(abBranchYears / 1e6).toFixed(0)} Myr) ...`);
   const armOn = runArm(true);
   // Instrument tripwire: pre-branch keyframes must be bit-identical, or the
   // "paired" deltas below are ordinary trajectory divergence in disguise.
