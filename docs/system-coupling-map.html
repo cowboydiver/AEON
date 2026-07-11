@@ -1,0 +1,433 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>AEON — System Coupling Map</title>
+<style>
+  /* minimal reset (standalone file — the artifact host injects this at publish time) */
+  *, *::before, *::after { box-sizing: border-box; }
+  html { -webkit-text-size-adjust: 100%; }
+  body { margin: 0; }
+  img, svg { max-width: 100%; }
+  :root {
+    --sans: ui-sans-serif, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    --mono: ui-monospace, "SF Mono", "JetBrains Mono", Menlo, Consolas, monospace;
+
+    --bg: #eaeef2;
+    --surface: #ffffff;
+    --surface-2: #f3f6f8;
+    --ink: #1b2127;
+    --muted: #5b6773;
+    --line: #d5dce3;
+    --line-strong: #c1cad3;
+
+    --solid: #bb5533;      /* magma / crust */
+    --climate: #2c7d9b;    /* glacial teal */
+    --globalc: #a5760f;    /* whole-planet scalars */
+    --lag: #c0670f;        /* one-step feedback */
+
+    --radius: 12px;
+    --shadow: 0 1px 2px rgba(20,30,40,.05), 0 6px 20px rgba(20,30,40,.05);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #12151a;
+      --surface: #1b1f26;
+      --surface-2: #222833;
+      --ink: #e0e5ec;
+      --muted: #98a4b1;
+      --line: #2c343f;
+      --line-strong: #3a4552;
+      --solid: #e07a50;
+      --climate: #57b6d3;
+      --globalc: #e2ae41;
+      --lag: #ec9c3e;
+      --shadow: 0 1px 2px rgba(0,0,0,.3), 0 8px 26px rgba(0,0,0,.35);
+    }
+  }
+  :root[data-theme="light"] {
+    --bg: #eaeef2; --surface: #ffffff; --surface-2: #f3f6f8; --ink: #1b2127;
+    --muted: #5b6773; --line: #d5dce3; --line-strong: #c1cad3;
+    --solid: #bb5533; --climate: #2c7d9b; --globalc: #a5760f; --lag: #c0670f;
+    --shadow: 0 1px 2px rgba(20,30,40,.05), 0 6px 20px rgba(20,30,40,.05);
+  }
+  :root[data-theme="dark"] {
+    --bg: #12151a; --surface: #1b1f26; --surface-2: #222833; --ink: #e0e5ec;
+    --muted: #98a4b1; --line: #2c343f; --line-strong: #3a4552;
+    --solid: #e07a50; --climate: #57b6d3; --globalc: #e2ae41; --lag: #ec9c3e;
+    --shadow: 0 1px 2px rgba(0,0,0,.3), 0 8px 26px rgba(0,0,0,.35);
+  }
+
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--ink);
+    font-family: var(--sans); line-height: 1.55;
+    -webkit-font-smoothing: antialiased;
+  }
+  .wrap { max-width: 1040px; margin: 0 auto; padding: 56px 24px 96px; }
+
+  /* ---- header ---- */
+  .eyebrow {
+    font-family: var(--mono); font-size: 12px; letter-spacing: .14em;
+    text-transform: uppercase; color: var(--muted); margin: 0 0 14px;
+  }
+  h1 {
+    font-size: clamp(28px, 4.6vw, 44px); line-height: 1.08; margin: 0 0 16px;
+    letter-spacing: -.02em; text-wrap: balance; font-weight: 640;
+  }
+  .lede { font-size: 18px; color: var(--muted); max-width: 64ch; margin: 0 0 28px; }
+  .lede b { color: var(--ink); font-weight: 600; }
+
+  .metabar {
+    display: flex; flex-wrap: wrap; gap: 10px 26px; padding: 16px 0 0;
+    border-top: 1px solid var(--line); font-size: 13px; color: var(--muted);
+  }
+  .metabar .k { font-family: var(--mono); color: var(--ink); font-weight: 600; }
+
+  /* ---- legend ---- */
+  .legend {
+    display: flex; flex-wrap: wrap; gap: 8px 20px; align-items: center;
+    margin: 28px 0 40px; padding: 14px 18px; background: var(--surface);
+    border: 1px solid var(--line); border-radius: var(--radius); box-shadow: var(--shadow);
+    font-size: 12.5px;
+  }
+  .legend .grp { display: inline-flex; align-items: center; gap: 8px; }
+  .legend .sw { width: 12px; height: 12px; border-radius: 3px; display: inline-block; }
+  .legend .lbl { color: var(--muted); }
+  .legend .sep { width: 1px; align-self: stretch; background: var(--line); margin: 2px 0; }
+
+  /* ---- section ---- */
+  .section-h {
+    font-family: var(--mono); font-size: 12px; letter-spacing: .12em;
+    text-transform: uppercase; color: var(--muted); margin: 48px 0 18px;
+    display: flex; align-items: center; gap: 12px;
+  }
+  .section-h::after { content: ""; flex: 1; height: 1px; background: var(--line); }
+
+  /* ---- pipeline band ---- */
+  .band {
+    display: flex; align-items: baseline; gap: 12px; margin: 34px 0 14px;
+  }
+  .band .tag {
+    font-family: var(--mono); font-size: 11.5px; font-weight: 700; letter-spacing: .08em;
+    text-transform: uppercase; padding: 4px 10px; border-radius: 999px;
+    color: #fff;
+  }
+  .band.s .tag { background: var(--solid); }
+  .band.c .tag { background: var(--climate); }
+  .band.o .tag { background: var(--globalc); }
+  .band .desc { color: var(--muted); font-size: 13.5px; }
+  .band:first-of-type { margin-top: 6px; }
+
+  .chev { text-align: center; color: var(--line-strong); font-size: 15px; line-height: 1; margin: 3px 0; }
+
+  /* ---- system card ---- */
+  .card {
+    background: var(--surface); border: 1px solid var(--line);
+    border-left: 3px solid var(--edge, var(--line-strong));
+    border-radius: var(--radius); box-shadow: var(--shadow);
+    padding: 16px 18px; display: grid;
+    grid-template-columns: 40px 1fr; gap: 4px 16px;
+  }
+  .card.s { --edge: var(--solid); }
+  .card.c { --edge: var(--climate); }
+  .card.o { --edge: var(--globalc); }
+  .card.off { opacity: .82; border-left-style: dashed; }
+
+  .card .num {
+    grid-row: 1 / span 3; font-family: var(--mono); font-size: 20px; font-weight: 700;
+    color: var(--edge, var(--muted)); align-self: start; padding-top: 1px;
+    font-variant-numeric: tabular-nums;
+  }
+  .card .head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+  .card .name { font-family: var(--mono); font-size: 16px; font-weight: 700; letter-spacing: -.01em; }
+  .card .role { color: var(--muted); font-size: 13.5px; margin: 2px 0 10px; max-width: 74ch; }
+  .card .pill {
+    font-family: var(--mono); font-size: 10.5px; letter-spacing: .06em; text-transform: uppercase;
+    padding: 2px 8px; border-radius: 999px; border: 1px solid var(--lag);
+    color: var(--lag); font-weight: 700;
+  }
+
+  .io { display: grid; grid-template-columns: 52px 1fr; gap: 6px 10px; align-items: start; }
+  .io .io-l {
+    font-family: var(--mono); font-size: 11px; text-transform: uppercase; letter-spacing: .06em;
+    color: var(--muted); padding-top: 5px; font-weight: 600;
+  }
+  .io .chips { display: flex; flex-wrap: wrap; gap: 5px; }
+
+  .chip {
+    font-family: var(--mono); font-size: 12px; padding: 2px 8px; border-radius: 6px;
+    white-space: nowrap; line-height: 1.5;
+  }
+  .chip[data-cat="s"] { --k: var(--solid); }
+  .chip[data-cat="c"] { --k: var(--climate); }
+  .chip[data-cat="g"] { --k: var(--globalc); }
+  .chip.write { background: var(--k); color: #fff; border: 1px solid var(--k); font-weight: 600; }
+  .chip.read {
+    color: var(--k); border: 1px solid color-mix(in srgb, var(--k) 42%, transparent);
+    background: color-mix(in srgb, var(--k) 9%, transparent);
+  }
+  .chip.lag { border-style: dashed; }
+  .chip.lag::before { content: "↺ "; color: var(--lag); font-weight: 700; }
+
+  /* ---- feedback loops ---- */
+  .loops { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 16px; }
+  .loop {
+    background: var(--surface); border: 1px solid var(--line); border-top: 3px solid var(--lag);
+    border-radius: var(--radius); padding: 18px 18px 16px; box-shadow: var(--shadow);
+  }
+  .loop h3 { margin: 0 0 4px; font-size: 15.5px; letter-spacing: -.01em; display: flex; align-items: center; gap: 8px; }
+  .loop .sign {
+    font-family: var(--mono); font-size: 10.5px; font-weight: 700; padding: 2px 7px; border-radius: 999px;
+    text-transform: uppercase; letter-spacing: .05em;
+  }
+  .loop .sign.neg { color: var(--climate); background: color-mix(in srgb, var(--climate) 14%, transparent); }
+  .loop .sign.pos { color: var(--solid); background: color-mix(in srgb, var(--solid) 14%, transparent); }
+  .loop .flow {
+    font-family: var(--mono); font-size: 12.5px; color: var(--ink); margin: 10px 0 10px;
+    line-height: 1.9; word-break: break-word;
+  }
+  .loop .flow .arr { color: var(--lag); font-weight: 700; padding: 0 3px; }
+  .loop .flow .lagmark { color: var(--lag); font-size: 11px; }
+  .loop p { margin: 0; font-size: 13px; color: var(--muted); }
+
+  /* ---- matrix ---- */
+  .scroll { overflow-x: auto; border: 1px solid var(--line); border-radius: var(--radius); box-shadow: var(--shadow); }
+  table.mx { border-collapse: collapse; width: 100%; min-width: 760px; background: var(--surface); font-size: 12px; }
+  table.mx th, table.mx td { padding: 7px 6px; text-align: center; border-bottom: 1px solid var(--line); }
+  table.mx thead th {
+    position: sticky; top: 0; background: var(--surface-2); font-family: var(--mono);
+    font-weight: 600; color: var(--muted); font-size: 11px; letter-spacing: .02em;
+  }
+  table.mx thead th.grouphead { color: #fff; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; font-size: 10.5px; }
+  table.mx thead th.grouphead.s { background: var(--solid); }
+  table.mx thead th.grouphead.c { background: var(--climate); }
+  table.mx thead th.grouphead.g { background: var(--globalc); }
+  table.mx td.sys, table.mx th.sys {
+    text-align: left; font-family: var(--mono); font-weight: 600; white-space: nowrap;
+    position: sticky; left: 0; background: var(--surface); color: var(--ink); z-index: 1;
+    border-right: 1px solid var(--line-strong);
+  }
+  table.mx thead th.sys { background: var(--surface-2); z-index: 3; }
+  table.mx tbody tr:hover td { background: var(--surface-2); }
+  table.mx tbody tr:hover td.sys { background: var(--surface-2); }
+  .mk { display: inline-block; width: 13px; height: 13px; border-radius: 3px; }
+  .mk.w { background: var(--kc); }
+  .mk.r { border: 1.5px solid var(--kc); }
+  .mk.lag { border: 1.5px dashed var(--lag); }
+  .mx-key { display: flex; flex-wrap: wrap; gap: 8px 18px; margin: 12px 2px 0; font-size: 12px; color: var(--muted); }
+  .mx-key .grp { display: inline-flex; align-items: center; gap: 7px; }
+
+  footer { margin-top: 56px; padding-top: 20px; border-top: 1px solid var(--line); color: var(--muted); font-size: 12.5px; }
+  footer code { font-family: var(--mono); color: var(--ink); }
+  a { color: var(--climate); }
+</style>
+</head>
+<body>
+
+<div class="wrap">
+  <header>
+    <p class="eyebrow">AEON · sim-kernel · system coupling</p>
+    <h1>How the systems feed into each other</h1>
+    <p class="lede">Every step pushes the planet through <b>twelve pure systems in a fixed order</b>. Solid-earth systems reshape the crust; the climate stack then solves on top of that terrain. Fast diagnostics are re-solved from scratch each step; three <b>slow reservoirs</b> — ice, sea level, CO₂ — close their loops back to the top with a deliberate <b>one-step lag</b>.</p>
+    <div class="metabar">
+      <span><span class="k">12</span> systems in the live pipeline</span>
+      <span><span class="k">2</span> prototypes default-off</span>
+      <span><span class="k">3</span> lagged feedback loops</span>
+      <span><span class="k">1-step</span> explicit lag, never a joint solve</span>
+    </div>
+  </header>
+
+  <div class="legend">
+    <span class="grp"><span class="sw" style="background:var(--solid)"></span><span class="lbl">solid-earth field</span></span>
+    <span class="grp"><span class="sw" style="background:var(--climate)"></span><span class="lbl">climate field</span></span>
+    <span class="grp"><span class="sw" style="background:var(--globalc)"></span><span class="lbl">whole-planet scalar</span></span>
+    <span class="sep"></span>
+    <span class="grp"><span class="chip read" data-cat="s" style="pointer-events:none">reads</span></span>
+    <span class="grp"><span class="chip write" data-cat="s" style="pointer-events:none">writes</span></span>
+    <span class="grp"><span class="chip read lag" data-cat="g" style="pointer-events:none">lagged read</span></span>
+  </div>
+
+  <div class="section-h">The step pipeline</div>
+  <div id="pipeline"></div>
+
+  <div class="section-h">The three feedback loops</div>
+  <div class="loops">
+    <div class="loop">
+      <h3>Ice–albedo <span class="sign pos">positive</span></h3>
+      <div class="flow"><span>ice</span><span class="arr">→</span><span>iceFraction</span><span class="arr">→</span><span class="lagmark">↺ next step</span> <span>energyBalance</span> <span>(albedo)</span><span class="arr">→</span><span>colder</span><span class="arr">→</span><span>more ice</span></div>
+      <p>White ice reflects sunlight, cooling the surface and growing more ice. Runaway is held off by a deliberately <em>wide</em> equilibrium-cover ramp that keeps d(albedo)/dT subcritical — but a strong cold shock still tips the whole planet into a reachable snowball.</p>
+    </div>
+    <div class="loop">
+      <h3>CO₂ thermostat <span class="sign neg">negative</span></h3>
+      <div class="flow"><span>carbon</span><span class="arr">→</span><span>co2</span><span class="arr">→</span><span class="lagmark">↺ next step</span> <span>energyBalance</span> <span>(greenhouse)</span><span class="arr">→</span><span>warmer</span><span class="arr">→</span><span>weathering</span><span class="arr">→</span><span>carbon</span></div>
+      <p>Warmth speeds silicate weathering, which draws CO₂ down and cools — a stabilizing loop. When ice seals the continents weathering stops, outgassing rebuilds CO₂, and a snowball thaws itself. This is what makes the ice loop recoverable.</p>
+    </div>
+    <div class="loop">
+      <h3>Sea-level mask <span class="sign neg">coupling</span></h3>
+      <div class="flow"><span>ice</span><span class="arr">→</span><span>grounded ice</span><span class="arr">→</span><span>seaLevel</span><span class="arr">→</span><span>seaLevelM</span><span class="arr">→</span><span class="lagmark">↺ next step</span> <span>energyBalance · erosion · moisture · ice · biome</span></div>
+      <p>Grounded ice locks water out of the ocean, dropping sea level and exposing shelves. The moved coastline becomes next step's land/ocean mask everywhere downstream — changing albedo, erosion base level, evaporation area and biomes.</p>
+    </div>
+  </div>
+
+  <div class="section-h">Coupling matrix</div>
+  <div class="scroll">
+    <table class="mx" id="matrix"></table>
+  </div>
+  <div class="mx-key">
+    <span class="grp"><span class="mk w" style="--kc:var(--muted)"></span> writes</span>
+    <span class="grp"><span class="mk r" style="--kc:var(--muted)"></span> reads (this step)</span>
+    <span class="grp"><span class="mk lag"></span> reads (previous step — lagged)</span>
+    <span class="grp">colour = the field's category</span>
+  </div>
+
+  <footer>
+    Generated from <code>packages/sim-kernel/src/step.ts</code> and each system's source header. Order: <code>tectonics → wilson → crustFates → erosion → blockIsostasy → energyBalance → winds → moisture → ice → seaLevel → carbon → biome</code>. <code>crustFates</code> and <code>blockIsostasy</code> are identity functions when their param is off. Full coupling notes live in <code>docs/ARCHITECTURE.md</code>.
+  </footer>
+</div>
+
+<script>
+  // field name -> category: s (solid earth), c (climate), g (global scalar)
+  const CAT = {
+    elevation:'s', crustAge:'s', crustType:'s', plateId:'s', boundaryStress:'s', sutureYears:'s', sedimentM:'s',
+    temperature:'c', precipitation:'c', windU:'c', windV:'c', iceFraction:'c', biome:'c',
+    co2:'g', seaLevelM:'g', landFraction:'g', waterInventoryM:'g', meanTemperatureK:'g'
+  };
+  // r(field) reads this step; r(field,true) reads previous step (lagged); w(field) writes
+  const r = (f, lag=false) => ({ f, kind:'read', lag });
+  const w = (f) => ({ f, kind:'write' });
+
+  const SYSTEMS = [
+    { n:1, id:'tectonics', g:'s',
+      role:'Rigid plate drift by Euler-pole rotation. Raises mountains where plates converge, opens young ocean where they diverge; carries the boundaries helper that classifies every boundary.',
+      io:[r('plateId'),r('crustType'),r('elevation'),r('crustAge'),r('sutureYears'),r('sedimentM'),
+          w('elevation'),w('crustAge'),w('crustType'),w('plateId'),w('boundaryStress'),w('sutureYears')] },
+    { n:2, id:'wilson', g:'s',
+      role:'Plate reorganization. Merges long-colliding continents (suturing) and rifts old plates apart — the supercontinent cycle that gives deep time a story.',
+      io:[r('plateId'),r('crustType'),r('boundaryStress'),r('elevation'),
+          w('plateId'),w('sutureYears')] },
+    { n:3, id:'crustFates', g:'s', off:true,
+      role:'Docks small continental fragments onto neighbours or drowns isolated ones and retires their crust record. Consolidates continental lace.',
+      io:[r('crustType'),r('plateId'),r('elevation'),
+          w('crustType'),w('sutureYears'),w('elevation'),w('plateId'),w('boundaryStress')] },
+    { n:4, id:'erosion', g:'s',
+      role:'Wears relief down: slope diffusion, coastal sediment export to the shelf, and exponential decay of over-thick mountain roots.',
+      io:[r('elevation'),r('crustType'),r('sedimentM'),r('precipitation',true),r('seaLevelM',true),
+          w('elevation'),w('sedimentM')] },
+    { n:5, id:'blockIsostasy', g:'s', off:true,
+      role:'Caps the elevation of small continental blocks by area, foundering splinters as submerged platform. Older prototype, superseded by crust fates.',
+      io:[r('crustType'),r('elevation'),
+          w('elevation')] },
+    { n:6, id:'energyBalance', g:'c',
+      role:'Budyko–Sellers energy balance — the climate hub. Solves surface temperature from sunlight, greenhouse and heat transport. Reads last step’s ice, sea level and CO₂.',
+      io:[r('elevation'),r('iceFraction',true),r('seaLevelM',true),r('co2',true),
+          w('temperature'),w('meanTemperatureK')] },
+    { n:7, id:'winds', g:'c',
+      role:'Prevailing wind bands from rotation rate (band count) and the equator-to-pole temperature gradient (strength). Diagnostic, no fluid solve.',
+      io:[r('temperature'),
+          w('windU'),w('windV')] },
+    { n:8, id:'moisture', g:'c',
+      role:'Evaporate → advect → precipitate along the winds. Rain shadows and dry interiors emerge from transport; water is conserved (ΣP = ΣE).',
+      io:[r('windU'),r('windV'),r('temperature'),r('elevation'),r('seaLevelM',true),
+          w('precipitation')] },
+    { n:9, id:'ice', g:'c',
+      role:'Ice-sheet mass balance — a slow reservoir with memory. Grows ice where cold + wet, ablates where warm, relaxing toward a temperature-set target.',
+      io:[r('temperature'),r('precipitation'),r('iceFraction',true),r('seaLevelM',true),
+          w('iceFraction')] },
+    { n:10, id:'seaLevel', g:'c',
+      role:'Floats the coastline on a conserved water budget minus grounded ice. Re-solves sea level and land fraction each step; holds no state of its own.',
+      io:[r('elevation'),r('iceFraction'),r('waterInventoryM'),
+          w('seaLevelM'),w('landFraction')] },
+    { n:11, id:'carbon', g:'c',
+      role:'Carbonate–silicate CO₂ thermostat: volcanic outgassing (from boundary stress) minus silicate weathering (temperature × runoff × exposed land). A slow reservoir.',
+      io:[r('boundaryStress'),r('temperature'),r('precipitation'),r('iceFraction'),r('elevation'),r('seaLevelM'),
+          w('co2')] },
+    { n:12, id:'biome', g:'o',
+      role:'Whittaker classification of the fully-solved climate into biomes for the renderer. Terminal — nothing downstream reads it.',
+      io:[r('temperature'),r('precipitation'),r('elevation'),r('seaLevelM'),
+          w('biome')] },
+  ];
+
+  const BANDS = {
+    s: { tag:'Solid earth', desc:'reshapes the crust' },
+    c: { tag:'Climate', desc:'solves on the finished terrain' },
+    o: { tag:'Output', desc:'classification — read by the renderer only' },
+  };
+
+  const pipe = document.getElementById('pipeline');
+  let lastG = null;
+  SYSTEMS.forEach((s, i) => {
+    if (s.g !== lastG) {
+      const b = document.createElement('div');
+      b.className = 'band ' + s.g;
+      b.innerHTML = `<span class="tag">${BANDS[s.g].tag}</span><span class="desc">${BANDS[s.g].desc}</span>`;
+      pipe.appendChild(b);
+      lastG = s.g;
+    } else {
+      const c = document.createElement('div'); c.className = 'chev'; c.textContent = '↓';
+      pipe.appendChild(c);
+    }
+    const reads = s.io.filter(x => x.kind === 'read');
+    const writes = s.io.filter(x => x.kind === 'write');
+    const chip = (x) => `<span class="chip ${x.kind}${x.lag?' lag':''}" data-cat="${CAT[x.f]}">${x.f}</span>`;
+    const card = document.createElement('div');
+    card.className = 'card ' + s.g + (s.off ? ' off' : '');
+    card.innerHTML = `
+      <div class="num">${String(s.n).padStart(2,'0')}</div>
+      <div class="head"><span class="name">${s.id}</span>${s.off?'<span class="pill">prototype · off</span>':''}</div>
+      <div class="role">${s.role}</div>
+      <div class="io">
+        <div class="io-l">reads</div><div class="chips">${reads.map(chip).join('')}</div>
+        <div class="io-l">writes</div><div class="chips">${writes.map(chip).join('')}</div>
+      </div>`;
+    pipe.appendChild(card);
+  });
+
+  // ---- matrix ----
+  const COLS = {
+    s: ['elevation','crustAge','crustType','plateId','boundaryStress','sutureYears','sedimentM'],
+    c: ['temperature','precipitation','windU','windV','iceFraction','biome'],
+    g: ['co2','seaLevelM','landFraction','waterInventoryM','meanTemperatureK'],
+  };
+  const SHORT = {
+    elevation:'elev', crustAge:'cAge', crustType:'cTyp', plateId:'plate', boundaryStress:'bStr',
+    sutureYears:'sutr', sedimentM:'sed', temperature:'temp', precipitation:'prcp', windU:'wU',
+    windV:'wV', iceFraction:'ice', biome:'biome', co2:'co2', seaLevelM:'sea', landFraction:'land',
+    waterInventoryM:'watr', meanTemperatureK:'meanT'
+  };
+  const allCols = [...COLS.s, ...COLS.c, ...COLS.g];
+  const mx = document.getElementById('matrix');
+
+  const gh = document.createElement('tr');
+  gh.innerHTML = `<th class="sys"></th>`
+    + `<th class="grouphead s" colspan="${COLS.s.length}">Solid earth</th>`
+    + `<th class="grouphead c" colspan="${COLS.c.length}">Climate</th>`
+    + `<th class="grouphead g" colspan="${COLS.g.length}">Globals</th>`;
+  const ch = document.createElement('tr');
+  ch.innerHTML = `<th class="sys">system \\ field</th>`
+    + allCols.map(f => `<th title="${f}">${SHORT[f]}</th>`).join('');
+  const thead = document.createElement('thead');
+  thead.appendChild(gh); thead.appendChild(ch); mx.appendChild(thead);
+
+  const tbody = document.createElement('tbody');
+  SYSTEMS.forEach(s => {
+    const map = {};
+    s.io.forEach(x => { map[x.f] = x.kind === 'write' ? 'w' : (x.lag ? 'lag' : 'r'); });
+    const cells = allCols.map(f => {
+      const k = map[f];
+      if (!k) return '<td></td>';
+      const cls = k === 'w' ? 'mk w' : (k === 'lag' ? 'mk lag' : 'mk r');
+      const kc = `var(--${CAT[f]==='s'?'solid':CAT[f]==='c'?'climate':'globalc'})`;
+      const title = f + ' — ' + (k==='w'?'write':k==='lag'?'read (lagged)':'read');
+      return `<td><span class="${cls}" style="--kc:${kc}" title="${title}"></span></td>`;
+    }).join('');
+    const tr = document.createElement('tr');
+    tr.innerHTML = `<td class="sys">${String(s.n).padStart(2,'0')} ${s.id}</td>${cells}`;
+    tbody.appendChild(tr);
+  });
+  mx.appendChild(tbody);
+</script>
+
+</body>
+</html>
