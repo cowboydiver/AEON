@@ -202,8 +202,24 @@
  *     `temperature`'s codec max widens 320→330 K, bumping HISTORY_FORMAT_VERSION
  *     1→2. That is a codec-layout change (new byte goldens) but touches no
  *     simulation bytes; both version integers move together this once.
+ * 15 — `crustFates` (#88) and `marinePlanation` (#90) promoted to
+ *     default-on (onsets stay 0 — active from formation). The default
+ *     planet's history changes wholesale: small-component crust docks or
+ *     retires (the #88 consolidation sweep measured in
+ *     ISSUE_88_91_FINDINGS.md) and small-island planation exports into
+ *     `sedimentM`. The promoted pair measured HEALTHIER than baseline over
+ *     full 4.5 Gyr histories (N=64 land min ~16% vs 14% baseline, continents
+ *     consolidated). `compactArcs` (#89) and `emergentArcTaper` (#91) were
+ *     NOT promoted: measured together at default-on they starve continental
+ *     creation into a near-waterworld (N=64 final land 2-5%, N=128 land min
+ *     5.3% — far below the standing 10% sanity floor), so they stay
+ *     default-off togglables. Main goldens regenerated deliberately for the
+ *     new defaults; the pre-promotion kernel path is pinned unchanged by the
+ *     legacy all-mechanisms-off goldens (same hashes the old main goldens
+ *     carried). `blockIsostasy` (#84) stays default-off, superseded by
+ *     crustFates.
  */
-export const KERNEL_BEHAVIOR_VERSION = 14;
+export const KERNEL_BEHAVIOR_VERSION = 15;
 
 /** IUGG mean Earth radius, m. */
 export const EARTH_RADIUS_M = 6.371e6;

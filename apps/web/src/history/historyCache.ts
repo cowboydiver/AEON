@@ -16,7 +16,13 @@
  * one `keyframes` record per keyframe, compound-keyed `[key, index]` so a whole
  * history deletes as a single primary-key range.
  */
-import { HISTORY_FORMAT_VERSION, KERNEL_BEHAVIOR_VERSION } from 'sim-kernel';
+import {
+  HISTORY_FORMAT_VERSION,
+  KERNEL_BEHAVIOR_VERSION,
+  MECHANISMS,
+  defaultMechanismToggles,
+  type MechanismToggles,
+} from 'sim-kernel';
 
 const DB_NAME = 'aeon-history';
 const DB_VERSION = 1;
@@ -28,9 +34,9 @@ export interface HistoryCacheConfig {
   gridN: number;
   untilYears: number;
   keyframeIntervalYears: number;
-  /** Crustal-block isostasy prototype (#84). Part of the key so a flag-on
-   *  run never hydrates from a flag-off history or vice versa. */
-  blockIsostasy: boolean;
+  /** Mechanism toggle states (#84, #88-#91). Part of the key so a history
+   *  simulated under one mechanism set never hydrates a different set. */
+  mechanisms: MechanismToggles;
 }
 
 /** A keyframe as stored/returned: metadata plus the still-encoded payload. */
@@ -59,6 +65,7 @@ interface KeyframeRecord extends CachedKeyframe {
 
 /** Stable cache key. Both version integers are folded in, so a bump = a miss. */
 export function historyCacheKey(cfg: HistoryCacheConfig): string {
+  const defaults = defaultMechanismToggles();
   return [
     cfg.seed,
     cfg.gridN,
@@ -66,9 +73,14 @@ export function historyCacheKey(cfg: HistoryCacheConfig): string {
     cfg.keyframeIntervalYears,
     HISTORY_FORMAT_VERSION,
     KERNEL_BEHAVIOR_VERSION,
-    // Appended only when on, so existing cached flag-off histories keep
-    // matching their pre-#84 keys.
-    ...(cfg.blockIsostasy ? ['iso'] : []),
+    // One entry per mechanism whose toggle differs from the kernel default,
+    // in registry order (deterministic). All-defaults keeps the clean key;
+    // the KERNEL_BEHAVIOR_VERSION component above already retires every
+    // pre-promotion entry (including the old ':iso' form), so no
+    // back-compat suffix survives here.
+    ...MECHANISMS.filter((m) => cfg.mechanisms[m.key] !== defaults[m.key]).map(
+      (m) => `${m.key}=${cfg.mechanisms[m.key] ? 'on' : 'off'}`,
+    ),
   ].join(':');
 }
 

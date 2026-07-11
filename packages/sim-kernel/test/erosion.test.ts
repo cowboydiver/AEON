@@ -218,7 +218,12 @@ describe('coastal sediment export (#65)', () => {
     // A lone continental island: no continental pairs (no diffusion), below
     // the decay reference — export is the only term, and its flux vanishes at
     // the datum, so elevation decays toward 0 without ever crossing it.
+    // marinePlanation (default on since the #88/#90 promotion) is pinned OFF
+    // here: it deliberately planes small islands BELOW sea level (to the
+    // −200 m shelf), and this test isolates the #65 ordinary-export term,
+    // whose no-crossing property must keep holding on its own.
     let state = coastalWorld();
+    state = { ...state, params: { ...state.params, marinePlanation: false } };
     const crustType = state.fields.crustType.slice();
     const crustAge = state.fields.crustAge.slice();
     const elevation = state.fields.elevation.slice();

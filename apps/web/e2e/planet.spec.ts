@@ -176,6 +176,16 @@ test('blends continents across a keyframe boundary (fractional scrub morphs, not
 test('plate-debug toggle repaints the globe with per-plate colours', async ({ page }) => {
   await page.goto('/?until=100e6');
   await page.waitForSelector('[data-planet-ready="1"]', { timeout: 90_000 });
+  // Wait out the stream: the live view follows the newest keyframe, so a
+  // screenshot taken mid-stream is a moving target (the #88/#90 default-on
+  // kernel steps slower than the pre-promotion one, which surfaced exactly
+  // that race — the terrain baseline landed at 0.05 Gyr, the comparison at
+  // 0.10 Gyr).
+  await expect(page.locator('[data-history-progress]')).toHaveAttribute(
+    'data-history-progress',
+    'done',
+    { timeout: 60_000 },
+  );
 
   const canvas = page.locator('canvas');
   const toggle = page.locator('[data-plate-debug]');
@@ -279,4 +289,38 @@ test('renders the dual-sample blend material without stalling (Spike B)', async 
   expect(steady.fps, `steady fps ${steady.fps.toFixed(2)}`).toBeGreaterThan(0.4);
   // A set-swap must not wedge the loop; generous bound absorbs SwiftShader jitter.
   expect(swapMs, `swap ${swapMs.toFixed(0)} ms`).toBeLessThan(15_000);
+});
+
+test('mechanism sidebar shows kernel defaults, re-simulates on toggle, and re-hydrates from cache on toggle-back', async ({ page }) => {
+  await page.goto('/?until=100e6');
+  await page.waitForSelector('[data-planet-ready="1"]', { timeout: 90_000 });
+  const progress = page.locator('[data-history-progress]');
+  await expect(progress).toHaveAttribute('data-history-progress', 'done', { timeout: 60_000 });
+
+  // The sidebar lists every togglable mechanism with the kernel's default
+  // state: the promoted #88/#90 pair on, the measured-negative pair and the
+  // superseded #84 prototype off. This pins the product default visibly —
+  // if a promotion/demotion changes it, this test changes with it.
+  const sidebar = page.locator('[data-mechanism-sidebar]');
+  await expect(sidebar.locator('[data-mechanism]')).toHaveCount(5);
+  await expect(sidebar.locator('[data-mechanism="crustFates"]')).toBeChecked();
+  await expect(sidebar.locator('[data-mechanism="marinePlanation"]')).toBeChecked();
+  await expect(sidebar.locator('[data-mechanism="compactArcs"]')).not.toBeChecked();
+  await expect(sidebar.locator('[data-mechanism="emergentArcTaper"]')).not.toBeChecked();
+  await expect(sidebar.locator('[data-mechanism="blockIsostasy"]')).not.toBeChecked();
+
+  // Toggling a mechanism re-simulates: a different mechanism set is a
+  // different history-cache key, so this run streams from the worker (the
+  // 'cached' badge must NOT be up once it completes... it was never cached).
+  await sidebar.locator('[data-mechanism="crustFates"]').uncheck();
+  await expect(progress).toHaveAttribute('data-history-progress', 'done', { timeout: 90_000 });
+  await expect(page.locator('[data-planet-ready]')).toHaveAttribute('data-history-source', 'worker');
+
+  // Toggling back restores the original mechanism set — the same cache key
+  // the first stream wrote through, so this history re-hydrates from
+  // IndexedDB without a worker run. This is the end-to-end proof that
+  // mechanism toggles are correctly folded into the cache key (#24).
+  await sidebar.locator('[data-mechanism="crustFates"]').check();
+  await expect(progress).toHaveAttribute('data-history-progress', 'done', { timeout: 90_000 });
+  await expect(page.locator('[data-planet-ready]')).toHaveAttribute('data-history-source', 'cache');
 });

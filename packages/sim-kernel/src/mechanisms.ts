@@ -1,0 +1,77 @@
+/**
+ * Registry of the togglable mechanism prototypes (#84, #88-#91): the single
+ * source of truth for UIs that expose mechanism switches (the web sidebar,
+ * harness help text, docs). Each entry is a boolean `PlanetParams` gate with
+ * a paired `<key>OnsetYears` param carrying the branched-A/B contract.
+ *
+ * Defaults are NOT duplicated here — `defaultMechanismToggles()` reads them
+ * from `createPlanetParams`, so a future promotion/demotion can never leave
+ * a UI showing stale default states.
+ */
+import { createPlanetParams, type PlanetParams } from './state';
+
+/** The boolean `PlanetParams` keys that gate a togglable mechanism. */
+export type MechanismKey =
+  | 'blockIsostasy'
+  | 'crustFates'
+  | 'compactArcs'
+  | 'marinePlanation'
+  | 'emergentArcTaper';
+
+export interface MechanismInfo {
+  key: MechanismKey;
+  /** Short human label for toggles and legends. */
+  label: string;
+  /** The GitHub issue that specified the mechanism. */
+  issue: number;
+  /** One-sentence description, suitable for a tooltip. */
+  summary: string;
+}
+
+export const MECHANISMS: readonly MechanismInfo[] = [
+  {
+    key: 'crustFates',
+    label: 'Crust fates + docking',
+    issue: 88,
+    summary:
+      'Small continental fragments weld onto nearby continents across short straits (terrane docking); isolated ones drown and their crust record retires.',
+  },
+  {
+    key: 'compactArcs',
+    label: 'Compact arc maturation',
+    issue: 89,
+    summary:
+      'New continental crust matures only against ≥2 continental neighbors, growing compact blobs instead of island chains.',
+  },
+  {
+    key: 'marinePlanation',
+    label: 'Marine planation',
+    issue: 90,
+    summary:
+      'Wave attack planes small islands down to the continental-shelf level, conservatively moving the mass into ocean sediment.',
+  },
+  {
+    key: 'emergentArcTaper',
+    label: 'Emergent-arc taper',
+    issue: 91,
+    summary:
+      'Arc growth above sea level is heavily tapered, so only long-lived subduction margins build emergent island-arc chains.',
+  },
+  {
+    key: 'blockIsostasy',
+    label: 'Block isostasy',
+    issue: 84,
+    summary:
+      'Per-component elevation ceilings founder small continental blocks (the #84 prototype, superseded by crust fates + docking).',
+  },
+] satisfies readonly MechanismInfo[];
+
+/** On/off states for every mechanism, e.g. a UI's toggle state. */
+export type MechanismToggles = Record<MechanismKey, boolean>;
+
+/** The kernel-default toggle states, read live from `createPlanetParams`.
+ *  (The seed is irrelevant — mechanism defaults are seed-independent.) */
+export function defaultMechanismToggles(): MechanismToggles {
+  const defaults: PlanetParams = createPlanetParams({ seed: 0 });
+  return Object.fromEntries(MECHANISMS.map((m) => [m.key, defaults[m.key]])) as MechanismToggles;
+}
