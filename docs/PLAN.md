@@ -18,7 +18,9 @@ carries a `phase-N` label. Milestones and dependencies are applied by
 edit its tables and re-run it whenever the plan is restructured.
 
 **Standing labels:** `spike`, `kernel`, `renderer`, `ui`, `infra`, `goldens`
-(any issue expected to change golden hashes), plus `phase-1` … `phase-6`.
+(any issue expected to change golden hashes), plus `phase-1` … `phase-6`. Each
+label's meaning is documented in [`LABELS.md`](LABELS.md); the descriptions
+themselves are reconciled onto GitHub by `tracker-sync.yml`.
 
 **Phase gate (HANDOVER §4.5).** Before implementation of each phase begins:
 write `docs/PHASE_N_SPEC.md` (milestones + acceptance criteria, in the spirit
