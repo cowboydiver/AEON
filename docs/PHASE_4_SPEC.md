@@ -135,7 +135,11 @@ documented per API; constants sourced in `constants.ts`):
   `oxygen` holds its seed, `abiogenesisYear` stays `-1`, and the albedo/weathering
   hooks fall back to their Phase 3 life-free form. Goldens run with the default;
   the ablation is a *separate parameterized run* (mirroring Phase 3's faint-star
-  snowball test), so it does not perturb the golden hash space.
+  snowball test), so it does not perturb the golden hash space. This is the same
+  boolean-toggle family the #84/#88 tectonic prototypes added to `PlanetParams`
+  (`crustFates`, `blockIsostasy`, `marinePlanation`, …), except it defaults *on*
+  (the biosphere is a shipped feature, not a prototype) and needs no `OnsetYears`
+  gate (abiogenesis provides the temporal onset).
 - `abiogenesisRatePerYear` — the per-year onset hazard for the gated Bernoulli
   trial (converted to a per-step probability via `dt`), so onset timing is
   seed-dependent but reliably occurs within deep time.
@@ -164,11 +168,14 @@ events the sim actually produces (tectonic + climate + biosphere).
 
 ### Systems: the pipeline gains a biosphere block
 
-The Phase 3 pipeline is
+The shipped Phase 3 climate pipeline is
 `tectonics → wilson → erosion → energyBalance → winds → moisture → ice → seaLevel → carbon → biome`.
-Phase 4 inserts three systems after `carbon` (so life reads this step's fully
-solved climate and land mask) and before `biome` (which stays terminal and
-climate-only):
+(The live `SYSTEMS` array also carries the default-off #84/#88 tectonic
+prototypes `crustFatesSystem` — after `wilson` — and `blockIsostasySystem` —
+after `erosion`; both are identity when their param is off and do not affect the
+biosphere insertion point below.) Phase 4 inserts three systems after `carbon`
+(so life reads this step's fully solved climate and land mask) and before `biome`
+(which stays terminal and climate-only):
 
 ```
 … → carbon → marineLife → oxygen → vegetation → biome
