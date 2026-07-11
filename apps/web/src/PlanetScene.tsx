@@ -10,7 +10,7 @@ const SUN_DIRECTION: [number, number, number] = [1, 0.25, 0.45];
 interface PlanetSceneProps {
   gridN: number;
   blend: RenderBlend | null;
-  /** Debug overlay: paint each tectonic plate its own flat colour. */
+  /** Debug overlay: plate boundaries + crust-type colours (oceanic vs continental). */
   plateDebug: boolean;
   onFirstFrame: () => void;
 }
@@ -35,7 +35,8 @@ export function PlanetScene({ gridN, blend, plateDebug, onFirstFrame }: PlanetSc
   }, [planet]);
 
   // Drive the plate-debug overlay uniform (0/1) from the toggle. Cheap: flips a
-  // single uniform, no re-upload — the material's `plateDebug` swaps the surface.
+  // single uniform, no re-upload — the material's `plateDebug` swaps the biome
+  // surface for the crust-type + plate-boundary map.
   useEffect(() => {
     planet.uniforms.plateDebug.value = plateDebug ? 1 : 0;
   }, [planet, plateDebug]);

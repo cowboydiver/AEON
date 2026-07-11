@@ -158,7 +158,7 @@ export function App() {
           {streaming ? 'Generating…' : 'Regenerate'}
         </button>
         <label
-          title="Colour-code each tectonic plate (debug view)"
+          title="Show plate boundaries, coloured by crust type: oceanic vs continental (debug view)"
           style={{ display: 'flex', alignItems: 'center', gap: 4, cursor: 'pointer', userSelect: 'none' }}
         >
           <input

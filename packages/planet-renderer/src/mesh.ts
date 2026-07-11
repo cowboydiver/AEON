@@ -82,17 +82,20 @@ export function createPlanetMesh(gridN: number, radiusMeters: number): PlanetHan
         {
           elevation: fieldsA.elevation[face]!,
           plateId: fieldsA.plateId[face]!,
+          crustType: fieldsA.crustType[face]!,
           biome: fieldsA.biome[face]!,
           iceFraction: fieldsA.iceFraction[face]!,
         },
         {
           elevation: fieldsB.elevation[face]!,
           plateId: fieldsB.plateId[face]!,
+          crustType: fieldsB.crustType[face]!,
           biome: fieldsB.biome[face]!,
           iceFraction: fieldsB.iceFraction[face]!,
         },
         uniforms,
         radiusMeters,
+        gridN,
       ),
     );
     mesh.name = `planet-face-${face}`;

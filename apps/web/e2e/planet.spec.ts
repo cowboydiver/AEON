@@ -173,7 +173,7 @@ test('blends continents across a keyframe boundary (fractional scrub morphs, not
   expect(diffFraction(shotMid, shotMid2), 'fractional scrub is deterministic').toBeLessThan(0.001);
 });
 
-test('plate-debug toggle repaints the globe with per-plate colours', async ({ page }) => {
+test('plate-debug toggle repaints the globe with the crust-type + boundary map', async ({ page }) => {
   await page.goto('/?until=100e6');
   await page.waitForSelector('[data-planet-ready="1"]', { timeout: 90_000 });
   // Wait out the stream: the live view follows the newest keyframe, so a
@@ -196,8 +196,9 @@ test('plate-debug toggle repaints the globe with per-plate colours', async ({ pa
   await settle(page);
   const terrain = await canvas.screenshot({ path: join(ARTIFACTS_DIR, 'plates-off.png') });
 
-  // Flip the debug toggle: each plate should now be a flat, distinct colour, so
-  // a large share of the globe changes and the frame gets more chromatic.
+  // Flip the debug toggle: the surface is now coloured by crust type (teal
+  // oceanic vs tan continental) with plate boundaries drawn over it, so a large
+  // share of the globe changes and the frame stays chromatic.
   await toggle.check();
   await expect(toggle).toBeChecked();
   await settle(page);
@@ -205,10 +206,11 @@ test('plate-debug toggle repaints the globe with per-plate colours', async ({ pa
 
   // The overlay is a wholesale surface swap, not a subtle tint — a big fraction
   // of pixels must differ from the terrain view.
-  expect(diffFraction(terrain, plates), 'plate map repaints the globe').toBeGreaterThan(0.05);
+  expect(diffFraction(terrain, plates), 'crust map repaints the globe').toBeGreaterThan(0.05);
 
-  // The plate palette is a saturated rainbow; the debug frame carries at least as
-  // much chroma as the terrain view (which is mostly ocean blue + land greens).
+  // The crust palette is two saturated colours (cool oceanic + warm continental);
+  // the debug frame carries at least as much chroma as the terrain view (which is
+  // mostly ocean blue + land greens).
   const chroma = (buf: Buffer): number => {
     const png = PNG.sync.read(buf);
     let colored = 0;
@@ -221,7 +223,7 @@ test('plate-debug toggle repaints the globe with per-plate colours', async ({ pa
     }
     return colored / n;
   };
-  expect(chroma(plates), 'plate map is chromatic').toBeGreaterThan(chroma(terrain) * 0.8);
+  expect(chroma(plates), 'crust map is chromatic').toBeGreaterThan(chroma(terrain) * 0.8);
 
   // Toggling back returns to terrain (uniform flip only — deterministic frame).
   await toggle.uncheck();
