@@ -43,6 +43,17 @@ export interface PlanetParams {
    * unchanged); flip on via sim-cli --block-isostasy for A/B measurement.
    */
   blockIsostasy: boolean;
+  /**
+   * Sim year before which blockIsostasy is inert even when enabled (#84
+   * branched A/B). The system consumes no RNG, so a flag-on run with onset Y
+   * is bit-identical to a flag-off run until Y and diverges after Y *only*
+   * by the mechanism's direct effect — paired keyframes in the window after
+   * Y measure the mechanism itself, before chaotic trajectory divergence
+   * (the first founder perturbing all subsequent tectonics) swamps the
+   * signal, which is what defeated the whole-history on/off comparison in
+   * ISSUE_84_PROTOTYPE_FINDINGS.md. Default 0: active from the start.
+   */
+  blockIsostasyOnsetYears: number;
 }
 
 /** Scalar whole-planet quantities, updated by systems as they run. */
@@ -112,6 +123,7 @@ export function createPlanetParams(partial: Partial<PlanetParams> & { seed: numb
     obliquityDeg: EARTH_OBLIQUITY_DEG,
     initialCo2Ppm: INITIAL_CO2_PPM,
     blockIsostasy: false,
+    blockIsostasyOnsetYears: 0,
     ...partial,
   };
 }

@@ -500,10 +500,15 @@ export const BLOCK_FULL_OROGENY_AREA_M2 = 2e12;
 /**
  * Rate at which elevation above a block's isostatic ceiling subsides toward
  * it, m/yr (#84). Rate-bounded like OCEAN_RELIEF_RELAX_M_PER_YR, never a
- * hard-set, so a component split by a rift or advection tear subsides over
- * ~5-10 Myr (1e-3 m/yr takes a 9 km orogen to the founder level in ~9 Myr —
- * a gravitational-collapse timescale) instead of popping between 10 Myr
- * keyframes. Subsidence only: the cap never raises elevation.
+ * hard-set: 1e-3 m/yr takes a 9 km orogen to the founder level in ~9 Myr (a
+ * gravitational-collapse timescale) — several 1 Myr sim steps, so no
+ * single-step cliff, though the full sink still fits inside about one
+ * 10 Myr keyframe interval: the on-screen smoothness is the keyframe blend
+ * riding this multi-step ramp, not the rate alone. On an active margin the
+ * orogeny pump (OROGENY_RATE_M_PER_YR, 6e-4) works against this relax, so
+ * the effective sink rate there is ~4e-4 m/yr and a still-converging block
+ * sits pinned at its cap rather than below it. Subsidence only: the cap
+ * never raises elevation.
  */
 export const BLOCK_ISOSTASY_RELAX_M_PER_YR = 1e-3;
 

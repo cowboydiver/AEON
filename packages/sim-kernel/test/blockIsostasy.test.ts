@@ -6,9 +6,12 @@ import {
   MICROCONTINENT_FOUNDER_ELEVATION_M,
   OROGENY_MAX_ELEVATION_M,
 } from '../src/constants';
+import { FIELD_NAMES } from '../src/fields';
 import { cellCount, faceRCToIndex } from '../src/grid';
+import { hashFloat32Array } from '../src/hash';
 import { blockElevationCap, blockIsostasySystem } from '../src/systems/blockIsostasy';
-import type { PlanetState } from '../src/state';
+import { createPlanetParams, type PlanetState } from '../src/state';
+import { run, type Keyframe } from '../src/step';
 import { runSystems, twoPlateState } from './helpers';
 
 /**
@@ -16,9 +19,11 @@ import { runSystems, twoPlateState } from './helpers';
  * states (zero angular velocity) run through [blockIsostasySystem] alone,
  * so the system under test is the only elevation writer.
  *
- * N=32: cell area = 4πR²/6144 ≈ 8.3e10 m², so the founder threshold
- * (3e11 m²) is ~3.6 cells and the full-orogeny threshold (2e12 m²) is
- * ~24 cells — a 2-cell island founders, a 6×6 block keeps its mountains.
+ * N=32: mean cell area = 4πR²/6144 ≈ 8.3e10 m² (true solid-angle areas,
+ * which the system sums, run ~1.18× that at the face centers where these
+ * blocks sit), so the founder threshold (3e11 m²) is ~3 cells and the
+ * full-orogeny threshold (2e12 m²) is ~20 cells — a 2-cell island founders,
+ * a 6×6 block keeps its mountains.
  */
 const N = 32;
 const MID = N / 2;
@@ -145,6 +150,30 @@ describe('blockIsostasy system', () => {
     }
   });
 
+  it('is inert before blockIsostasyOnsetYears and active from it (#84 branched A/B)', () => {
+    const base = paintBlock(oceanWorld(), 0, 1, 2, 5000);
+    const dt = base.params.stepYears;
+    // Onset two steps in: the steps starting at t=0 and t=dt are inert
+    // (timeYears < onset), the step starting at t=2·dt is the first active one.
+    const world: PlanetState = {
+      ...base,
+      params: { ...base.params, blockIsostasyOnsetYears: 2 * dt },
+    };
+    const cells = blockCells(0, 1, 2);
+
+    const preOnset = runSystems(world, 2, [blockIsostasySystem]);
+    for (const c of cells) expect(preOnset.fields.elevation[c]).toBe(5000);
+
+    const postOnset = runSystems(world, 3, [blockIsostasySystem]);
+    for (const c of cells) {
+      // The third step is the first active one: exactly one relax quantum.
+      expect(postOnset.fields.elevation[c]).toBeCloseTo(
+        5000 - BLOCK_ISOSTASY_RELAX_M_PER_YR * dt,
+        3,
+      );
+    }
+  });
+
   it('separated islands founder independently of a large neighbor component', () => {
     // A big block on face 0 and a detached 2-cell island on face 1: only the
     // island founders. Guards against component labels bleeding across the
@@ -155,6 +184,37 @@ describe('blockIsostasy system', () => {
     for (const c of blockCells(0, 6, 6)) expect(out.fields.elevation[c]).toBe(8000);
     for (const c of blockCells(1, 1, 2)) {
       expect(out.fields.elevation[c]).toBeCloseTo(MICROCONTINENT_FOUNDER_ELEVATION_M, 3);
+    }
+  });
+
+  it('a flag-on run with onset Y is bit-identical to a flag-off run until Y', () => {
+    // The branched A/B instrument's whole contract, through the FULL system
+    // pipeline: arms share every pre-onset byte, so post-onset deltas are the
+    // mechanism's direct effect, not seed-level trajectory divergence.
+    const untilYears = 30e6;
+    const onsetYears = 20e6;
+    const collect = (blockIsostasy: boolean): Keyframe[] => {
+      const frames: Keyframe[] = [];
+      const params = createPlanetParams({
+        seed: 42,
+        gridN: N,
+        blockIsostasy,
+        blockIsostasyOnsetYears: onsetYears,
+      });
+      run(params, untilYears, (kf) => frames.push(kf));
+      return frames;
+    };
+    const off = collect(false);
+    const on = collect(true);
+    expect(on.length).toBe(off.length);
+    for (let i = 0; i < off.length; i++) {
+      if (off[i]!.timeYears > onsetYears) continue;
+      for (const name of FIELD_NAMES) {
+        expect(
+          hashFloat32Array(on[i]!.fields[name]),
+          `${name} @ ${off[i]!.timeYears} yr`,
+        ).toBe(hashFloat32Array(off[i]!.fields[name]));
+      }
     }
   });
 });

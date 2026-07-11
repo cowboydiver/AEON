@@ -4,6 +4,7 @@ import {
   computeKeyframeMetrics,
   DISPERSED_MAX_PLATE_FRAC,
   summarizeMetrics,
+  summarizePairedMetrics,
   type KeyframeMetrics,
 } from '../src/metrics';
 
@@ -151,5 +152,44 @@ describe('summarizeMetrics', () => {
     const out = summarizeMetrics(series, undefined);
     expect(out).toContain('shape past 1 Gyr: n/a');
     expect(out).not.toContain('largest comp 0.000');
+  });
+});
+
+describe('summarizePairedMetrics (#84 branched A/B)', () => {
+  const point = (
+    timeYears: number,
+    landComponents: number,
+    largestLandCompFrac: number,
+    landFrac = 0.2,
+  ): KeyframeMetrics => ({
+    timeYears,
+    landFrac,
+    maxPlateFrac: 0.5,
+    contFrac: 0.2,
+    contComponents: 10,
+    largestCompFrac: 0.5,
+    edgeToArea: 1,
+    landComponents,
+    largestLandCompFrac,
+  });
+
+  it('reports only the post-branch window and the mean off->on deltas', () => {
+    const off = [point(0, 5, 0.5), point(10e6, 10, 0.3), point(20e6, 12, 0.3)];
+    const on = [point(0, 5, 0.5), point(10e6, 8, 0.4), point(20e6, 8, 0.5)];
+    const out = summarizePairedMetrics(off, on, 10e6);
+    // Pre-branch keyframe (t=0) is not part of the comparison window.
+    expect(out).not.toContain('      0 Myr');
+    expect(out).toContain('10 -> 8');
+    expect(out).toContain('12 -> 8');
+    // Mean deltas over the two post-branch keyframes: components (8-10 + 8-12)/2 = -3,
+    // largest land comp (0.1 + 0.2)/2 = +0.15.
+    expect(out).toContain('Δ land components -3.0');
+    expect(out).toContain('Δ largest land comp +0.150');
+  });
+
+  it('flags unpaired arms instead of fabricating deltas', () => {
+    const off = [point(0, 5, 0.5)];
+    const out = summarizePairedMetrics(off, [], 0);
+    expect(out).toContain('not paired');
   });
 });

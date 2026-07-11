@@ -413,7 +413,10 @@ after erosion, before the climate stack): small continental blocks cannot hold
 high topography. Each step it labels the 4-connected components of
 `crustType == 1` (fixed-order iterative BFS) and relaxes elevation standing
 above the component's area-dependent ceiling toward it at
-`BLOCK_ISOSTASY_RELAX_M_PER_YR` (never a hard-set, never raises). The ceiling
+`BLOCK_ISOSTASY_RELAX_M_PER_YR` (never a hard-set, never raises). Component
+area is the sum of true per-cell solid angles × R² (`cellSolidAngleTable` in
+grid.ts) — the warp leaves ±35% residual per-cell area distortion, enough to
+matter at the founder threshold, so cells × mean area is not used. The ceiling
 is `MICROCONTINENT_FOUNDER_ELEVATION_M` below `BLOCK_FOUNDER_AREA_M2`
 (300k km² — the block founders as submerged platform; `crustType` untouched,
 so the crustal-area ledger is untouched and the block can re-accrete), rises
@@ -423,7 +426,14 @@ generalizes the one-cell founder clamp in tectonics to the 2+-cell splinters
 every other repair pass misses — the #60 "tall-island confetti" residual.
 Non-conservative by design (subsidence, not transport), same justification
 as orogenic root decay. Flag-off runs are byte-identical to the pre-#84
-kernel (the goldens pin this).
+kernel (the goldens pin this); the flag-on path has its own goldens.
+`params.blockIsostasyOnsetYears` (default 0) keeps the system inert before
+that sim year: since it consumes no RNG, a flag-on run with onset Y is
+bit-identical to a flag-off run until Y, which is the **branched A/B**
+instrument (`pnpm sim -- --ab-block-isostasy <years>`) — paired keyframes
+just after the branch measure the mechanism's direct effect, isolated from
+the chaotic whole-trajectory divergence that defeats plain on/off
+comparisons.
 
 `energyBalance` (#30): the Phase 3 climate hub. A Budyko–Sellers **zonal
 energy-balance model** solved on `ENERGY_BALANCE_BANDS` (90) equal-area
