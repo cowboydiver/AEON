@@ -212,6 +212,27 @@ export interface PlanetParams {
   /** Anoxic starting atmospheric O₂ that seeds `globals.oxygen`, PAL (#37).
    *  Default `INITIAL_OXYGEN_PAL` (≈0). */
   initialOxygenPAL: number;
+  /**
+   * Dimensionless multiplier on the derived water inventory (#105): planets
+   * accumulate different amounts of water during formation, so the endowment
+   * is a chosen property, not an artifact of the terrain noise. The base is
+   * still derived in `createInitialState` — the ocean volume below the t=0
+   * coastline, which keeps t=0 sea level exactly 0 and adapts to a companion
+   * `initialLandFraction` (#106) or grid resolution — and this scales it, so
+   * the two knobs compose as base × scale. Init-time only, no RNG, no mechanism
+   * flag/onset: it is a `PlanetParams` number like `numPlates`. Default **1.0**
+   * — the derivation multiplies by exactly 1.0, so the main goldens are
+   * byte-identical by construction. Scale > 1 raises the deep-time sea (≈2.6
+   * km-equiv ≈ Earth floats the ridge crests roughly awash; ≈3.4–4.7 submerges
+   * them 1–2.5 km natively, making the #102 `bathymetryDatum` crest cap
+   * redundant); scale < 1 gives a low-water world. Composes with
+   * `bathymetryDatum` by construction — its crest cap self-disengages once the
+   * sea rides above −2000 m. See docs/SEA_LEVEL_DATUM_FINDINGS.md for the
+   * scale/seed sweep and the native-submergence measurement. Must be > 0 —
+   * enforced at the boundary by the `--water-scale` CLI flag; like `numPlates`,
+   * the kernel trusts the value (a non-positive scale is a caller bug).
+   */
+  waterInventoryScale: number;
 }
 
 /** Scalar whole-planet quantities, updated by systems as they run. */
@@ -320,6 +341,7 @@ export function createPlanetParams(partial: Partial<PlanetParams> & { seed: numb
     biosphereEnabled: true,
     abiogenesisRatePerYear: ABIOGENESIS_RATE_PER_YR,
     initialOxygenPAL: INITIAL_OXYGEN_PAL,
+    waterInventoryScale: 1,
     ...partial,
   };
 }
@@ -363,15 +385,24 @@ export function createInitialState(params: PlanetParams): PlanetState {
   // for, rather than imposing a free ocean-inventory constant that would
   // generally place the initial shoreline away from that datum. The inventory
   // is then held constant and the water-mass invariant checks it (§5).
+  //
+  // `waterInventoryScale` (#105) then multiplies this derived base to give the
+  // planet a chosen water endowment. At the default 1.0 the multiply is exact
+  // (`x * 1.0 === x` in IEEE-754), so the inventory — and every field — is
+  // byte-identical to the pre-#105 kernel and the main goldens are untouched.
+  // Only the `waterInventoryM` global moves at t=0 (seaLevelM stays pinned to 0
+  // here); at scale > 1 the seaLevel solve at step 1 lifts the sea above the
+  // initial coastline into the early-flooding regime measured in the findings doc.
   const elevation = shaped.fields.elevation;
   let oceanDepthSum = 0;
   for (let i = 0; i < count; i++) {
     const e = elevation[i]!;
     if (e < 0) oceanDepthSum -= e;
   }
+  const waterInventoryM = (oceanDepthSum / count) * params.waterInventoryScale;
   const calibrated: PlanetState = {
     ...shaped,
-    globals: { ...shaped.globals, seaLevelM: 0, waterInventoryM: oceanDepthSum / count },
+    globals: { ...shaped.globals, seaLevelM: 0, waterInventoryM },
   };
 
   // Then the energy balance (a physical temperature field + meanTemperatureK),

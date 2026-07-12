@@ -469,3 +469,25 @@ exports[`golden field hashes: legacy all-mechanisms-off > seed 1337: initial sta
   },
 }
 `;
+
+exports[`golden field hashes: waterInventoryScale 2.0 (#105) > seed 42: after 10 steps, with the sea flooded above the 0 m datum 1`] = `
+{
+  "after10Steps": {
+    "biome": "169240d5",
+    "boundaryStress": "e5a1b483",
+    "crustAge": "1b6fdaec",
+    "crustType": "47774d85",
+    "elevation": "e7ea937e",
+    "iceFraction": "2bd2196e",
+    "marineLife": "8dc2aa00",
+    "plateId": "b7762ad5",
+    "precipitation": "9cdb2f9a",
+    "sedimentM": "c22b3f08",
+    "sutureYears": "61f1d94b",
+    "temperature": "aa58530e",
+    "timeYears": 10000000,
+    "windU": "596643a5",
+    "windV": "be9608c5",
+  },
+}
+`;
