@@ -501,6 +501,15 @@ seeds lose 5–7 points of continental crust (28.9→22.2%, 27.5→22.3%;
 seed 1337 unchanged at 24.5→24.4%) and all three lose 3–6.6 points of
 land.
 
+**#101 re-measured on the combined stack** (the issue's pairing clause):
+`FREEBOARD_TARGET_M = 800` × all three seeds on the full stack, against
+the 400 m stack-on rows above. Flooded share moves 51.0→55.3 / 51.2→46.2
+/ 54.9→49.7 — mixed signs inside the per-checkpoint scatter, land within
+±1.8 points, and the cont-crust regression #101 saw at high targets on
+seed 42 does not reappear (22.3→22.8%). The #101 conclusion transfers
+unchanged to the re-keyed world: the freeboard target is not the
+flooded-share knob, and it stays at its cleanly-anchored 400 m.
+
 **Flipbooks** (elevation, all three seeds, frames every 250 Myr, inspected
 against the #101 baseline flipbooks): the baseline's dotted green chains
 crossing every open ocean are gone at mid- and late-time on all seeds —
