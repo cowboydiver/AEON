@@ -69,11 +69,13 @@ describe('seaKeyedOceanicDepthForAge (bathymetry.ts)', () => {
     }
   });
 
-  it('a sea within 1.5 km of the datum leaves the design curve untouched', () => {
-    // crest cap = sea − 1000 ≥ −2500 ⇔ sea ≥ −1500: the mechanism engages
-    // smoothly only once the sea has genuinely fallen past the design crest.
+  it('a shallow sea leaves the design curve untouched', () => {
+    // crest cap = sea − OCEAN_RIDGE_MIN_SUBMERGENCE_M ≥ −2500 ⇔ sea above
+    // the engagement threshold: the mechanism engages smoothly only once
+    // the sea has genuinely fallen past the design crest.
+    const shallow = OCEAN_RIDGE_DEPTH_M + OCEAN_RIDGE_MIN_SUBMERGENCE_M + 100;
     for (const age of [0, 25e6, 200e6]) {
-      expect(seaKeyedOceanicDepthForAge(age, -1400)).toBe(oceanicDepthForAge(age));
+      expect(seaKeyedOceanicDepthForAge(age, shallow)).toBe(oceanicDepthForAge(age));
     }
   });
 

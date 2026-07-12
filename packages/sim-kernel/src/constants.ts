@@ -353,18 +353,23 @@ export const OCEAN_ABYSSAL_DEPTH_M = -6000;
  * falls below `OCEAN_RIDGE_DEPTH_M − this`, the sea-keyed age-depth curve
  * (bathymetry.ts) caps its crest at `seaLevelM − this` (the abyssal end
  * stays absolute) so spreading centers stay submerged instead of crossing
- * the ocean as emergent island chains. 1000 m is the shallow end of the
- * #102 acceptance band (crests 1–2.5 km below the surface): Earth's crests
- * sit ~2.5 km down, but the sim's conserved water inventory (~1.7 km
- * global-equivalent, measured) fills only ~45% of an Earth-proportioned
- * basin — pushing the crest deeper toward Earth's figure costs ridge-abyss
- * relief 1:1 (the abyss is pinned at −6000 m and the equilibrium sea rides
- * ~−3.6 km), and full Earth submergence (2.5 km) would leave the ridges
- * flatter than the trench noise floor. See the findings doc for the
- * volumetric budget and the measured divergence of the alternative
- * (tracking the whole curve 1:1).
+ * the ocean as emergent island chains. 500 m — deliberately equal to
+ * |ARC_MATURATION_ELEVATION_M|, so fresh ridge crust is born exactly AT
+ * the (sea-keyed) arc maturation gate: the #102 calibration measured that
+ * a 1000 m crest starves arc-driven continental creation (−5..−7 points of
+ * continental crust on two golden seeds — the baseline's emergent ridge
+ * flank had been auto-maturing belt arcs), while 500 m retires the chains
+ * identically (emergent young crust 1.7–2.5% vs 37–65% baseline; mean
+ * crest ~0.7 km below the sea) and keeps the continental budget within
+ * seed scatter. Earth's crests sit ~2.5 km down, but the sim's conserved
+ * water inventory (~1.7 km global-equivalent, measured) fills only ~45%
+ * of an Earth-proportioned basin: the abyss is pinned at −6000 m and the
+ * equilibrium sea rides ~−3.6 km, so every metre of extra crest depth
+ * costs ridge-abyss relief 1:1. See the findings doc for the volumetric
+ * budget, the measured divergence of full 1:1 curve tracking, and the
+ * 500-vs-1000 probe table.
  */
-export const OCEAN_RIDGE_MIN_SUBMERGENCE_M = 1000;
+export const OCEAN_RIDGE_MIN_SUBMERGENCE_M = 500;
 
 /**
  * Rate at which inactive oceanic relief relaxes toward the age-depth curve,

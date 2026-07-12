@@ -566,25 +566,29 @@ key:
   five consumers of the age-depth reference (thermal-subsidence target,
   trench pinning, divergent gap fill, consolidation island flips, sediment
   shelf room) read a curve whose **crest caps at `seaLevelM −
-  OCEAN_RIDGE_MIN_SUBMERGENCE_M` (1 km)** — never shallower than the
-  design crest — while the **abyssal end stays absolute** and the √age
-  slope rescales to reach the abyss at the unchanged 100 Myr. The abyss is
-  the volume anchor: full 1:1 tracking of the curve was measured (#102)
-  to have NO equilibrium — the keyed basin capacity (~3.9 km
-  global-equivalent) exceeds the conserved inventory (~1.7 km) ~2.3×, so
-  the (sea, floor) pair co-falls at the ocean-relief relax rate (~200
-  m/Myr; −900 km by 4.5 Gyr, measured) and the freeboard anchor is outrun
-  ~10:1. The crest-cap shape tracks only the young ridge flank (~0.15
-  km-equivalent), keeps the sea-level bisection sloped by construction,
-  and engages smoothly once the sea falls past −1.5 km (no onset shock);
-  the stated cost is ridge-to-abyss relief compressed to ~1.1–1.6 km at
-  the equilibrium sea — Earth's 2.5 km crest submergence needs ~0.9
-  km-equivalent more water than the #33 inventory holds (a water-inventory
-  follow-up, not a datum one). Flag-off (offset 0) returns the design
-  curve bit-exactly. Measured paired on the full datum stack — see
-  `SEA_LEVEL_DATUM_FINDINGS.md` for trajectories, the dt-halving check,
-  and the freeboard-side interaction. Default OFF — measurement prototype,
-  designed to run with `seaLevelDatums` + `freeboard` on.
+  OCEAN_RIDGE_MIN_SUBMERGENCE_M` (500 m — deliberately equal to the arc
+  maturation gate depth, so fresh ridge crust is born AT the gate and the
+  arc-driven continental-creation budget survives the re-key; a 1000 m
+  crest was measured to cost 5–7 points of continental crust)** — never
+  shallower than the design crest — while the **abyssal end stays
+  absolute** and the √age slope rescales to reach the abyss at the
+  unchanged 100 Myr. The abyss is the volume anchor: full 1:1 tracking of
+  the curve was measured (#102) to have NO equilibrium — the keyed basin
+  capacity (~3.9 km global-equivalent) exceeds the conserved inventory
+  (~1.7 km) ~2.3×, so the (sea, floor) pair co-falls at the ocean-relief
+  relax rate (~200 m/Myr; −900 km by 4.5 Gyr, measured) and the freeboard
+  anchor is outrun ~10:1. The crest-cap shape tracks only the young ridge
+  flank, keeps the sea-level bisection sloped by construction, and
+  engages smoothly once the sea falls past −2 km (no onset shock).
+  Measured paired on the full datum stack (all golden seeds, 4.5 Gyr):
+  emergent young crust 37–65% → ~2%, crests ~0.7 km submerged, sea
+  stationary, freeboard-side metrics within seed scatter — Earth's 2.5 km
+  crest submergence would need ~0.9 km-equivalent more water than the #33
+  inventory holds (a water-inventory follow-up, not a datum one).
+  Flag-off (offset 0) returns the design curve bit-exactly. See
+  `SEA_LEVEL_DATUM_FINDINGS.md` for the trajectories, the dt-halving
+  check, and the crest-depth calibration. Default OFF — measurement
+  prototype, designed to run with `seaLevelDatums` + `freeboard` on.
 
 `energyBalance` (#30): the Phase 3 climate hub. A Budyko–Sellers **zonal
 energy-balance model** solved on `ENERGY_BALANCE_BANDS` (90) equal-area
