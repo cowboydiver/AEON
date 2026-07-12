@@ -27,7 +27,7 @@ import {
   OROGENY_WIDTH_CELLS,
   TRENCH_EXTRA_DEPTH_M,
 } from '../constants';
-import { platformDatumOffsetM } from '../datums';
+import { landDatumOffsetM, platformDatumOffsetM } from '../datums';
 import { cellCenterTable, neighborTable } from '../grid';
 import { plateVelocityAt } from '../plates';
 import type { PlanetState } from '../state';
@@ -208,6 +208,11 @@ export function applyConvergentTopography(
   const datumOffset = platformDatumOffsetM(state);
   const arcCeiling = datumOffset + ARC_MAX_ELEVATION_M;
   const maturationGate = datumOffset + ARC_MATURATION_ELEVATION_M;
+  // Freeboard regulation (datums.ts): the orogeny ceiling is a land-relief
+  // datum ("mountains cap near 9 km" — above the SEA); under the freeboard
+  // mechanism it rides the dynamic sea level, and is exactly the absolute
+  // constant when the mechanism is off.
+  const orogenyCeiling = landDatumOffsetM(state) + OROGENY_MAX_ELEVATION_M;
   // Arc cells that reached maturation elevation this step (#67): maturation
   // is decided in one attachment pass after the margin loop, not inline —
   // see below.
@@ -348,7 +353,7 @@ export function applyConvergentTopography(
       const c = queue[q]!;
       const d = dist[c]!;
       const falloff = (seed.width + 1 - d) / (seed.width + 1);
-      elevation[c] = Math.min(OROGENY_MAX_ELEVATION_M, elevation[c]! + seed.amount * falloff);
+      elevation[c] = Math.min(orogenyCeiling, elevation[c]! + seed.amount * falloff);
       if (d >= seed.width) continue;
       for (let k = 0; k < 4; k++) {
         const nb = nbTable[c * 4 + k]!;

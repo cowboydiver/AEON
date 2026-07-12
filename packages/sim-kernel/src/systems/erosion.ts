@@ -69,7 +69,7 @@ import {
   OROGENIC_ROOT_REFERENCE_M,
   SEDIMENT_SHELF_CEILING_M,
 } from '../constants';
-import { platformDatumOffsetM } from '../datums';
+import { landDatumOffsetM, platformDatumOffsetM } from '../datums';
 import { cellCount, neighborTable } from '../grid';
 import type { System } from '../step';
 
@@ -193,13 +193,18 @@ export const erosionSystem: System = {
     }
 
     // Orogenic root decay (#65), applied to the post-flux elevation. keep is
-    // hoisted so Math.exp runs once per step, not per cell.
+    // hoisted so Math.exp runs once per step, not per cell. The reference is
+    // a land-relief datum ("terrain standing ~1 km above the SEA carries an
+    // excess root"); under the freeboard mechanism it rides the dynamic sea
+    // level (landDatumOffsetM, datums.ts), and is exactly the absolute
+    // constant when the mechanism is off.
+    const rootReference = landDatumOffsetM(state) + OROGENIC_ROOT_REFERENCE_M;
     const keep = Math.exp(-dtYears / OROGENIC_ROOT_DECAY_TAU_YEARS);
     for (let i = 0; i < count; i++) {
       if (crustType[i] !== 1) continue;
       const e = elevation[i]!;
-      if (e > OROGENIC_ROOT_REFERENCE_M) {
-        elevation[i] = OROGENIC_ROOT_REFERENCE_M + (e - OROGENIC_ROOT_REFERENCE_M) * keep;
+      if (e > rootReference) {
+        elevation[i] = rootReference + (e - rootReference) * keep;
       }
     }
 

@@ -42,3 +42,25 @@ export function platformDatumOffsetM(state: PlanetState): number {
     ? state.globals.seaLevelM
     : 0;
 }
+
+/**
+ * The datum offset (m) the LAND-RELIEF constants get under the `freeboard`
+ * mechanism: the dynamic sea level when the mechanism is active, exactly 0
+ * when it is off or before its onset year (same branched-A/B contract as
+ * `platformDatumOffsetM` — no RNG is consumed).
+ *
+ * Kept separate from `platformDatumOffsetM` because the two mechanisms own
+ * different constants: `seaLevelDatums` re-keys the submerged-platform datums
+ * (founder level, shelf ceiling, arc gates), a pure unit fix; `freeboard`
+ * re-keys the land-relief datums (`OROGENIC_ROOT_REFERENCE_M`,
+ * `OROGENY_MAX_ELEVATION_M`) as part of regulating how high continents ride
+ * over the sea — a regime change the findings doc deliberately excluded from
+ * the datum-shift prototype because it re-tunes orogeny/erosion budgets
+ * planet-wide. The flags stay independently togglable for A/B isolation;
+ * freeboard is designed to be MEASURED with seaLevelDatums also on.
+ */
+export function landDatumOffsetM(state: PlanetState): number {
+  return state.params.freeboard && state.timeYears >= state.params.freeboardOnsetYears
+    ? state.globals.seaLevelM
+    : 0;
+}

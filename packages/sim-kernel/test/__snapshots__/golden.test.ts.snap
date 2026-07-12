@@ -180,6 +180,28 @@ exports[`golden field hashes: #88-#91 mechanism prototypes on > emergentArcTaper
 }
 `;
 
+exports[`golden field hashes: #88-#91 mechanism prototypes on > freeboard on, seed 42: after 10 steps 1`] = `
+{
+  "after10Steps": {
+    "biome": "3cec1108",
+    "boundaryStress": "3470f23d",
+    "crustAge": "5df42012",
+    "crustType": "8383c658",
+    "elevation": "60950138",
+    "iceFraction": "e1fe3d09",
+    "marineLife": "34e74d5c",
+    "plateId": "830343d2",
+    "precipitation": "f1871458",
+    "sedimentM": "45a7bf8e",
+    "sutureYears": "b0549dc5",
+    "temperature": "44eaf33e",
+    "timeYears": 10000000,
+    "windU": "0b3b82e5",
+    "windV": "e6fc96e5",
+  },
+}
+`;
+
 exports[`golden field hashes: #88-#91 mechanism prototypes on > marinePlanation on, seed 42: after 10 steps 1`] = `
 {
   "after10Steps": {

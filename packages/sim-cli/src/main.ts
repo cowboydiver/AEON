@@ -63,10 +63,17 @@ Options:
                               shelves survive the deep-time sea-level fall
                               (default off — prototype; see
                               docs/SEA_LEVEL_DATUM_FINDINGS.md)
+  --freeboard                 enable freeboard regulation (the findings-doc
+                              follow-up): continental mean elevation relaxes
+                              toward a target freeboard above the dynamic sea
+                              level, passive margins subside toward shelf
+                              depth, and the land-relief datums ride the sea
+                              level (default off — prototype; measure with
+                              --sea-level-datums also on)
   --no-<mechanism>            disable a default-on mechanism for this run,
                               e.g. --no-crust-fates --no-marine-planation;
-                              all six --no-* forms exist. Composable with the
-                              positive flags for any on/off combination.
+                              all seven --no-* forms exist. Composable with
+                              the positive flags for any on/off combination.
   --ab <mechanism>            paired branched A/B (PR #87 instrument): run
                               flag-off and flag-on-with-onset arms that are
                               bit-identical until --ab-branch, then print
@@ -76,7 +83,7 @@ Options:
                               hundred Myr after the branch most. Mechanisms:
                               block-isostasy, crust-fates, compact-arcs,
                               marine-planation, emergent-arc-taper,
-                              sea-level-datums.
+                              sea-level-datums, freeboard.
                               Mutually exclusive with the single-arm mechanism
                               flags and --dump. Since the #88-#91 promotion
                               BOTH arms inherit the promoted defaults for the
@@ -110,12 +117,14 @@ const { values } = parseArgs({
     'marine-planation': { type: 'boolean', default: false },
     'emergent-arc-taper': { type: 'boolean', default: false },
     'sea-level-datums': { type: 'boolean', default: false },
+    freeboard: { type: 'boolean', default: false },
     'no-block-isostasy': { type: 'boolean', default: false },
     'no-crust-fates': { type: 'boolean', default: false },
     'no-compact-arcs': { type: 'boolean', default: false },
     'no-marine-planation': { type: 'boolean', default: false },
     'no-emergent-arc-taper': { type: 'boolean', default: false },
     'no-sea-level-datums': { type: 'boolean', default: false },
+    'no-freeboard': { type: 'boolean', default: false },
     ab: { type: 'string' },
     'ab-branch': { type: 'string' },
     'ab-block-isostasy': { type: 'string' },
@@ -164,6 +173,7 @@ const MECHANISMS: Record<string, (on: boolean, onsetYears: number) => Partial<Pl
   'marine-planation': (on, onset) => ({ marinePlanation: on, marinePlanationOnsetYears: onset }),
   'emergent-arc-taper': (on, onset) => ({ emergentArcTaper: on, emergentArcTaperOnsetYears: onset }),
   'sea-level-datums': (on, onset) => ({ seaLevelDatums: on, seaLevelDatumsOnsetYears: onset }),
+  freeboard: (on, onset) => ({ freeboard: on, freeboardOnsetYears: onset }),
 };
 const MECHANISM_FLAGS = Object.keys(MECHANISMS) as ReadonlyArray<
   | 'block-isostasy'
@@ -172,6 +182,7 @@ const MECHANISM_FLAGS = Object.keys(MECHANISMS) as ReadonlyArray<
   | 'marine-planation'
   | 'emergent-arc-taper'
   | 'sea-level-datums'
+  | 'freeboard'
 >;
 
 // --ab-block-isostasy <years> predates --ab and is kept as its alias.
@@ -275,10 +286,15 @@ function report(keyframe: Keyframe): void {
   const elevation = keyframe.fields.elevation;
   const crustType = keyframe.fields.crustType;
   const { min, max, mean } = fieldStats(elevation);
-  // >= 0: cells exactly at the datum are land (matches globals.landFraction,
-  // which counts noise >= the sea-level quantile — those cells get 0 m).
+  // Land is emergence above the DYNAMIC sea level (#33) — the kernel's actual
+  // coastline — not the fixed 0 m crust datum, which the deep-time sea-level
+  // fall leaves ~3 km above the water (docs/SEA_LEVEL_DATUM_FINDINGS.md
+  // measured the old >= 0 count under-reporting emergent area by every cell
+  // between the two levels). >= : cells exactly at the level count as land,
+  // matching globals.landFraction (identical at t=0, where seaLevelM is 0).
+  const seaLevelM = keyframe.globals.seaLevelM;
   let land = 0;
-  for (const e of elevation) if (e >= 0) land++;
+  for (const e of elevation) if (e >= seaLevelM) land++;
   const landPct = ((land / elevation.length) * 100).toFixed(1);
   // Mean elevation over continental crust (#65's acceptance metric: it must
   // not ratchet monotonically upward over deep time).
@@ -314,7 +330,9 @@ function report(keyframe: Keyframe): void {
 
 function dump(keyframe: Keyframe): void {
   for (const name of dumpFields) {
-    const png = renderFieldPng(name, keyframe.fields[name], params.gridN);
+    // The hypsometric ocean/land split follows the dynamic sea level, so the
+    // dumped coastline is the kernel's actual coastline in any regime.
+    const png = renderFieldPng(name, keyframe.fields[name], params.gridN, keyframe.globals.seaLevelM);
     const file = join(outDir, `${name}-${String(Math.round(keyframe.timeYears / 1e6)).padStart(6, '0')}Myr.png`);
     writeFileSync(file, PNG.sync.write(png));
     console.log(`wrote ${file}`);

@@ -394,7 +394,9 @@ upward — orogeny kept injecting and nothing ever left):
   sediment leaves that ledger only by subduction or by accretion into
   maturing/re-rooting continental crust.
 - **Orogenic root decay:** continental elevation above
-  `OROGENIC_ROOT_REFERENCE_M` (1 km) relaxes toward it exponentially with
+  `OROGENIC_ROOT_REFERENCE_M` (1 km; under the `freeboard` mechanism the
+  reference rides the dynamic sea level — `landDatumOffsetM`, datums.ts)
+  relaxes toward it exponentially with
   `OROGENIC_ROOT_DECAY_TAU_YEARS` (300 Myr) — isostatic re-equilibration of
   the over-thickened root (Caledonides/Appalachians-style aging).
   Deliberately non-conservative (root loss is subsidence, not transport)
@@ -518,14 +520,39 @@ key:
   oceanic **age-depth curve stays absolute**: the sea-level solve fills the
   hypsometry with a conserved volume, so a seafloor target that tracked sea
   level would chase it downward without bound (see the findings doc — the
-  emergent-ridge artifact survives this prototype and belongs to the
-  freeboard-regulation follow-up, together with the land-relief constants
-  `OROGENY_MAX_ELEVATION_M`/`OROGENIC_ROOT_REFERENCE_M`). Measured flag-on
-  (seed 42/N=64/4.5 Gyr): the shallow-ocean share recovers from a 1–7%
-  decay to a sustained 7–13% (real shelf fringes) and arc maturation
-  re-submerges, but flooded *continental* crust does not return — drowned
-  platforms are transient (crustFates retires them) and large continents
-  still never subside, which is the freeboard follow-up's job.
+  emergent-ridge artifact survives this prototype; the land-relief
+  constants `OROGENY_MAX_ELEVATION_M`/`OROGENIC_ROOT_REFERENCE_M` are
+  re-keyed by the `freeboard` mechanism below, which owns that regime
+  change). Measured flag-on (seed 42/N=64/4.5 Gyr): the shallow-ocean
+  share recovers from a 1–7% decay to a sustained 7–13% (real shelf
+  fringes) and arc maturation re-submerges, but flooded *continental*
+  crust does not return — drowned platforms are transient (crustFates
+  retires them) and large continents still never subside, which is the
+  freeboard mechanism's job.
+- **`freeboard` (no tracking issue — scoped, specified and measured in
+  `SEA_LEVEL_DATUM_FINDINGS.md`; `systems/freeboard.ts` + call-site
+  re-keys via `landDatumOffsetM` in `datums.ts`):** freeboard regulation,
+  the regime change the datum re-key above deliberately excluded —
+  continental crust *floats*. Three pieces, all reading the previous
+  step's `seaLevelM` (the standard lag): (1) the cell-count mean of
+  continental elevation relaxes toward `seaLevelM + FREEBOARD_TARGET_M`
+  (400 m) by a uniform, rate-bounded (20 m/Myr) epeirogenic shift —
+  relief-preserving, floored at the continental buoyancy floor
+  `seaLevelM − 2500 m` (without the floor, orogenic injection plus the
+  compensating sink ratcheted flooded interiors to −17 km — measured, see
+  the findings doc); (2) passive margins — continental cells within 2
+  cells of *same-plate* oceanic crust, convergent cells excluded —
+  subside toward `seaLevelM − 150 m` at 20 m/Myr (post-rift thermal
+  subsidence as a mean rate, no per-cell rift clock); (3) the land-relief
+  datums re-key: orogeny/collision caps at `seaLevelM + 9 km`, orogenic
+  root decay toward `seaLevelM + 1 km`. Runs after `blockIsostasy`,
+  before the climate stack. Measured with `seaLevelDatums` also on (the
+  designed pairing — without it the absolute arc-maturation gate starves
+  creation and continental crust decays to 13–16%): 30–65% of continental
+  crust stays flooded at every checkpoint over 4.5 Gyr (Earth ~25%;
+  baseline 0%), 9–27% of ocean area sits on continental crust (Earth
+  ~17%), sea level equilibrates at −3.3..−3.7 km, and continental crust
+  holds 24–36% of the sphere. Default OFF — measurement prototype.
 
 `energyBalance` (#30): the Phase 3 climate hub. A Budyko–Sellers **zonal
 energy-balance model** solved on `ENERGY_BALANCE_BANDS` (90) equal-area
@@ -787,9 +814,9 @@ PlanetParams = { seed, radiusMeters, gridN, stepYears, keyframeIntervalYears,
                  numPlates,
                  starLuminosity, dayLengthHours, obliquityDeg,
                  initialCo2Ppm,
-                 // mechanism toggles (#84/#88-#91 + datum re-key): blockIsostasy,
-                 //   crustFates, compactArcs, marinePlanation, emergentArcTaper,
-                 //   seaLevelDatums + *OnsetYears
+                 // mechanism toggles (#84/#88-#91 + datum re-key + freeboard):
+                 //   blockIsostasy, crustFates, compactArcs, marinePlanation,
+                 //   emergentArcTaper, seaLevelDatums, freeboard + *OnsetYears
                  // biosphere (#37): biosphereEnabled (default true — the ablation
                  //   switch), abiogenesisRatePerYear, initialOxygenPAL
                }   // immutable per run

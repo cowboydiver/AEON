@@ -140,6 +140,29 @@ export interface PlanetParams {
    *  Default 0. */
   seaLevelDatumsOnsetYears: number;
   /**
+   * Enable freeboard regulation (the "real fix" scoped in
+   * docs/SEA_LEVEL_DATUM_FINDINGS.md): continental crust floats. Three
+   * coupled pieces, all keyed to the dynamic sea level: (1) the cell-count
+   * mean of continental elevation relaxes toward `seaLevelM +
+   * FREEBOARD_TARGET_M` by a uniform, rate-bounded epeirogenic shift — the
+   * isostatic anchor that stops the deep-time sea-level fall stranding the
+   * continents kilometres above the waterline; (2) passive margins
+   * (continental cells within PASSIVE_MARGIN_WIDTH_CELLS of same-plate
+   * oceanic crust, excluding convergent cells) subside toward `seaLevelM +
+   * PASSIVE_MARGIN_SHELF_M` — post-rift thermal subsidence building
+   * flooded shelves; (3) the land-relief datums (`OROGENIC_ROOT_REFERENCE_M`,
+   * `OROGENY_MAX_ELEVATION_M`) become sea-level-relative via
+   * `landDatumOffsetM` (datums.ts). Default OFF — measurement prototype,
+   * same posture as #84/#88-#91; designed to be measured with
+   * `seaLevelDatums` also on (it regulates the regime those re-keyed
+   * platform datums describe).
+   */
+  freeboard: boolean;
+  /** Sim year before which freeboard is inert even when enabled — the
+   *  branched-A/B onset, same contract as blockIsostasyOnsetYears.
+   *  Default 0. */
+  freeboardOnsetYears: number;
+  /**
    * Enable the biosphere (#37, Phase 4): ocean life, oxygenation, and — from
    * #39 — land vegetation. The ablation switch, **default `true`** (the
    * biosphere is a shipped feature, not a prototype). When `false` the life
@@ -262,6 +285,8 @@ export function createPlanetParams(partial: Partial<PlanetParams> & { seed: numb
     emergentArcTaperOnsetYears: 0,
     seaLevelDatums: false,
     seaLevelDatumsOnsetYears: 0,
+    freeboard: false,
+    freeboardOnsetYears: 0,
     biosphereEnabled: true,
     abiogenesisRatePerYear: ABIOGENESIS_RATE_PER_YR,
     initialOxygenPAL: INITIAL_OXYGEN_PAL,

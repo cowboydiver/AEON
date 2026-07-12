@@ -27,6 +27,7 @@ const ALL_MECHANISMS_OFF = {
   marinePlanation: false,
   emergentArcTaper: false,
   seaLevelDatums: false,
+  freeboard: false,
 } as const;
 
 function fieldHashes(state: PlanetState): Record<string, string> {
@@ -119,6 +120,7 @@ describe('golden field hashes: #88-#91 mechanism prototypes on', () => {
     ['marinePlanation', { marinePlanation: true }],
     ['emergentArcTaper', { emergentArcTaper: true }],
     ['seaLevelDatums', { seaLevelDatums: true }],
+    ['freeboard', { freeboard: true }],
   ] as const;
   for (const [name, partial] of MECHS) {
     it(`${name} on, seed 42: after 10 steps`, () => {

@@ -17,7 +17,8 @@ export type MechanismKey =
   | 'compactArcs'
   | 'marinePlanation'
   | 'emergentArcTaper'
-  | 'seaLevelDatums';
+  | 'seaLevelDatums'
+  | 'freeboard';
 
 export interface MechanismInfo {
   key: MechanismKey;
@@ -71,6 +72,12 @@ export const MECHANISMS: readonly MechanismInfo[] = [
     label: 'Sea-level-anchored datums',
     summary:
       'Platform and arc datums (founder level, sediment shelf ceiling, arc maturation gate and island ceiling) key off the dynamic sea level instead of the fixed 0 m datum, so drowned platforms and shallow shelves survive the deep-time sea-level fall.',
+  },
+  {
+    key: 'freeboard',
+    label: 'Freeboard regulation',
+    summary:
+      'Continental crust floats: mean continental elevation relaxes toward a target freeboard above the dynamic sea level, passive margins subside toward shelf depth, and the land-relief datums (orogeny ceiling, orogenic-root reference) ride the sea level — restoring flooded shelves and epicontinental seas.',
   },
 ] satisfies readonly MechanismInfo[];
 

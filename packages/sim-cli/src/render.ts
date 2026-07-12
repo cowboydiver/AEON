@@ -45,13 +45,27 @@ const LAND_STOPS = [
   [1, [245, 245, 245]],
 ] as const satisfies readonly (readonly [number, Rgb])[];
 
-/** Hypsometric tint for elevation in meters. */
-export function hypsometricColor(elevation: number, min: number, max: number): Rgb {
-  if (elevation <= 0) {
-    const depth = min < 0 ? Math.min(1, elevation / min) : 0; // 0 at datum, 1 at deepest
+/**
+ * Hypsometric tint for elevation in meters. The ocean/land split sits at
+ * `seaLevelM` — the DYNAMIC sea level (#33), not the fixed 0 m datum: the
+ * deep-time sea-level fall leaves the datum ~3 km above the real coastline
+ * (docs/SEA_LEVEL_DATUM_FINDINGS.md), and a 0-split dump painted emergent
+ * land ocean-blue, which is a hazard for a project whose verification
+ * workflow is "look at the PNGs". Defaults to 0 (identical arithmetic to
+ * the old datum split) for callers without a keyframe in hand.
+ */
+export function hypsometricColor(
+  elevation: number,
+  min: number,
+  max: number,
+  seaLevelM = 0,
+): Rgb {
+  if (elevation <= seaLevelM) {
+    // 0 at the coastline, 1 at the deepest floor.
+    const depth = min < seaLevelM ? Math.min(1, (elevation - seaLevelM) / (min - seaLevelM)) : 0;
     return ramp(OCEAN_STOPS, 1 - depth);
   }
-  const height = max > 0 ? Math.min(1, elevation / max) : 0;
+  const height = max > seaLevelM ? Math.min(1, (elevation - seaLevelM) / (max - seaLevelM)) : 0;
   return ramp(LAND_STOPS, height);
 }
 
@@ -201,6 +215,9 @@ export function renderFieldPng(
   fieldName: string,
   field: Float32Array,
   gridN: number,
+  // Dynamic sea level for the hypsometric ocean/land split; 0 (the fixed
+  // datum) when the caller has no keyframe globals in hand.
+  seaLevelM = 0,
 ): PNG {
   const png = new PNG({ width: DUMP_WIDTH, height: DUMP_HEIGHT });
   const { min, max } = fieldStats(field);
@@ -219,7 +236,7 @@ export function renderFieldPng(
 
       let rgb: Rgb;
       if (hint === 'hypsometric') {
-        rgb = hypsometricColor(value, min, max);
+        rgb = hypsometricColor(value, min, max, seaLevelM);
       } else if (hint === 'categorical') {
         rgb = categoricalColor(value);
       } else if (hint === 'sequentialReversed') {

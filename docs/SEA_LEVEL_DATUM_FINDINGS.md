@@ -151,28 +151,131 @@ outpaces consumption at a higher equilibrium.
 - The **emergent ridge chains** survive (age-depth curve stays absolute,
   see above).
 
-## Follow-up: freeboard regulation (the real fix)
+## Freeboard regulation: the `freeboard` mechanism (the real fix, implemented)
 
 The re-keying makes the platform constants correct in any sea-level regime;
 it does not change the regime. Earth keeps ~25% of continental crust
 flooded because isostasy regulates **freeboard**: continental surface
 floats a few hundred metres above a sea level pinned near the shelf edge,
 erosion planes land toward it, and epeirogeny/flexure let interiors dip
-below it. The equivalent kernel mechanism (a future prototype, measurable
-with the same A/B harness) would:
+below it. The `freeboard` mechanism (default off, `systems/freeboard.ts`,
+same posture and plumbing as the prototypes above) implements the three
+scoped pieces:
 
-1. relax mean continental elevation toward a target freeboard **relative
-   to `seaLevelM`** (slow, rate-bounded — the isostatic anchor that stops
-   the sea falling away from the continents, and the prerequisite for
-   re-keying the age-depth curve);
-2. stamp rift margins (`wilson.ts` has the rift event and the carve
-   geometry) with post-rift thermal subsidence toward shelf depth over
-   ~100 Myr — passive-margin shelves;
-3. revisit the water inventory / initial hypsometry so the equilibrium
-   coastline sits inside the continental-crust boundary rather than
-   exactly on it.
+1. **Epeirogenic relaxation** — the cell-count mean of continental
+   elevation relaxes toward `seaLevelM + FREEBOARD_TARGET_M` (400 m — the
+   t=0 construction measures 380–450 m across the golden seeds, and Earth's
+   continental-crust mean is a few hundred metres) by a UNIFORM shift of
+   every continental cell, rate-bounded at `FREEBOARD_RELAX_M_PER_YR`
+   (20 m/Myr, the order of the early sea-level fall itself). Uniform =
+   isostatic motion of the floating column: relief is preserved, orogeny
+   and erosion keep ownership of shape. The downward shift stops at the
+   **buoyancy floor** `seaLevelM + CONTINENTAL_BUOYANCY_FLOOR_M` (−2500 m —
+   Zealandia/Kerguelen-order drowned-platform depths; see below for the
+   measured failure that forced it).
+2. **Passive-margin subsidence** — continental cells within
+   `PASSIVE_MARGIN_WIDTH_CELLS` (2) of a SAME-PLATE oceanic 4-neighbor
+   (same-plate adjacency IS the passive-margin definition; convergent
+   cells excluded — orogeny owns them) subside toward `seaLevelM +
+   PASSIVE_MARGIN_SHELF_M` (−150 m) at 20 m/Myr (~2 km/100 Myr, the
+   McKenzie post-rift total as a mean rate — no per-cell rift clock, no
+   new field). The band is measured from oceanic crust only, so flooded
+   margin cells (still continental) never let the shelf creep inland.
+3. **Land-relief datum re-key** — `OROGENIC_ROOT_REFERENCE_M` (erosion) and
+   `OROGENY_MAX_ELEVATION_M` (boundaries orogeny cap, tectonics collision
+   cap) become sea-level-relative via `landDatumOffsetM` (datums.ts),
+   closing the "continents stand ~4.8 km" residual: mountains now cap 9 km
+   above the SEA and roots decay toward 1 km above it. This re-key belongs
+   to freeboard, not to `seaLevelDatums`, exactly as scoped above — it
+   changes the orogeny/erosion regime, not just units.
 
-They are complementary, not exclusive: this prototype is the groundwork
-(correct units), freeboard regulation is the physics (correct regime).
-Also worth fixing independently: the sim-cli `land%` column should count
-`elevation >= seaLevelM`.
+Same contract as every mechanism prototype: no RNG, flag-off byte-identical
+(main goldens unchanged), its own golden spine and onset-gating arm,
+`--freeboard` CLI flag and `--ab freeboard`, web-sidebar toggle via the
+registry. Also fixed alongside (unconditional, CLI-only): the report's
+`land%` column and the `--dump` hypsometric ocean/land split now key off
+`keyframe.globals.seaLevelM` instead of the stranded 0 m datum — both were
+lying about late-time worlds by every cell between the two levels.
+
+### The buoyancy floor (a measured failure, fixed)
+
+The first cut had no floor. Measured (seed 42, N=64): the regulation held
+mean freeboard at ~400 m, but minimum elevation ratcheted to **−17.8 km by
+1.7 Gyr** and sea level drifted to −4.2 km. Mechanism: orogeny keeps
+injecting elevation into active belts, the compensating uniform sink drags
+everything else down, and flooded interiors — which no process ever
+lifts — have nowhere to stop; their subsidence adds ocean capacity, so the
+sea follows them down (a slow, rate-bounded cousin of the age-depth
+runaway above). The floor ends it: continental crust is too buoyant to
+visit abyssal depths, so the shift never pushes a cell below
+`seaLevelM − 2500 m` (cells already below — trench-landed collision
+debris — are left alone, never lifted). Post-floor, minimum elevation stays
+at trench order (−6.7..−8.5 km) and sea level equilibrates at −3.3..−3.7 km.
+
+### Measured (seed 42, N=64, 4.5 Gyr, freeboard + seaLevelDatums on from t=0)
+
+| t (Gyr) | seaLevelM | cont. crust | mean freeboard | submerged share of cont. crust | ocean area on cont. crust |
+|---|---|---|---|---|---|
+| 0.0 | 0 m | 40.0% | 383 m | 25.0% | 14.3% |
+| 0.5 | −3730 m | 35.9% | 428 m | **65.3%** | **27.3%** |
+| 1.5 | −3503 m | 25.2% | 1902 m | 49.8% | 14.9% |
+| 2.5 | −3646 m | 27.2% | 797 m | 57.6% | 18.4% |
+| 3.5 | −3072 m | 29.8% | 3248 m | 34.8% | 13.1% |
+| 4.5 | −3649 m | 30.0% | 593 m | **60.5%** | **21.8%** |
+
+**The regime is changed.** Flooded continental crust — 0% forever in the
+baseline, still ≈0% under `seaLevelDatums` alone — is now permanent and
+first-order: 30–65% of continental crust submerged at every checkpoint
+(Earth: ~25%), and 9–27% of ocean area sits ON continental crust (Earth:
+~17%). These are epicontinental seas and shelves, not transient drowned
+fragments. Land fraction runs 14–20% of the sphere; the shallow-ocean
+(<500 m) share holds 4–10% (Earth's shelf seas: ~7–8%); peak elevation
+rides at `seaLevelM + 9 km` by construction. Continental crust equilibrates
+at 24–36% of the sphere (final 30.0%) — healthier than both the 17.1%
+baseline and the 24.6% of `seaLevelDatums` alone.
+
+Dynamics worth knowing when reading histories: the mean freeboard
+**oscillates** (0.4–3.7 km) instead of pinning at the target. The swings
+are real events, not noise — collisions inject elevation faster than the
+20 m/Myr relaxation removes it, and when a drowned platform's crust record
+retires (`crustFates`), removing deep cells RAISES the survivors' mean in
+one step; relaxation then works it back down over ~100–200 Myr. The
+retirement pathway also means drowning is now a real crust sink: flooding →
+fragment isolation → retirement is how this world recycles continental
+crust, at a rate the 24–36% equilibrium shows is sustainable.
+
+**Pairing matters:** freeboard measured WITHOUT `seaLevelDatums` decays
+continental crust to 13–16% of the sphere (the absolute −500 m arc
+maturation gate sits ~3 km above the fallen sea, so creation starves while
+drowning-retirement keeps consuming). The two mechanisms are designed to
+run together; the web sidebar and CLI leave them independently togglable
+for exactly this kind of isolation measurement.
+
+**Scope item 3 (water inventory) — resolved without touching it.** The
+follow-up scoped "revisit the water inventory / initial hypsometry so the
+equilibrium coastline sits inside the continental-crust boundary". With
+freeboard on, it does: a fifth to a quarter of the late-time ocean floor IS
+continental crust. The conserved inventory and its invariant stay exactly
+as #33 built them; `FREEBOARD_TARGET_M` is the calibration knob if the
+flooded share needs tuning (it currently runs ~2× Earth's — a future
+calibration pass could raise the target toward 600–800 m to trade flooded
+area for land).
+
+### Remaining residuals (all pre-existing, none introduced)
+
+- **Emergent ridge chains** still cross the late-time oceans: the age-depth
+  curve stays absolute (ridge −2500 m vs sea ~−3600 m ⇒ crests stand ~1 km
+  proud). Freeboard provides the isostatic anchor this doc named as the
+  prerequisite for re-keying it, so a sea-level-relative age-depth curve is
+  now a *feasible* follow-on prototype — but it still needs its own care:
+  the sea-level solve degenerates as the fraction of sea-tracking floor
+  approaches 1, so the re-key must leave enough absolutely-anchored (or
+  continental) hypsometry near the waterline to keep the bisection
+  conditioned.
+- The **flooded share (~45–60%) overshoots Earth's ~25%** — a
+  `FREEBOARD_TARGET_M` calibration question, deliberately left at its
+  cleanly-anchored 400 m for this prototype.
+- **Freeboard oscillation** (above): a faster relaxation rate would pin the
+  target more tightly at the cost of more aggressive drowning after every
+  orogenic pulse; 20 m/Myr was chosen to match the driver, not to
+  critically damp the loop.

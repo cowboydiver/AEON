@@ -38,7 +38,7 @@ import {
   OCEAN_RIDGE_DEPTH_M,
   OROGENY_MAX_ELEVATION_M,
 } from '../constants';
-import { platformDatumOffsetM } from '../datums';
+import { landDatumOffsetM, platformDatumOffsetM } from '../datums';
 import { cellCenterTable, cellCount, directionToIndex, neighborTable, type Vec3 } from '../grid';
 import { hash2, hashString } from '../hash';
 import type { PlanetState } from '../state';
@@ -524,8 +524,12 @@ function advect(
               : bestContFwd;
     if (t === -1) continue;
     if (newFields.plateId[t] !== -1 && newFields.crustType[t] === 1) {
+      // Collision thickening caps at the orogeny ceiling — a land-relief
+      // datum that rides the dynamic sea level under the freeboard
+      // mechanism (landDatumOffsetM, datums.ts) and is exactly the absolute
+      // constant when it is off.
       newFields.elevation[t] = Math.min(
-        OROGENY_MAX_ELEVATION_M,
+        landDatumOffsetM(state) + OROGENY_MAX_ELEVATION_M,
         newFields.elevation[t]! + COLLISION_THICKENING_FACTOR * Math.max(0, push.elevation),
       );
       newFields.crustAge[t] = Math.max(newFields.crustAge[t]!, push.crustAge);
