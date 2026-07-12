@@ -587,3 +587,156 @@ goldens byte-identical. Follow-ups this pass surfaced, each its own
 measurement: the #33 water-inventory revisit (the only route to Earth's
 2.5 km crest submergence AND full ridge relief), and the flooded-share
 overshoot (#101's residual, unchanged by this mechanism).
+
+## The water-inventory parameter (#105): endowment as a chosen property
+
+The #102 budget above diagnosed the emergent-ridge-chain artifact as, at
+root, a **water-deficit** artifact: the derived inventory (~1.74 km-equiv at
+seed 42, N=64) fills only ~45% of the mature basins' Earth-proportioned
+capacity, so the deep-time sea falls ~3.5 km and the design ridge crests
+(−2500 m absolute) poke out. #102 fixed the *symptom* with the crest cap; #105
+addresses the *cause* by making the endowment a planet parameter instead of an
+artifact of the terrain noise.
+
+`waterInventoryScale` (default **1.0**) is a dimensionless multiplier on the
+derived base — the ocean volume below the t=0 coastline, still derived so the
+scale composes with a companion `initialLandFraction` (#106) and grid
+resolution as base × scale. The default multiplies by exactly 1.0, so the
+inventory and every field are byte-identical to the pre-#105 kernel (the main
+goldens pin it). It is init-time only, consumes no RNG, and carries no
+mechanism flag/onset — a `PlanetParams` number like `numPlates`.
+
+### The early-flooding ("waterworld") regime
+
+At scale > 1 the t=0 sea is still pinned to 0 by construction (the calibration
+forces `seaLevelM = 0` at init), but the very first `seaLevel` solve lifts the
+sea far above the initial coastline: the extra water has nowhere to go until the
+basins deepen and freeboard floats the continents out. Seed 42, N=64, full
+datum stack, first-Gyr trajectory (10 Myr cadence, `--crust-stats`):
+
+| t (Myr) | seaLevelM | land % | submerged cont. | shallow % |
+|---|---|---|---|---|
+| 0 | 0 (pinned) | 30.0% | 25.0% | 10.0% |
+| 10 | **+1477** | 8.4% | 80.3% | 2.9% |
+| 30 | +1025 | 12.3% | 69.7% | 7.7% |
+| 50 | +585 | 13.1% | 66.8% | 8.3% |
+| 80 | +66 | 13.6% | 65.4% | 6.9% |
+| 90 | −93 | 13.6% | 65.5% | 6.6% |
+| 150 | −535 | 11.8% | 69.9% | 3.4% |
+| 300 | −451 | 12.6% | 67.7% | 5.7% |
+
+The sea jumps ~1.5 km above the initial coastline at the first solve (10 Myr:
+land collapses 30→8%, 80% of continental crust drowned), then freeboard floats
+the continents out and the sea returns below the t=0 datum at **~85 Myr** —
+matching the issue's "~85 Myr per km of gap at 20 m/Myr" estimate almost
+exactly. After that the planet rejoins the ordinary deep-time fall, ~1 km
+higher than the default-scale sea at every late checkpoint. The phase length
+scales with the endowment (the sweep's "waterworld end" column below: 0 → 20 →
+70–80 Myr → a permanent ocean at scale 2.7). It is a genuine transient, not a
+pathology: land fraction and continental crust recover as freeboard does its
+work, and the water-mass invariant is exact at every scale — ocean +
+grounded-ice-equivalent equals the scaled inventory every step.
+
+### The scale/seed sweep (full datum stack on, 4.5 Gyr, N=64)
+
+Late-time aggregates (≥ 1.5 Gyr means, 100 Myr cadence). "emergent young" is the
+#102 instrument — the share of <20 Myr oceanic crust standing above the sea (the
+visible chains), mean [min..max]; "crest below sea" is the mean elevation of
+<5 Myr oceanic crust relative to `seaLevelM` (positive = submerged); "waterworld
+end" is the last time the sea stands above the t=0 coastline datum.
+
+| seed | scale | late sea (m) | crest below sea | emergent young | land % | cont. crust | flooded cont. | shallow % | waterworld end |
+|---|---|---|---|---|---|---|---|---|---|
+| 1 | 1.0 | −3566 | +726 | 1.8% [0..11.4] | 13.1% | 26.6% | 54.7% | 4.4% | 0 |
+| 1 | 1.5 | −2418 | +826 | 2.7% [0..11.4] | 10.1% | 20.3% | 54.3% | 2.7% | 20 Myr |
+| 1 | 2.0 | −1252 | +1606 | 3.2% [0..15.0] | 9.2% | 19.0% | 55.1% | 2.0% | 70 Myr |
+| 1 | 2.7 | +273 | +3055 | 2.3% [0..12.4] | 7.6% | 17.7% | 60.7% | 1.6% | 4500 Myr |
+| 42 | 1.0 | −3583 | +729 | 2.0% [0..11.2] | 15.6% | 27.5% | 46.5% | 4.1% | 0 |
+| 42 | 1.5 | −2513 | +818 | 3.5% [0..17.0] | 10.4% | 23.1% | 57.9% | 2.8% | 20 Myr |
+| 42 | 2.0 | −1425 | +1428 | 2.1% [0..8.4] | 10.3% | 18.1% | 47.0% | 2.2% | 80 Myr |
+| 42 | 2.7 | +196 | +3008 | 2.0% [0..7.3] | 10.0% | 18.9% | 50.9% | 1.6% | 4500 Myr |
+| 1337 | 1.0 | −3788 | +691 | 2.5% [0..10.0] | 12.4% | 22.7% | 47.9% | 4.6% | 0 |
+| 1337 | 1.5 | −2535 | +828 | 2.5% [0..15.1] | 11.7% | 23.8% | 55.0% | 2.8% | 20 Myr |
+| 1337 | 2.0 | −1169 | +1709 | 1.9% [0..6.6] | 12.7% | 25.0% | 52.9% | 2.4% | 70 Myr |
+| 1337 | 2.7 | −32 | +2761 | 2.4% [0..10.2] | 8.4% | 18.4% | 58.7% | 1.5% | 3910 Myr |
+
+Reading the sweep:
+
+- **Late-time sea rises ~1.9 km per +1.0 scale**, monotonically on every seed
+  (seed 42: −3583 → −2513 → −1425 → +196). The derived base is ~1.74 km-equiv
+  (seed 42); Earth's ~2.6 km-equiv is ≈ scale 1.5, which raises the late sea
+  ~1.07 km over the default — the issue's "~2.6 km-equiv raises the late-time
+  sea by ~1 km" prediction, confirmed.
+- **Crest submergence tracks the sea, as designed.** With the cap on, "crest
+  below sea" holds ~0.7–0.8 km at scales 1.0–1.5 (the cap is doing the work);
+  once the sea clears the −2000 m engagement level (scale ≥ 2.0) the cap
+  disengages and the crests ride at their absolute −2500 m, now **1.4–3.1 km
+  below the risen sea** — native submergence. Scale 2.0 lands crests 1.4–1.7 km
+  down (the issue's "1–2.5 km" band); scale 2.7 reaches ~2.8–3.1 km, past
+  Earth's 2.5 km.
+- **Emergent young stays retired at every scale** (1.8–3.5%) — the chains never
+  come back, whether the cap retires them (low water) or the risen sea drowns
+  them (high water).
+- **The losers, stated:** continental crust falls with water (seed 42:
+  27.5 → 18–19%; seed 1: 26.6 → 17.7%) — more flooding and marine planation
+  retire continental crust — and **land fraction drops** (seed 42: 15.6 → 10%;
+  seed 1: 13.1 → 7.6%). The shallow-ocean band also thins (4–5% → 1.5–2.2%) as
+  the compressed relief drops flanks past the waterline faster. Scale 2.7 is a
+  **permanent waterworld** on two of three seeds (sea stays above the t=0 datum
+  for ~4 Gyr; 7.6–10% land). More water is a real planet-diversity knob, not a
+  free upgrade: it buys native crest submergence at the cost of continental
+  crust, land, and shelf. (Seed 1337 is the mildest — its continental budget
+  even rises slightly through scale 2.0 before falling — so the cost is
+  seed-dependent, not uniform.)
+
+### Native submergence: does more water retire the chains without the crest cap?
+
+The #102 crest cap is a shape-fix: it holds ridge crests submerged when the sea
+is too low for them to drown on their own. If a larger endowment raises the sea
+above the crest, the crests should submerge natively and the cap becomes
+redundant. Measured directly — the same scale-2.0/2.7 cells run with
+`bathymetryDatum` **off** (`seaLevelDatums + freeboard` still on):
+
+| seed | scale | late sea (m) | crest below sea | emergent young | cont. crust | land % |
+|---|---|---|---|---|---|---|
+| 1 | 2.0 | −1252 | +1606 | 3.2% [0..15.0] | 19.0% | 9.2% |
+| 1 | 2.7 | +273 | +3055 | 2.3% [0..12.4] | 17.7% | 7.6% |
+| 42 | 2.0 | −1425 | +1428 | 2.1% [0..8.4] | 18.1% | 10.3% |
+| 42 | 2.7 | +196 | +3008 | 2.0% [0..7.3] | 18.9% | 10.0% |
+| 1337 | 2.0 | −1169 | +1709 | 1.9% [0..6.6] | 25.0% | 12.7% |
+| 1337 | 2.7 | −32 | +2761 | 2.4% [0..10.2] | 18.4% | 8.4% |
+
+**These rows are byte-identical to the cap-ON sweep above.** At scale ≥ 2.0 the
+late sea rides above −2000 m, so the cap self-disengages and `bathymetryDatum`
+on/off produce the same history to the last bit — direct confirmation of the
+compose-safely-by-construction claim. And emergent young is still 1.9–3.2%: the
+chains are retired **natively** by the higher water, with the cap contributing
+nothing. Contrast the #102 baseline (scale 1.0, cap off, the "off" rows of the
+mechanism table above): emergent young 37–65%, the full chain artifact. Raising
+the endowment from 1.0 to 2.0 collapses it to ~2–3% with no datum re-key at all.
+
+**Where the crest cap earns its keep vs where it is redundant:** the cap engages
+only when the late sea sits below −2000 m — the low-water regime (scale ≲ 1.7,
+including the default 1.0, where the sea equilibrates ~−3.5 km). There it is
+essential: without it the ridge crests (−2500 m absolute) stand ~1 km proud and
+the chains return (37–65% emergent young). On high-water worlds (scale ≳ 2.0)
+the risen sea drowns the crests on its own and the cap is redundant — inert by
+construction. So the two mechanisms are complementary, not competing: the crest
+cap is the low-water world's fix, a larger inventory is the high-water world's,
+and neither perturbs the other. The endowment at which the chains retire without
+the cap is **≈ scale 2.0** (late sea ≈ −1.2 to −1.4 km), and the price is the
+loser column above: ~8 points of continental crust and a thinner, more flooded
+world.
+
+### Shipped state
+
+`waterInventoryScale` default 1.0 (byte-identical goldens), `--water-scale`
+CLI flag (validated > 0), a non-default golden arm (scale 2.0, seed 42, 10
+steps, with a `seaLevelM > 0` engagement assertion so it pins the flooded
+path). The scale/seed sweep and native-submergence campaign above were run at
+N=64, 4.5 Gyr, full datum stack, on all three golden seeds; the early-flooding
+trajectory at 10 Myr cadence. Follow-up surfaced: at the endowments that
+submerge the crests natively (scale ≳ 2.0) the #102 crest cap is redundant — a
+candidate for simplifying the datum stack on high-water worlds — and the
+continental-crust cost of high water (the loser column) is worth its own
+tectonic-budget study.
