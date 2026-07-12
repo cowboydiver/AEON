@@ -26,6 +26,7 @@ const ALL_OFF = {
   emergentArcTaper: false,
   seaLevelDatums: false,
   freeboard: false,
+  bathymetryDatum: false,
 } as const;
 
 const MECHANISMS: ReadonlyArray<Partial<PlanetParams>> = [
@@ -35,6 +36,7 @@ const MECHANISMS: ReadonlyArray<Partial<PlanetParams>> = [
   { emergentArcTaper: true, emergentArcTaperOnsetYears: 20e6 },
   { seaLevelDatums: true, seaLevelDatumsOnsetYears: 20e6 },
   { freeboard: true, freeboardOnsetYears: 20e6 },
+  { bathymetryDatum: true, bathymetryDatumOnsetYears: 20e6 },
 ];
 
 describe('onset gating (#88/#89/#90/#91 branched A/B)', () => {

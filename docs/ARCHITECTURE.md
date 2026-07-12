@@ -519,11 +519,11 @@ key:
   retirement semantics — and the whole `blockElevationCap` ramp. The
   oceanic **age-depth curve stays absolute**: the sea-level solve fills the
   hypsometry with a conserved volume, so a seafloor target that tracked sea
-  level would chase it downward without bound (see the findings doc — the
-  emergent-ridge artifact survives this prototype; the land-relief
-  constants `OROGENY_MAX_ELEVATION_M`/`OROGENIC_ROOT_REFERENCE_M` are
-  re-keyed by the `freeboard` mechanism below, which owns that regime
-  change). Measured flag-on (seed 42/N=64/4.5 Gyr): the shallow-ocean
+  level would chase it downward without bound (measured — see the findings
+  doc and the `bathymetryDatum` bullet below, which re-keys only the ridge
+  crest for exactly this reason; the land-relief constants
+  `OROGENY_MAX_ELEVATION_M`/`OROGENIC_ROOT_REFERENCE_M` are re-keyed by
+  the `freeboard` mechanism below, which owns that regime change). Measured flag-on (seed 42/N=64/4.5 Gyr): the shallow-ocean
   share recovers from a 1–7% decay to a sustained 7–13% (real shelf
   fringes) and arc maturation re-submerges, but flooded *continental*
   crust does not return — drowned platforms are transient (crustFates
@@ -558,6 +558,33 @@ key:
   is structural (rate-bound relaxation + a flooded lobe piled against the
   buoyancy floor), so the target keeps its cleanly-anchored 400 m; see
   the findings doc. Default OFF — measurement prototype.
+- **`bathymetryDatum` (#102; `seaKeyedOceanicDepthForAge` in
+  `bathymetry.ts` + `bathymetryDatumOffsetM` in `datums.ts`):** the
+  age-depth re-key — the third datum layer, retiring the emergent
+  mid-ocean-ridge chains (design crest −2500 m absolute vs a deep-time sea
+  at −3.4..−3.9 km left every spreading center standing ~1 km proud). All
+  five consumers of the age-depth reference (thermal-subsidence target,
+  trench pinning, divergent gap fill, consolidation island flips, sediment
+  shelf room) read a curve whose **crest caps at `seaLevelM −
+  OCEAN_RIDGE_MIN_SUBMERGENCE_M` (1 km)** — never shallower than the
+  design crest — while the **abyssal end stays absolute** and the √age
+  slope rescales to reach the abyss at the unchanged 100 Myr. The abyss is
+  the volume anchor: full 1:1 tracking of the curve was measured (#102)
+  to have NO equilibrium — the keyed basin capacity (~3.9 km
+  global-equivalent) exceeds the conserved inventory (~1.7 km) ~2.3×, so
+  the (sea, floor) pair co-falls at the ocean-relief relax rate (~200
+  m/Myr; −900 km by 4.5 Gyr, measured) and the freeboard anchor is outrun
+  ~10:1. The crest-cap shape tracks only the young ridge flank (~0.15
+  km-equivalent), keeps the sea-level bisection sloped by construction,
+  and engages smoothly once the sea falls past −1.5 km (no onset shock);
+  the stated cost is ridge-to-abyss relief compressed to ~1.1–1.6 km at
+  the equilibrium sea — Earth's 2.5 km crest submergence needs ~0.9
+  km-equivalent more water than the #33 inventory holds (a water-inventory
+  follow-up, not a datum one). Flag-off (offset 0) returns the design
+  curve bit-exactly. Measured paired on the full datum stack — see
+  `SEA_LEVEL_DATUM_FINDINGS.md` for trajectories, the dt-halving check,
+  and the freeboard-side interaction. Default OFF — measurement prototype,
+  designed to run with `seaLevelDatums` + `freeboard` on.
 
 `energyBalance` (#30): the Phase 3 climate hub. A Budyko–Sellers **zonal
 energy-balance model** solved on `ENERGY_BALANCE_BANDS` (90) equal-area
@@ -819,9 +846,10 @@ PlanetParams = { seed, radiusMeters, gridN, stepYears, keyframeIntervalYears,
                  numPlates,
                  starLuminosity, dayLengthHours, obliquityDeg,
                  initialCo2Ppm,
-                 // mechanism toggles (#84/#88-#91 + datum re-key + freeboard):
+                 // mechanism toggles (#84/#88-#91 + datum re-keys + freeboard):
                  //   blockIsostasy, crustFates, compactArcs, marinePlanation,
-                 //   emergentArcTaper, seaLevelDatums, freeboard + *OnsetYears
+                 //   emergentArcTaper, seaLevelDatums, freeboard,
+                 //   bathymetryDatum + *OnsetYears
                  // biosphere (#37): biosphereEnabled (default true — the ablation
                  //   switch), abiogenesisRatePerYear, initialOxygenPAL
                }   // immutable per run

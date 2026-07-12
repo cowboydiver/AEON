@@ -114,6 +114,28 @@ exports[`golden field hashes > seed 1337: initial state and after 10 steps 1`] =
 }
 `;
 
+exports[`golden field hashes: #88-#91 mechanism prototypes on > bathymetryDatum on, seed 42: after 10 steps 1`] = `
+{
+  "after10Steps": {
+    "biome": "e2e31168",
+    "boundaryStress": "3470f23d",
+    "crustAge": "5df42012",
+    "crustType": "8383c658",
+    "elevation": "373918c2",
+    "iceFraction": "fbb1b22f",
+    "marineLife": "4a70a4be",
+    "plateId": "830343d2",
+    "precipitation": "cd23f547",
+    "sedimentM": "25b5b01f",
+    "sutureYears": "b0549dc5",
+    "temperature": "fc11acd1",
+    "timeYears": 10000000,
+    "windU": "f4059f85",
+    "windV": "5f9a56b5",
+  },
+}
+`;
+
 exports[`golden field hashes: #88-#91 mechanism prototypes on > compactArcs on, seed 42: after 10 steps 1`] = `
 {
   "after10Steps": {

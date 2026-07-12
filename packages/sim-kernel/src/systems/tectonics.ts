@@ -28,17 +28,16 @@
  * reorganization churn from shredding deep-time continents into lace.
  */
 
-import { oceanicDepthForAge } from '../bathymetry';
+import { seaKeyedOceanicDepthForAge } from '../bathymetry';
 import {
   ACTIVE_MARGIN_STRESS_M_PER_YR,
   COLLISION_THICKENING_FACTOR,
   MARGIN_CONSOLIDATION_HOLE_MIN_NEIGHBORS,
   MICROCONTINENT_FOUNDER_ELEVATION_M,
   OCEAN_RELIEF_RELAX_M_PER_YR,
-  OCEAN_RIDGE_DEPTH_M,
   OROGENY_MAX_ELEVATION_M,
 } from '../constants';
-import { landDatumOffsetM, platformDatumOffsetM } from '../datums';
+import { bathymetryDatumOffsetM, landDatumOffsetM, platformDatumOffsetM } from '../datums';
 import { cellCenterTable, cellCount, directionToIndex, neighborTable, type Vec3 } from '../grid';
 import { hash2, hashString } from '../hash';
 import type { PlanetState } from '../state';
@@ -122,9 +121,13 @@ function applyTectonics(state: PlanetState, dtYears: number): PlanetState {
   const sedimentM = next.fields.sedimentM.slice();
   const age = next.fields.crustAge;
   const relax = OCEAN_RELIEF_RELAX_M_PER_YR * dtYears;
+  // Sea-level-keyed bathymetry (#102, datums.ts + bathymetry.ts): under the
+  // bathymetryDatum mechanism the curve's crest rides the previous step's
+  // sea level (abyss absolute); offset 0 means the exact absolute curve.
+  const bathyOffset = bathymetryDatumOffsetM(next);
   for (let i = 0; i < elevation.length; i++) {
     if (crustType[i] === 0 && boundaryStress[i]! <= ACTIVE_MARGIN_STRESS_M_PER_YR) {
-      const target = oceanicDepthForAge(age[i]!) + sedimentM[i]!;
+      const target = seaKeyedOceanicDepthForAge(age[i]!, bathyOffset) + sedimentM[i]!;
       const e = elevation[i]!;
       elevation[i] = e > target ? Math.max(target, e - relax) : Math.min(target, e + relax);
     }
@@ -226,7 +229,7 @@ function applyTectonics(state: PlanetState, dtYears: number): PlanetState {
         // (crust age travels with the cell, so an old fleck sinks toward
         // abyssal depth; its sediment cover, if any, rides on top).
         crustType[isl] = 0;
-        elevation[isl] = oceanicDepthForAge(crustAgeOut[isl]!) + sedimentM[isl]!;
+        elevation[isl] = seaKeyedOceanicDepthForAge(crustAgeOut[isl]!, bathyOffset) + sedimentM[isl]!;
         sutureYearsOut[isl] = 0; // ocean carries no weld memory
         crustType[hole.cell] = 1;
         elevation[hole.cell] = hole.elev;
@@ -549,6 +552,9 @@ function advect(
   // neighbors (ties toward the lower plate id), filled as provisional young
   // ocean crust at ridge depth. Decisions are computed from the pre-pass
   // state and applied together, so fill order cannot leak into the result.
+  // Fresh crust is created at the age-depth reference for age 0 — the crest,
+  // which rides the sea level under bathymetryDatum (#102, bathymetry.ts).
+  const ridgeFillLevel = seaKeyedOceanicDepthForAge(0, bathymetryDatumOffsetM(state));
   for (;;) {
     const fills: number[] = [];
     const owners: number[] = [];
@@ -581,7 +587,7 @@ function advect(
     for (let k = 0; k < fills.length; k++) {
       const i = fills[k]!;
       newFields.plateId[i] = owners[k]!;
-      newFields.elevation[i] = OCEAN_RIDGE_DEPTH_M;
+      newFields.elevation[i] = ridgeFillLevel;
       newFields.crustAge[i] = 0;
       newFields.crustType[i] = 0;
       newFields.sutureYears[i] = 0; // fresh ocean carries no weld memory

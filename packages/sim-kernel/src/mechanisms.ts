@@ -18,7 +18,8 @@ export type MechanismKey =
   | 'marinePlanation'
   | 'emergentArcTaper'
   | 'seaLevelDatums'
-  | 'freeboard';
+  | 'freeboard'
+  | 'bathymetryDatum';
 
 export interface MechanismInfo {
   key: MechanismKey;
@@ -78,6 +79,13 @@ export const MECHANISMS: readonly MechanismInfo[] = [
     label: 'Freeboard regulation',
     summary:
       'Continental crust floats: mean continental elevation relaxes toward a target freeboard above the dynamic sea level, passive margins subside toward shelf depth, and the land-relief datums (orogeny ceiling, orogenic-root reference) ride the sea level — restoring flooded shelves and epicontinental seas.',
+  },
+  {
+    key: 'bathymetryDatum',
+    label: 'Sea-level-keyed bathymetry',
+    issue: 102,
+    summary:
+      'The oceanic age-depth reference (ridge crest, trench pinning, gap fill, shelf room) keys off the dynamic sea level instead of the fixed 0 m datum, so mid-ocean ridge crests stay submerged instead of crossing the late-time oceans as emergent island chains. Designed to run on top of seaLevelDatums + freeboard.',
   },
 ] satisfies readonly MechanismInfo[];
 

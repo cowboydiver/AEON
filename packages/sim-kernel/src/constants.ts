@@ -348,6 +348,25 @@ export const OCEAN_SUBSIDENCE_K_M_PER_SQRT_YR = 0.35;
 export const OCEAN_ABYSSAL_DEPTH_M = -6000;
 
 /**
+ * Minimum submergence of a mid-ocean ridge crest below the DYNAMIC sea level
+ * under the `bathymetryDatum` mechanism (#102), m. When the deep-time sea
+ * falls below `OCEAN_RIDGE_DEPTH_M − this`, the sea-keyed age-depth curve
+ * (bathymetry.ts) caps its crest at `seaLevelM − this` (the abyssal end
+ * stays absolute) so spreading centers stay submerged instead of crossing
+ * the ocean as emergent island chains. 1000 m is the shallow end of the
+ * #102 acceptance band (crests 1–2.5 km below the surface): Earth's crests
+ * sit ~2.5 km down, but the sim's conserved water inventory (~1.7 km
+ * global-equivalent, measured) fills only ~45% of an Earth-proportioned
+ * basin — pushing the crest deeper toward Earth's figure costs ridge-abyss
+ * relief 1:1 (the abyss is pinned at −6000 m and the equilibrium sea rides
+ * ~−3.6 km), and full Earth submergence (2.5 km) would leave the ridges
+ * flatter than the trench noise floor. See the findings doc for the
+ * volumetric budget and the measured divergence of the alternative
+ * (tracking the whole curve 1:1).
+ */
+export const OCEAN_RIDGE_MIN_SUBMERGENCE_M = 1000;
+
+/**
  * Rate at which inactive oceanic relief relaxes toward the age-depth curve,
  * m/yr (#59). Replaces the Phase-1 hard-set ("dead arcs sink instantly"):
  * excess relief (an abandoned volcanic arc) decays and deficit relief (an

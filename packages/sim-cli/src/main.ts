@@ -77,9 +77,18 @@ Options:
                               depth, and the land-relief datums ride the sea
                               level (default off — prototype; measure with
                               --sea-level-datums also on)
+  --bathymetry-datum          key the oceanic age-depth reference (ridge
+                              crest, trench pinning, gap fill, shelf room) to
+                              the dynamic sea level (#102), so ridge crests
+                              stay submerged instead of crossing the deep-time
+                              oceans as emergent island chains (default off —
+                              prototype; measure with --sea-level-datums
+                              --freeboard also on)
+  --step-years <years>        simulation step size (default 1e6); use e.g.
+                              0.5e6 for dt-halving checks of lagged datums
   --no-<mechanism>            disable a default-on mechanism for this run,
                               e.g. --no-crust-fates --no-marine-planation;
-                              all seven --no-* forms exist. Composable with
+                              all eight --no-* forms exist. Composable with
                               the positive flags for any on/off combination.
   --ab <mechanism>            paired branched A/B (PR #87 instrument): run
                               flag-off and flag-on-with-onset arms that are
@@ -90,7 +99,7 @@ Options:
                               hundred Myr after the branch most. Mechanisms:
                               block-isostasy, crust-fates, compact-arcs,
                               marine-planation, emergent-arc-taper,
-                              sea-level-datums, freeboard.
+                              sea-level-datums, freeboard, bathymetry-datum.
                               Mutually exclusive with the single-arm mechanism
                               flags and --dump. Since the #88-#91 promotion
                               BOTH arms inherit the promoted defaults for the
@@ -116,6 +125,7 @@ const { values } = parseArgs({
     until: { type: 'string', default: '100e6' },
     'keyframe-interval': { type: 'string' },
     'grid-n': { type: 'string' },
+    'step-years': { type: 'string' },
     report: { type: 'boolean', default: false },
     metrics: { type: 'boolean', default: false },
     'crust-stats': { type: 'boolean', default: false },
@@ -126,6 +136,7 @@ const { values } = parseArgs({
     'emergent-arc-taper': { type: 'boolean', default: false },
     'sea-level-datums': { type: 'boolean', default: false },
     freeboard: { type: 'boolean', default: false },
+    'bathymetry-datum': { type: 'boolean', default: false },
     'no-block-isostasy': { type: 'boolean', default: false },
     'no-crust-fates': { type: 'boolean', default: false },
     'no-compact-arcs': { type: 'boolean', default: false },
@@ -133,6 +144,7 @@ const { values } = parseArgs({
     'no-emergent-arc-taper': { type: 'boolean', default: false },
     'no-sea-level-datums': { type: 'boolean', default: false },
     'no-freeboard': { type: 'boolean', default: false },
+    'no-bathymetry-datum': { type: 'boolean', default: false },
     ab: { type: 'string' },
     'ab-branch': { type: 'string' },
     'ab-block-isostasy': { type: 'string' },
@@ -162,6 +174,7 @@ const seed = numArg(values.seed, 'seed')!;
 const untilYears = numArg(values.until, 'until')!;
 const keyframeIntervalYears = numArg(values['keyframe-interval'], 'keyframe-interval');
 const gridN = numArg(values['grid-n'], 'grid-n');
+const stepYears = numArg(values['step-years'], 'step-years');
 const dumpEvery = Math.max(1, Math.round(numArg(values['dump-every'], 'dump-every') ?? 1));
 
 /**
@@ -182,6 +195,7 @@ const MECHANISMS: Record<string, (on: boolean, onsetYears: number) => Partial<Pl
   'emergent-arc-taper': (on, onset) => ({ emergentArcTaper: on, emergentArcTaperOnsetYears: onset }),
   'sea-level-datums': (on, onset) => ({ seaLevelDatums: on, seaLevelDatumsOnsetYears: onset }),
   freeboard: (on, onset) => ({ freeboard: on, freeboardOnsetYears: onset }),
+  'bathymetry-datum': (on, onset) => ({ bathymetryDatum: on, bathymetryDatumOnsetYears: onset }),
 };
 const MECHANISM_FLAGS = Object.keys(MECHANISMS) as ReadonlyArray<
   | 'block-isostasy'
@@ -191,6 +205,7 @@ const MECHANISM_FLAGS = Object.keys(MECHANISMS) as ReadonlyArray<
   | 'emergent-arc-taper'
   | 'sea-level-datums'
   | 'freeboard'
+  | 'bathymetry-datum'
 >;
 
 // --ab-block-isostasy <years> predates --ab and is kept as its alias.
@@ -224,6 +239,7 @@ const params = createPlanetParams({
   seed,
   ...(gridN !== undefined ? { gridN } : {}),
   ...(keyframeIntervalYears !== undefined ? { keyframeIntervalYears } : {}),
+  ...(stepYears !== undefined ? { stepYears } : {}),
   // Single-arm mechanism flags compose (e.g. --block-isostasy --crust-fates
   // measures the pair together); --no-* forms disable a default-on mechanism.
   // The paired --ab harness takes one at a time.
@@ -447,6 +463,7 @@ if (abMechanism !== undefined && abBranchYears !== undefined) {
       seed,
       ...(gridN !== undefined ? { gridN } : {}),
       ...(keyframeIntervalYears !== undefined ? { keyframeIntervalYears } : {}),
+      ...(stepYears !== undefined ? { stepYears } : {}),
       ...mechanismParams(on, abBranchYears),
     });
     const series: KeyframeMetrics[] = [];
