@@ -499,7 +499,17 @@ golden/onset suites needed no carve-out — they pin fixed step sizes.
 **The honest cost: the continental-creation budget thins.** Two of three
 seeds lose 5–7 points of continental crust (28.9→22.2%, 27.5→22.3%;
 seed 1337 unchanged at 24.5→24.4%) and all three lose 3–6.6 points of
-land. Mechanism: in the baseline the young oceanic flank (−2500 m
+land.
+
+**Flipbooks** (elevation, all three seeds, frames every 250 Myr, inspected
+against the #101 baseline flipbooks): the baseline's dotted green chains
+crossing every open ocean are gone at mid- and late-time on all seeds —
+spreading centers read as faint submerged ribbons a shade lighter than the
+abyss. The emergent linear features that remain hug continental margins
+(arcs and shelf-edge peaks, #91's residual, present in both arms).
+Trenches, arc belts, and shelf halos stay put; continents stay coherent
+with emergent cores. Numbers passing AND the chains visibly gone — the
+failure mode the issue warned about did not occur. Mechanism: in the baseline the young oceanic flank (−2500 m
 absolute) sat ~1.4 km ABOVE the re-keyed arc-maturation gate
 (`seaLevelM − 500` ≈ −3900 m), so a belt arc igniting on young crust was
 born above the gate and matured essentially instantly — the emergent
