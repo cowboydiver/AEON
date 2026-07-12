@@ -58,6 +58,35 @@ describe('golden field hashes', () => {
 });
 
 /**
+ * Non-default golden arm for the #105 water-inventory parameter. Unlike the
+ * mechanism prototypes this is a base `PlanetParams` number (like `numPlates`),
+ * so it is pinned on the shipped DEFAULT world — the realistic path a
+ * higher-water planet takes — with only `waterInventoryScale` changed. The
+ * default 1.0 is byte-identical to the pre-#105 kernel (the multiply is exactly
+ * ×1.0), so it needs no arm of its own; the MAIN goldens above pin it. This arm
+ * pins scale 2.0. The scale changes only `globals.waterInventoryM` at init (not
+ * a single field), so the t=0 hashes equal the default's and only the stepped
+ * hashes are pinned. The `seaLevelM > 0` assertion guards ENGAGEMENT — a scale-2
+ * planet floods above the 0 m datum within ten steps, where the default sea is
+ * ~−900 m and falling — so this spine can never silently pin an inert path
+ * (the #102 engaged-golden precedent).
+ */
+describe('golden field hashes: waterInventoryScale 2.0 (#105)', () => {
+  it('seed 42: after 10 steps, with the sea flooded above the 0 m datum', () => {
+    const params = createPlanetParams({ seed: 42, waterInventoryScale: 2 });
+    const ctx: SimContext = { rng: createRng(params.seed).fork('sim') };
+    let stepped = createInitialState(params);
+    for (let i = 0; i < 10; i++) {
+      stepped = step(stepped, params.stepYears, ctx);
+    }
+    expect(stepped.globals.seaLevelM).toBeGreaterThan(0);
+    expect({
+      after10Steps: { timeYears: stepped.timeYears, ...fieldHashes(stepped) },
+    }).toMatchSnapshot();
+  });
+});
+
+/**
  * Legacy spine: the pre-promotion kernel path with every mechanism off.
  * These hashes are the values the MAIN goldens carried before the #88-#91
  * default-on promotion (copied over verbatim, not regenerated), so they pin

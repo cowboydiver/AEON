@@ -856,6 +856,8 @@ PlanetParams = { seed, radiusMeters, gridN, stepYears, keyframeIntervalYears,
                  //   bathymetryDatum + *OnsetYears
                  // biosphere (#37): biosphereEnabled (default true — the ablation
                  //   switch), abiogenesisRatePerYear, initialOxygenPAL
+                 // planet knobs: waterInventoryScale (#105, default 1.0 —
+                 //   dimensionless multiplier on the derived water inventory)
                }   // immutable per run
 Globals     = { landFraction, co2, meanTemperatureK, seaLevelM, waterInventoryM,
                 oxygen, oxygenReductant, abiogenesisYear }
@@ -873,6 +875,19 @@ conserved total-water global-equivalent layer thickness) are the #33 sea-level
 state: the inventory is calibrated once at init from the initial ocean volume at
 the 0 m datum (so t=0 sea level is exactly 0 and the ~30% tuned land fraction is
 preserved), then held constant while `seaLevel` re-solves `seaLevelM` each step.
+The `waterInventoryScale` parameter (#105, default 1.0) multiplies that derived
+base, making the planet's water endowment a chosen property rather than an
+artifact of the terrain noise. The base is still derived (so the scale composes
+with a companion `initialLandFraction` (#106) and grid resolution as base ×
+scale); the
+default 1.0 multiplies by exactly 1.0, so the inventory — and every field — is
+byte-identical to the pre-#105 kernel (`--water-scale` validates > 0 at the CLI
+boundary). Scale > 1 raises the deep-time sea and
+can flood the ocean-ridge crests natively (making the #102 `bathymetryDatum`
+crest cap redundant on high-water worlds); scale < 1 gives a low-water planet.
+The measurement campaign — the early-flooding "waterworld" regime, the
+scale/seed sweep, and the endowment at which the ridge chains retire without the
+crest cap — is in `docs/SEA_LEVEL_DATUM_FINDINGS.md`.
 `globals.landFraction` is now emergent from `seaLevelM` (finalized by the
 `seaLevel` system — cells with `elevation ≥ seaLevelM`); at t=0, with `seaLevelM
 = 0`, it equals the 0 m-datum land share as before.
