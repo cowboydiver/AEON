@@ -69,6 +69,7 @@ import {
   OROGENIC_ROOT_REFERENCE_M,
   SEDIMENT_SHELF_CEILING_M,
 } from '../constants';
+import { landDatumOffsetM, platformDatumOffsetM } from '../datums';
 import { cellCount, neighborTable } from '../grid';
 import type { System } from '../step';
 
@@ -85,6 +86,13 @@ export const erosionSystem: System = {
     const old = state.fields.elevation;
     const elevation = old.slice();
     const sedimentM = state.fields.sedimentM.slice();
+    // Sea-level-anchored datums (datums.ts): the sediment shelf ceiling and
+    // the planation target are physically sea-level-relative (a shelf break
+    // sits ~200 m below the WAVES); the offset anchors them to the dynamic
+    // sea level when the mechanism is on, and is exactly 0 when off.
+    const datumOffset = platformDatumOffsetM(state);
+    const shelfCeiling = datumOffset + SEDIMENT_SHELF_CEILING_M;
+    const planationLevel = datumOffset + MICROCONTINENT_FOUNDER_ELEVATION_M;
 
     // Marine planation (#90): per-cell wave-attack strength, 1 − area/ref
     // clamped to [0, 1] — full attack on a speck, none at/above the
@@ -144,8 +152,7 @@ export const erosionSystem: System = {
           if (old[i]! > seaLevel) {
             // The shelf's remaining capacity: how far the relaxation target
             // (age-depth curve + sediment) still sits below the fill ceiling.
-            const room =
-              SEDIMENT_SHELF_CEILING_M - (oceanicDepthForAge(crustAge[j]!) + sedimentM[j]!);
+            const room = shelfCeiling - (oceanicDepthForAge(crustAge[j]!) + sedimentM[j]!);
             if (room > 0) {
               const flux = Math.min(
                 // Rivers grade to base level (sea level, #33), so export scales
@@ -168,16 +175,15 @@ export const erosionSystem: System = {
           // ordinary export (the room re-reads sedimentM[j], which the flux
           // above may just have raised), so conservation is unchanged.
           if (planation !== null && planation[i]! > 0) {
-            if (old[i]! <= MICROCONTINENT_FOUNDER_ELEVATION_M) continue;
-            const room =
-              SEDIMENT_SHELF_CEILING_M - (oceanicDepthForAge(crustAge[j]!) + sedimentM[j]!);
+            if (old[i]! <= planationLevel) continue;
+            const room = shelfCeiling - (oceanicDepthForAge(crustAge[j]!) + sedimentM[j]!);
             if (room <= 0) continue;
             const flux = Math.min(
               MARINE_PLANATION_RATE_M_PER_YR * dtYears * planation[i]!,
               room,
               // Never plane below the founder level, whatever dt or how many
               // oceanic neighbors drew from the cell this step.
-              Math.max(0, elevation[i]! - MICROCONTINENT_FOUNDER_ELEVATION_M),
+              Math.max(0, elevation[i]! - planationLevel),
             );
             elevation[i]! -= flux;
             sedimentM[j]! += flux;
@@ -187,13 +193,18 @@ export const erosionSystem: System = {
     }
 
     // Orogenic root decay (#65), applied to the post-flux elevation. keep is
-    // hoisted so Math.exp runs once per step, not per cell.
+    // hoisted so Math.exp runs once per step, not per cell. The reference is
+    // a land-relief datum ("terrain standing ~1 km above the SEA carries an
+    // excess root"); under the freeboard mechanism it rides the dynamic sea
+    // level (landDatumOffsetM, datums.ts), and is exactly the absolute
+    // constant when the mechanism is off.
+    const rootReference = landDatumOffsetM(state) + OROGENIC_ROOT_REFERENCE_M;
     const keep = Math.exp(-dtYears / OROGENIC_ROOT_DECAY_TAU_YEARS);
     for (let i = 0; i < count; i++) {
       if (crustType[i] !== 1) continue;
       const e = elevation[i]!;
-      if (e > OROGENIC_ROOT_REFERENCE_M) {
-        elevation[i] = OROGENIC_ROOT_REFERENCE_M + (e - OROGENIC_ROOT_REFERENCE_M) * keep;
+      if (e > rootReference) {
+        elevation[i] = rootReference + (e - rootReference) * keep;
       }
     }
 

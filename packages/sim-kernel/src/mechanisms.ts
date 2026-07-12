@@ -16,14 +16,17 @@ export type MechanismKey =
   | 'crustFates'
   | 'compactArcs'
   | 'marinePlanation'
-  | 'emergentArcTaper';
+  | 'emergentArcTaper'
+  | 'seaLevelDatums'
+  | 'freeboard';
 
 export interface MechanismInfo {
   key: MechanismKey;
   /** Short human label for toggles and legends. */
   label: string;
-  /** The GitHub issue that specified the mechanism. */
-  issue: number;
+  /** The GitHub issue that specified the mechanism, when one exists
+   *  (seaLevelDatums was specified by docs/SEA_LEVEL_DATUM_FINDINGS.md). */
+  issue?: number;
   /** One-sentence description, suitable for a tooltip. */
   summary: string;
 }
@@ -63,6 +66,18 @@ export const MECHANISMS: readonly MechanismInfo[] = [
     issue: 84,
     summary:
       'Per-component elevation ceilings founder small continental blocks (the #84 prototype, superseded by crust fates + docking).',
+  },
+  {
+    key: 'seaLevelDatums',
+    label: 'Sea-level-anchored datums',
+    summary:
+      'Platform and arc datums (founder level, sediment shelf ceiling, arc maturation gate and island ceiling) key off the dynamic sea level instead of the fixed 0 m datum, so drowned platforms and shallow shelves survive the deep-time sea-level fall.',
+  },
+  {
+    key: 'freeboard',
+    label: 'Freeboard regulation',
+    summary:
+      'Continental crust floats: mean continental elevation relaxes toward a target freeboard above the dynamic sea level, passive margins subside toward shelf depth, and the land-relief datums (orogeny ceiling, orogenic-root reference) ride the sea level — restoring flooded shelves and epicontinental seas.',
   },
 ] satisfies readonly MechanismInfo[];
 

@@ -26,6 +26,8 @@ const ALL_MECHANISMS_OFF = {
   compactArcs: false,
   marinePlanation: false,
   emergentArcTaper: false,
+  seaLevelDatums: false,
+  freeboard: false,
 } as const;
 
 function fieldHashes(state: PlanetState): Record<string, string> {
@@ -103,12 +105,13 @@ describe('golden field hashes: blockIsostasy on (#84)', () => {
 });
 
 /**
- * Isolated spines for the #88/#89/#90/#91 mechanisms: each pinned with ONLY
- * that mechanism on (the others explicitly off), so these are the same
- * hashes the block carried before the default-on promotion and each
- * mechanism's own path is pinned against silent drift independently of the
- * combined default world. One seed per mechanism keeps the suite's step
- * budget flat; the onset-gating tests cover the param plumbing on the others.
+ * Isolated spines for the #88/#89/#90/#91 mechanisms and the
+ * sea-level-anchored-datums prototype: each pinned with ONLY that mechanism
+ * on (the others explicitly off), so these are the same hashes the block
+ * carried before the default-on promotion and each mechanism's own path is
+ * pinned against silent drift independently of the combined default world.
+ * One seed per mechanism keeps the suite's step budget flat; the
+ * onset-gating tests cover the param plumbing on the others.
  */
 describe('golden field hashes: #88-#91 mechanism prototypes on', () => {
   const MECHS = [
@@ -116,6 +119,8 @@ describe('golden field hashes: #88-#91 mechanism prototypes on', () => {
     ['compactArcs', { compactArcs: true }],
     ['marinePlanation', { marinePlanation: true }],
     ['emergentArcTaper', { emergentArcTaper: true }],
+    ['seaLevelDatums', { seaLevelDatums: true }],
+    ['freeboard', { freeboard: true }],
   ] as const;
   for (const [name, partial] of MECHS) {
     it(`${name} on, seed 42: after 10 steps`, () => {

@@ -180,6 +180,28 @@ exports[`golden field hashes: #88-#91 mechanism prototypes on > emergentArcTaper
 }
 `;
 
+exports[`golden field hashes: #88-#91 mechanism prototypes on > freeboard on, seed 42: after 10 steps 1`] = `
+{
+  "after10Steps": {
+    "biome": "3cec1108",
+    "boundaryStress": "3470f23d",
+    "crustAge": "5df42012",
+    "crustType": "8383c658",
+    "elevation": "60950138",
+    "iceFraction": "e1fe3d09",
+    "marineLife": "34e74d5c",
+    "plateId": "830343d2",
+    "precipitation": "f1871458",
+    "sedimentM": "45a7bf8e",
+    "sutureYears": "b0549dc5",
+    "temperature": "44eaf33e",
+    "timeYears": 10000000,
+    "windU": "0b3b82e5",
+    "windV": "e6fc96e5",
+  },
+}
+`;
+
 exports[`golden field hashes: #88-#91 mechanism prototypes on > marinePlanation on, seed 42: after 10 steps 1`] = `
 {
   "after10Steps": {
@@ -198,6 +220,28 @@ exports[`golden field hashes: #88-#91 mechanism prototypes on > marinePlanation 
     "timeYears": 10000000,
     "windU": "3ffed615",
     "windV": "22bcf035",
+  },
+}
+`;
+
+exports[`golden field hashes: #88-#91 mechanism prototypes on > seaLevelDatums on, seed 42: after 10 steps 1`] = `
+{
+  "after10Steps": {
+    "biome": "02bce448",
+    "boundaryStress": "18e7e76f",
+    "crustAge": "f784a166",
+    "crustType": "23d4a595",
+    "elevation": "6c735458",
+    "iceFraction": "c3516af4",
+    "marineLife": "f7ac5feb",
+    "plateId": "691bdb92",
+    "precipitation": "b010fb10",
+    "sedimentM": "10c16b38",
+    "sutureYears": "b0549dc5",
+    "temperature": "dedc2ba7",
+    "timeYears": 10000000,
+    "windU": "e1fac275",
+    "windV": "4b3e2ae5",
   },
 }
 `;

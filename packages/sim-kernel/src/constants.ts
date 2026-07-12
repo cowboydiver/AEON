@@ -375,7 +375,9 @@ export const CONTINENTAL_INITIAL_AGE_YEARS = 2e9;
  * Convergence speed above which a boundary cell counts as an active margin
  * (trench/arc/orogeny; oceanic cells here are exempt from the thermal
  * subsidence hard-set), m/yr. 0.005 = 0.5 cm/yr, well below any deliberate
- * convergence but above transform noise.
+ * convergence but above transform noise. Also the exclusion gate for the
+ * freeboard passive-margin band (freeboard.ts): a coast converging faster
+ * than this is orogeny's, not thermal subsidence's.
  */
 export const ACTIVE_MARGIN_STRESS_M_PER_YR = 0.005;
 
@@ -655,6 +657,74 @@ export const MARINE_PLANATION_RATE_M_PER_YR = 1e-3;
  * of active subduction on the cell, with no new field to advect.
  */
 export const ARC_EMERGENT_GROWTH_FACTOR = 0.05;
+
+// --- Freeboard regulation (docs/SEA_LEVEL_DATUM_FINDINGS.md follow-up) --------
+
+/**
+ * Target cell-count-mean elevation of continental crust above the DYNAMIC sea
+ * level, m (the `freeboard` mechanism). Anchored two ways: the tuned initial
+ * terrain measures 380–450 m across the golden seeds at t=0 (sea at 0, 25% of
+ * continental crust submerged by construction), and Earth's continental crust
+ * — land mean +840 m over ~75% of it, flooded shelf ~−130 m over the rest —
+ * averages a few hundred metres. 400 m makes the mechanism near-inert at t=0
+ * and engages it exactly as the basin-maturation sea-level fall opens a gap.
+ */
+export const FREEBOARD_TARGET_M = 400;
+
+/**
+ * Rate bound on the uniform epeirogenic shift that relaxes the continental
+ * mean toward the freeboard target, m/yr. 2e-5 (20 m/Myr) is the order of the
+ * early basin-maturation sea-level fall itself (~3 km over the first
+ * ~200–500 Myr), so continents track the falling sea with a modest lag, and
+ * it is far below the local process rates (orogeny 6e-4, founder subsidence
+ * 1e-3 m/yr), so freeboard adjusts the datum the local processes work
+ * against without ever outrunning them.
+ */
+export const FREEBOARD_RELAX_M_PER_YR = 2e-5;
+
+/**
+ * Depth below the dynamic sea level that passive-margin subsidence grades
+ * toward, m. −150 m is mid-shelf (real shelves average ~−60 m and break at
+ * ~−120..−200 m). Deliberately a separate constant from
+ * SEDIMENT_SHELF_CEILING_M (a fill ceiling for oceanic sediment) and
+ * MICROCONTINENT_FOUNDER_ELEVATION_M (a flotation clamp for continental
+ * splinters) — same do-not-re-sync rule as those two.
+ */
+export const PASSIVE_MARGIN_SHELF_M = -150;
+
+/**
+ * Post-rift thermal-subsidence rate for the passive-margin band, m/yr.
+ * Stretched margins accumulate ~2 km of thermal subsidence over ~100 Myr
+ * (McKenzie 1978 half-space cooling of thinned lithosphere); a constant
+ * 2e-5 m/yr (20 m/Myr) is that total over that window — the prototype takes
+ * the mean rate rather than tracking a per-cell rift clock (no new field).
+ */
+export const PASSIVE_MARGIN_SUBSIDENCE_M_PER_YR = 2e-5;
+
+/**
+ * How many cells inland from same-plate oceanic crust the passive-margin
+ * subsidence band reaches. 2 cells is ~300–600 km at N=64..32 — real passive
+ * margins are 100–500 km wide. The band cannot creep inland over time:
+ * flooded margin cells stay continental crust, and the band is measured from
+ * OCEANIC (crustType 0) adjacency only.
+ */
+export const PASSIVE_MARGIN_WIDTH_CELLS = 2;
+
+/**
+ * Deepest the epeirogenic shift may push continental crust below the dynamic
+ * sea level, m — the buoyancy floor. Continental crust is too buoyant to
+ * float at abyssal depth: the deepest real drowned continental platforms
+ * (Zealandia's plateaus, the Kerguelen fragment) sit ~1–2.5 km below the
+ * waves, far above the −6 km abyssal plains. Without this floor the
+ * freeboard mean-regulation is an unbounded ratchet — orogeny keeps
+ * injecting elevation into active belts, the compensating uniform sink
+ * drags everything else down, and flooded interiors (which no erosive or
+ * isostatic process ever lifts) measured −17 km within 2 Gyr, deepening the
+ * ocean and pulling sea level down with them. The shift never pushes a cell
+ * below `seaLevelM + this`; cells already below it (collision debris landed
+ * in a trench) are left in place, never lifted.
+ */
+export const CONTINENTAL_BUOYANCY_FLOOR_M = -2500;
 
 // --- Wilson cycles (#18) -----------------------------------------------------
 

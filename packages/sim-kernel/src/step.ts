@@ -8,6 +8,7 @@ import { carbonSystem } from './systems/carbon';
 import { crustFatesSystem } from './systems/crustFates';
 import { energyBalanceSystem } from './systems/energyBalance';
 import { erosionSystem } from './systems/erosion';
+import { freeboardSystem } from './systems/freeboard';
 import { iceSystem } from './systems/ice';
 import { marineLifeSystem } from './systems/marineLife';
 import { moistureSystem } from './systems/moisture';
@@ -76,6 +77,12 @@ export const SYSTEMS: readonly System[] = [
   // caps the fully-reworked relief, before the climate stack so temperature/
   // winds/moisture see the capped elevation. Identity when the param is off.
   blockIsostasySystem,
+  // Freeboard regulation (default-off prototype, the SEA_LEVEL_DATUM_FINDINGS
+  // follow-up): after the tectonic/erosive reworking so it re-floats the
+  // finished relief, before the climate stack so temperature/winds/moisture
+  // and this step's sea-level solve see the adjusted elevation. Identity
+  // when the param is off.
+  freeboardSystem,
   energyBalanceSystem,
   windsSystem,
   moistureSystem,
