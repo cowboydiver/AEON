@@ -44,6 +44,77 @@ export interface KeyframeMetrics {
   largestLandCompFrac: number;
 }
 
+/**
+ * Sea-level/flooding stats per keyframe (the #101 freeboard-calibration
+ * harness, promoted from prototype scratch tooling). Everything is measured
+ * against the keyframe's DYNAMIC sea level — the kernel's actual coastline —
+ * matching the tables in docs/SEA_LEVEL_DATUM_FINDINGS.md. "Ocean" is a cell
+ * strictly below the level; "land" is at-or-above, matching the report's
+ * land% convention.
+ */
+export interface CrustStats {
+  timeYears: number;
+  seaLevelM: number;
+  /** Continental crust as a fraction of the sphere. */
+  contFrac: number;
+  /** Mean continental elevation minus seaLevelM — what freeboard regulates. */
+  meanFreeboardM: number;
+  /** Share of continental crust sitting below the sea (Earth: ~25%). */
+  submergedContFrac: number;
+  /** Share of OCEAN AREA sitting on continental crust (Earth: ~17%). */
+  oceanOnContFrac: number;
+  /** Ocean cells shallower than SHALLOW_OCEAN_DEPTH_M, as a share of the
+   *  SPHERE (Earth's shelf seas: ~7-8%). */
+  shallowOceanFrac: number;
+  /** Emergent share of the sphere (Earth: ~29%). NOTE: measured against the
+   *  dynamic sea level, unlike KeyframeMetrics.landFrac, which keeps its
+   *  historical 0 m-datum definition — don't join the two tables on this. */
+  landFrac: number;
+  /** Minimum elevation — the buoyancy-floor ratchet tripwire (#101): healthy
+   *  is trench order (−6..−9 km), not the pre-floor −17 km runaway. */
+  minElevationM: number;
+}
+
+/** Ocean shallower than this counts as shelf sea in CrustStats. */
+export const SHALLOW_OCEAN_DEPTH_M = 500;
+
+export function computeCrustStats(keyframe: Keyframe): CrustStats {
+  const { crustType, elevation } = keyframe.fields;
+  const count = elevation.length;
+  const seaLevelM = keyframe.globals.seaLevelM;
+  let cont = 0;
+  let contSum = 0;
+  let submergedCont = 0;
+  let ocean = 0;
+  let shallow = 0;
+  let minElevation = Infinity;
+  for (let i = 0; i < count; i++) {
+    const e = elevation[i]!;
+    if (e < minElevation) minElevation = e;
+    const isCont = crustType[i] === 1;
+    if (isCont) {
+      cont++;
+      contSum += e;
+    }
+    if (e < seaLevelM) {
+      ocean++;
+      if (isCont) submergedCont++;
+      if (seaLevelM - e < SHALLOW_OCEAN_DEPTH_M) shallow++;
+    }
+  }
+  return {
+    timeYears: keyframe.timeYears,
+    seaLevelM,
+    contFrac: cont / count,
+    meanFreeboardM: cont > 0 ? contSum / cont - seaLevelM : 0,
+    submergedContFrac: cont > 0 ? submergedCont / cont : 0,
+    oceanOnContFrac: ocean > 0 ? submergedCont / ocean : 0,
+    shallowOceanFrac: shallow / count,
+    landFrac: (count - ocean) / count,
+    minElevationM: minElevation,
+  };
+}
+
 /** Threshold below which a keyframe counts as dispersed (findings tables). */
 export const DISPERSED_MAX_PLATE_FRAC = 0.6;
 

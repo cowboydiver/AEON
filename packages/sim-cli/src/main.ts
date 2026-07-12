@@ -14,6 +14,7 @@ import {
   type SimEvent,
 } from 'sim-kernel';
 import {
+  computeCrustStats,
   computeKeyframeMetrics,
   summarizeMetrics,
   summarizePairedMetrics,
@@ -35,6 +36,12 @@ Options:
                               measurement harness: continental components,
                               largest-component fraction, edge/area,
                               dispersed-keyframe fraction, monopoly window)
+  --crust-stats               print the sea-level/flooding table per keyframe
+                              (the #101 freeboard-calibration harness): sea
+                              level, continental-crust share, mean freeboard,
+                              submerged share of continental crust, share of
+                              ocean area on continental crust, shallow-ocean
+                              share of the sphere, land share, min elevation
   --block-isostasy            enable the crustal-block isostasy prototype (#84):
                               per-component elevation ceilings that founder
                               small continental blocks (default off —
@@ -111,6 +118,7 @@ const { values } = parseArgs({
     'grid-n': { type: 'string' },
     report: { type: 'boolean', default: false },
     metrics: { type: 'boolean', default: false },
+    'crust-stats': { type: 'boolean', default: false },
     'block-isostasy': { type: 'boolean', default: false },
     'crust-fates': { type: 'boolean', default: false },
     'compact-arcs': { type: 'boolean', default: false },
@@ -328,6 +336,43 @@ function report(keyframe: Keyframe): void {
   reportEvents(keyframe);
 }
 
+let printedCrustStatsHeader = false;
+
+/** Per-keyframe sea-level/flooding row (the #101 calibration table). */
+function reportCrustStats(keyframe: Keyframe): void {
+  if (!printedCrustStatsHeader) {
+    console.log(
+      [
+        'time'.padStart(12),
+        'seaLevel'.padStart(9),
+        'cont%'.padStart(7),
+        'freeboard'.padStart(10),
+        'submerged%'.padStart(11),
+        'oceanOnCont%'.padStart(13),
+        'shallow%'.padStart(9),
+        'land%'.padStart(7),
+        'min elev'.padStart(10),
+      ].join('  '),
+    );
+    printedCrustStatsHeader = true;
+  }
+  const s = computeCrustStats(keyframe);
+  const pct = (x: number): string => `${(x * 100).toFixed(1)}%`;
+  console.log(
+    [
+      formatYears(s.timeYears),
+      s.seaLevelM.toFixed(0).padStart(9),
+      pct(s.contFrac).padStart(7),
+      s.meanFreeboardM.toFixed(0).padStart(10),
+      pct(s.submergedContFrac).padStart(11),
+      pct(s.oceanOnContFrac).padStart(13),
+      pct(s.shallowOceanFrac).padStart(9),
+      pct(s.landFrac).padStart(7),
+      s.minElevationM.toFixed(0).padStart(10),
+    ].join('  '),
+  );
+}
+
 function dump(keyframe: Keyframe): void {
   for (const name of dumpFields) {
     // The hypsometric ocean/land split follows the dynamic sea level, so the
@@ -437,6 +482,7 @@ const metricsSeries: KeyframeMetrics[] = [];
 run(params, untilYears, (keyframe) => {
   checkFinite(keyframe);
   if (values.report) report(keyframe);
+  if (values['crust-stats']) reportCrustStats(keyframe);
   if (values.metrics) metricsSeries.push(computeKeyframeMetrics(keyframe, params.gridN));
   // Every keyframe passes the tripwire above; --dump-every only thins the
   // PNG series. The final keyframe is always dumped so flipbooks end at the

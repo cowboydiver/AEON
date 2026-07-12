@@ -256,10 +256,10 @@ follow-up scoped "revisit the water inventory / initial hypsometry so the
 equilibrium coastline sits inside the continental-crust boundary". With
 freeboard on, it does: a fifth to a quarter of the late-time ocean floor IS
 continental crust. The conserved inventory and its invariant stay exactly
-as #33 built them; `FREEBOARD_TARGET_M` is the calibration knob if the
-flooded share needs tuning (it currently runs ~2× Earth's — a future
-calibration pass could raise the target toward 600–800 m to trade flooded
-area for land).
+as #33 built them; `FREEBOARD_TARGET_M` was the presumed calibration knob
+for the flooded share (it runs ~2× Earth's). The #101 sweep below measured
+that presumption and found it false: the flooded share is insensitive to
+the target across 400–800 m.
 
 ### Remaining residuals (all pre-existing, none introduced)
 
@@ -272,10 +272,96 @@ area for land).
   approaches 1, so the re-key must leave enough absolutely-anchored (or
   continental) hypsometry near the waterline to keep the bisection
   conditioned.
-- The **flooded share (~45–60%) overshoots Earth's ~25%** — a
-  `FREEBOARD_TARGET_M` calibration question, deliberately left at its
-  cleanly-anchored 400 m for this prototype.
+- The **flooded share (~45–60%) overshoots Earth's ~25%** — measured by
+  the #101 sweep below to be structural, NOT a `FREEBOARD_TARGET_M`
+  calibration question: the target stays at its cleanly-anchored 400 m.
 - **Freeboard oscillation** (above): a faster relaxation rate would pin the
   target more tightly at the cost of more aggressive drowning after every
   orogenic pulse; 20 m/Myr was chosen to match the driver, not to
   critically damp the loop.
+
+## The `FREEBOARD_TARGET_M` sweep (#101): the target is not the flooded-share knob
+
+The residual above scoped raising the target toward 600–800 m to trade
+flooded area for land. Measured (#66-style constants-only sweep:
+`FREEBOARD_TARGET_M` ∈ {400, 600, 800} × seeds {1, 42, 1337}, N=64,
+4.5 Gyr, freeboard + seaLevelDatums on from t=0 — the designed pairing;
+per-keyframe stats from the `--crust-stats` harness this pass promoted
+into sim-cli). Late-time aggregates (≥1.5 Gyr, 301 keyframes per run),
+mean [min..max]:
+
+| target | seed | submerged share of cont. crust | land % of sphere | cont. crust | ocean on cont. crust | shallow (<500 m) | mean freeboard | min elev (mean) |
+|---|---|---|---|---|---|---|---|---|
+| 400 m | 1 | 58.5% [48.0..67.7] | 14.6% | 29.0% | 19.8% | 6.6% | 975 m | −7438 m |
+| 400 m | 42 | 43.7% [26.3..63.9] | 18.2% | 27.5% | 14.7% | 6.8% | 2346 m | −7854 m |
+| 400 m | 1337 | 52.7% [36.8..63.2] | 14.9% | 24.7% | 15.4% | 6.5% | 1412 m | −8042 m |
+| 600 m | 1 | 56.1% [43.9..62.9] | 14.2% | 26.7% | 17.5% | 6.2% | 1089 m | −7476 m |
+| 600 m | 42 | 47.5% [25.3..64.1] | 15.2% | **22.6%** | 12.7% | 6.0% | 1945 m | −7933 m |
+| 600 m | 1337 | 52.5% [27.1..63.8] | 15.2% | 25.5% | 15.9% | 7.2% | 1552 m | −7940 m |
+| 800 m | 1 | 55.9% [40.2..64.9] | 14.3% | 27.1% | 17.7% | 6.6% | 1193 m | −7643 m |
+| 800 m | 42 | 47.2% [29.4..61.8] | 15.4% | **23.3%** | 13.0% | 6.4% | 1877 m | −7956 m |
+| 800 m | 1337 | 49.0% [26.1..61.7] | 17.1% | 28.1% | 16.8% | 6.8% | 1828 m | −7948 m |
+
+**The knob is near-inert.** Submerged share averages 51.6% / 52.0% / 50.7%
+across the three targets — flat within seed scatter, nowhere near the
+20–40% acceptance band. Land does not move up (14.6/18.2/14.9% at 400 vs
+14.3/15.4/17.1% at 800); ocean-on-continental-crust and the shallow-ocean
+share are equally flat. The only systematic response is the wrong one:
+seed 42's continental-crust equilibrium REGRESSES at the higher targets
+(27.5% at 400 → 22.6/23.3%, below the 24.6% seaLevelDatums-alone floor) —
+a higher target holds continents further above the arc-maturation gate's
+reach for longer, so the creation side thins while drowning-retirement
+keeps consuming.
+
+**Why the target cannot matter, mechanically.** Two measurements:
+
+1. **The relaxation is rate-bound, not target-bound.** Mean freeboard
+   rides 1–2.3 km above ANY of these targets through most of deep time
+   (the documented oscillation: collisions and retirement events inject
+   mean elevation faster than 20 m/Myr removes it). While the mean is
+   above the target the epeirogenic shift is downward at the full rate
+   bound regardless of whether the stop is 400 or 800 m — the targets
+   only choose where the descent would end, and it rarely gets there.
+2. **The flooded lobe is deep.** Depth histogram of submerged continental
+   cells (seed 42, target 400): only ~2–15% of flooded cells sit within
+   500 m of the sea; 46–73% sit 2–2.5+ km down, piled against the
+   buoyancy floor. A few hundred metres of extra target can emerge only
+   the thin near-surface layer — ~2–3 points of submerged share, exactly
+   the non-signal the table shows. Flooding is the structural product of
+   the orogeny→uniform-sink→retirement pump and the floor it drains to,
+   not of the datum the mean relaxes toward.
+
+**Couplings verified across all 9 runs** (the issue's watch-list): minimum
+elevation stays at trench order at every target — the table column is the
+late-time mean of the per-keyframe minima; the per-keyframe extremes
+across all runs span −6.0..−8.5 km, so no single-keyframe excursion hides
+in the average — the −17.8 km ratchet stays dead and
+`CONTINENTAL_BUOYANCY_FLOOR_M` needed no retuning. The shelf band itself
+persists: the depth histogram's 0–150 m (shelf-level) and 150–500 m
+buckets hold 1–2% and 5–13% of submerged continental cells at every
+checkpoint, and the shallow-ocean share holds its Earth-like 6–7% of the
+sphere at every target — the passive-margin shelf level is
+target-independent, as designed. Sea level equilibrates at −3.4..−3.7 km
+in all runs. Flipbooks (all three seeds at both 400 m and 800 m):
+coherent continents with emergent cores, shelf halos and permanent
+interior seas in every run — and the 800 m maps read no more emergent
+than the 400 m maps on any seed, corroborating the numbers.
+
+**Decision: `FREEBOARD_TARGET_M` stays 400 m** — the cleanly-anchored
+value (t=0 construction + Earth's continental mean). Raising it buys
+nothing measurable, costs continental crust on one golden seed, and
+abandons the anchor. No golden hashes change (main goldens were never
+touchable — the constant is read only behind the flag — and the flag-on
+freeboard spine is byte-identical because the shipped value is unchanged).
+The flooded-share overshoot survives as a real residual, now with its
+ownership corrected: the next knobs are the oscillation
+(`FREEBOARD_RELAX_M_PER_YR` — though a faster rate pins the mean by
+pumping DOWN harder after every event, which the depth histogram suggests
+would deepen flooding, not relieve it) and the shape of the flooded lobe
+itself (the buoyancy floor / drowning-retirement pathway). Each needs its
+own measurement pass — one knob at a time, per the #66/#101 discipline.
+
+Baseline note (the issue's pairing clause): these numbers were measured on
+the current stack, WITHOUT the age-depth re-key follow-up. If that lands,
+it reshapes late-time hypsometry and this table should be re-measured
+against the combined stack.

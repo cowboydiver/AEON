@@ -552,7 +552,12 @@ key:
   crust stays flooded at every checkpoint over 4.5 Gyr (Earth ~25%;
   baseline 0%), 9–27% of ocean area sits on continental crust (Earth
   ~17%), sea level equilibrates at −3.3..−3.7 km, and continental crust
-  holds 24–36% of the sphere. Default OFF — measurement prototype.
+  holds 24–36% of the sphere. The #101 calibration sweep (targets
+  400/600/800 m × the golden seeds) measured the flooded share
+  *insensitive* to `FREEBOARD_TARGET_M` — the overshoot vs Earth's ~25%
+  is structural (rate-bound relaxation + a flooded lobe piled against the
+  buoyancy floor), so the target keeps its cleanly-anchored 400 m; see
+  the findings doc. Default OFF — measurement prototype.
 
 `energyBalance` (#30): the Phase 3 climate hub. A Budyko–Sellers **zonal
 energy-balance model** solved on `ENERGY_BALANCE_BANDS` (90) equal-area
