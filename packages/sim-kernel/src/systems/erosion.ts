@@ -54,7 +54,7 @@
  * accumulating sedimentM in fixed cell order, which is deterministic.
  */
 
-import { oceanicDepthForAge } from '../bathymetry';
+import { seaKeyedOceanicDepthForAge } from '../bathymetry';
 import { labelContinentalComponents } from '../components';
 import {
   EROSION_PRECIP_FACTOR_MAX,
@@ -69,7 +69,7 @@ import {
   OROGENIC_ROOT_REFERENCE_M,
   SEDIMENT_SHELF_CEILING_M,
 } from '../constants';
-import { landDatumOffsetM, platformDatumOffsetM } from '../datums';
+import { bathymetryDatumOffsetM, landDatumOffsetM, platformDatumOffsetM } from '../datums';
 import { cellCount, neighborTable } from '../grid';
 import type { System } from '../step';
 
@@ -93,6 +93,11 @@ export const erosionSystem: System = {
     const datumOffset = platformDatumOffsetM(state);
     const shelfCeiling = datumOffset + SEDIMENT_SHELF_CEILING_M;
     const planationLevel = datumOffset + MICROCONTINENT_FOUNDER_ELEVATION_M;
+    // Sea-level-keyed bathymetry (#102, datums.ts + bathymetry.ts): the
+    // shelf-room check measures the relaxation target (age-depth curve +
+    // sediment), so the curve reference carries the bathymetry datum offset;
+    // offset 0 means the exact absolute curve.
+    const bathyOffset = bathymetryDatumOffsetM(state);
 
     // Marine planation (#90): per-cell wave-attack strength, 1 − area/ref
     // clamped to [0, 1] — full attack on a speck, none at/above the
@@ -152,7 +157,7 @@ export const erosionSystem: System = {
           if (old[i]! > seaLevel) {
             // The shelf's remaining capacity: how far the relaxation target
             // (age-depth curve + sediment) still sits below the fill ceiling.
-            const room = shelfCeiling - (oceanicDepthForAge(crustAge[j]!) + sedimentM[j]!);
+            const room = shelfCeiling - (seaKeyedOceanicDepthForAge(crustAge[j]!, bathyOffset) + sedimentM[j]!);
             if (room > 0) {
               const flux = Math.min(
                 // Rivers grade to base level (sea level, #33), so export scales
@@ -176,7 +181,7 @@ export const erosionSystem: System = {
           // above may just have raised), so conservation is unchanged.
           if (planation !== null && planation[i]! > 0) {
             if (old[i]! <= planationLevel) continue;
-            const room = shelfCeiling - (oceanicDepthForAge(crustAge[j]!) + sedimentM[j]!);
+            const room = shelfCeiling - (seaKeyedOceanicDepthForAge(crustAge[j]!, bathyOffset) + sedimentM[j]!);
             if (room <= 0) continue;
             const flux = Math.min(
               MARINE_PLANATION_RATE_M_PER_YR * dtYears * planation[i]!,

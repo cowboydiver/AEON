@@ -163,6 +163,34 @@ export interface PlanetParams {
    *  Default 0. */
   freeboardOnsetYears: number;
   /**
+   * Re-key the oceanic age-depth reference to the dynamic sea level (#102):
+   * every consumer of the age-depth curve — the thermal-subsidence target,
+   * trench pinning, divergent gap fill, consolidation island flips, and the
+   * sediment shelf-room check — reads it through
+   * `seaKeyedOceanicDepthForAge(age, bathymetryDatumOffsetM(state))`
+   * (bathymetry.ts / datums.ts; the offset is the previous step's
+   * `seaLevelM` — the standard explicit lag). The curve's CREST caps at
+   * `OCEAN_RIDGE_MIN_SUBMERGENCE_M` below the sea while the abyssal end
+   * stays absolute (the volume anchor), so ridge crests stay submerged
+   * instead of standing ~1 km proud of the deep-time sea as emergent island
+   * chains. Tracking the WHOLE curve 1:1 — the shape the seaLevelDatums
+   * prototype excluded as divergent — was measured (#102) to diverge at the
+   * ocean relief relax rate even WITH the freeboard anchor: the keyed basin
+   * capacity exceeds the conserved water inventory ~2.3×, so no equilibrium
+   * exists (see docs/SEA_LEVEL_DATUM_FINDINGS.md). Designed to
+   * run as the third layer of the datum stack — measured with
+   * `seaLevelDatums` AND `freeboard` also on; with the stack off, the
+   * re-keyed floor and the absolute platform/land datums disagree by the
+   * full sea-level fall (documented cross-mechanism interaction, same
+   * posture as the blockElevationCap note in blockIsostasy.ts). Default
+   * OFF — measurement prototype, same posture as #84/#88-#91.
+   */
+  bathymetryDatum: boolean;
+  /** Sim year before which bathymetryDatum is inert even when enabled — the
+   *  branched-A/B onset, same contract as blockIsostasyOnsetYears.
+   *  Default 0. */
+  bathymetryDatumOnsetYears: number;
+  /**
    * Enable the biosphere (#37, Phase 4): ocean life, oxygenation, and — from
    * #39 — land vegetation. The ablation switch, **default `true`** (the
    * biosphere is a shipped feature, not a prototype). When `false` the life
@@ -287,6 +315,8 @@ export function createPlanetParams(partial: Partial<PlanetParams> & { seed: numb
     seaLevelDatumsOnsetYears: 0,
     freeboard: false,
     freeboardOnsetYears: 0,
+    bathymetryDatum: false,
+    bathymetryDatumOnsetYears: 0,
     biosphereEnabled: true,
     abiogenesisRatePerYear: ABIOGENESIS_RATE_PER_YR,
     initialOxygenPAL: INITIAL_OXYGEN_PAL,

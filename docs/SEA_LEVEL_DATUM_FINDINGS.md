@@ -98,8 +98,10 @@ web-sidebar toggle via the mechanism registry.
   downward drift at the relaxation rate, and in the limit a degenerate
   sea-level solve (ocean volume independent of the level). Anchoring the
   seafloor absolutely is what keeps the #33 bisection well-posed. The
-  emergent-ridge artifact therefore **survives this prototype** and needs
-  the freeboard follow-up below.
+  emergent-ridge artifact therefore **survives this prototype**; the #102
+  `bathymetryDatum` mechanism (below) later measured full tracking
+  divergent even WITH the freeboard anchor, and re-keys only the ridge
+  crest against an absolutely-anchored abyss.
 - **The land-relief constants** (`OROGENY_MAX_ELEVATION_M`,
   `OROGENIC_ROOT_REFERENCE_M`). Physically these are also
   sea-level-relative ("9 km peaks", "1 km residual root"), but re-keying
@@ -265,13 +267,11 @@ the target across 400–800 m.
 
 - **Emergent ridge chains** still cross the late-time oceans: the age-depth
   curve stays absolute (ridge −2500 m vs sea ~−3600 m ⇒ crests stand ~1 km
-  proud). Freeboard provides the isostatic anchor this doc named as the
-  prerequisite for re-keying it, so a sea-level-relative age-depth curve is
-  now a *feasible* follow-on prototype — but it still needs its own care:
-  the sea-level solve degenerates as the fraction of sea-tracking floor
-  approaches 1, so the re-key must leave enough absolutely-anchored (or
-  continental) hypsometry near the waterline to keep the bisection
-  conditioned.
+  proud). This doc originally named freeboard as the isostatic anchor that
+  would make a sea-level-relative curve feasible — the #102 measurement
+  below found that anchor volumetrically too small for full tracking
+  (~0.3 km-equivalent against a ~2.2 km-equivalent basin deficit), and
+  shipped the crest-cap shape instead: see "The age-depth re-key (#102)".
 - The **flooded share (~45–60%) overshoots Earth's ~25%** — measured by
   the #101 sweep below to be structural, NOT a `FREEBOARD_TARGET_M`
   calibration question: the target stays at its cleanly-anchored 400 m.
@@ -362,6 +362,228 @@ itself (the buoyancy floor / drowning-retirement pathway). Each needs its
 own measurement pass — one knob at a time, per the #66/#101 discipline.
 
 Baseline note (the issue's pairing clause): these numbers were measured on
-the current stack, WITHOUT the age-depth re-key follow-up. If that lands,
-it reshapes late-time hypsometry and this table should be re-measured
-against the combined stack.
+the current stack, WITHOUT the age-depth re-key follow-up. That follow-up
+landed as the `bathymetryDatum` mechanism below — see its paired table for
+how the combined stack moves the freeboard-side metrics.
+
+## The age-depth re-key (#102): the `bathymetryDatum` mechanism — crest rides the sea, abyss anchors the volume
+
+The last first-order residual: emergent mid-ocean ridge chains. The design
+curve puts ridge crests at −2500 m absolute while the equilibrium sea rides
+−3.4..−3.7 km, so every spreading center stands ~0.9–1.2 km proud as a
+dotted island chain (measured baseline, seed 42: 20–80% of <20 Myr crust
+emergent at late-time checkpoints). #102 scoped re-keying the curve to the
+sea level, with three candidate shapes to prototype and measure. Measured
+verdict: **full tracking has no equilibrium and cannot be conditioned by
+freeboard; the shippable shape is a sea-keyed CREST against an absolute
+abyss.** The mechanism is `bathymetryDatum` (default off,
+`bathymetry.ts`/`datums.ts`, `--bathymetry-datum`, designed as the third
+layer of the datum stack).
+
+### The water budget rules first (measured before any re-key ran)
+
+Whether ANY floor-tracks-sea shape can equilibrate is a volume question,
+so it was measured first (seed 42, N=64, 4.5 Gyr, seaLevelDatums +
+freeboard, no re-key). The conserved inventory is **1737 m
+global-equivalent**; a fully-relaxed sea-keyed floor demands
+`Σ|curve+sediment|` over oceanic cells — **3.9–4.1 km-equivalent** at every
+late-time checkpoint (the age distribution is mature: mean |curve+sed|
+5.2–5.7 km over 70–75% of the sphere). The deficit, +1.9..+2.3
+km-equivalent, dwarfs the only slack in the system — flooded continental
+crust holds just 0.2–0.47 km-equivalent, and the freeboard relaxation
+resupplies volume at 20 m/Myr against an ocean-relief relax of 200 m/Myr.
+The sim's ocean is *underfilled* relative to Earth-proportioned basins
+(the #33 inventory was calibrated against the shallow t=0 hypsometry, and
+deep-time basin maturation is exactly the sea-level plunge this document
+opened with): the water to submerge the ridges 2.5 km Earth-style does not
+exist in the inventory.
+
+### Option 1 (full 1:1 tracking): measured divergent, exactly as the budget predicts
+
+The issue's cheapest shape — every consumer adds the lagged `seaLevelM` to
+the whole curve — was implemented first and run 4.5 Gyr on seed 42 (full
+stack). The (sea, floor) pair co-falls at the ocean-relief relax rate from
+the first step and never decelerates:
+
+| t (Myr) | seaLevelM | mean freeboard | submerged cont. share | crest below sea |
+|---|---|---|---|---|
+| 100 | −19.6 km | +13.5 km | 0.1% | 2.27 km |
+| 500 | −98.9 km | +34.6 km | 0.1% | 2.27 km |
+| 2000 | −398.7 km | +27.1 km | 0.1% | (no <5 Myr crust at this keyframe) |
+| 4500 | **−899.7 km** | +28.8 km | 0.4% | 2.28 km |
+
+~197 m/Myr, metronomic. Two things worth keeping from the wreck: (a) the
+co-falling geometry does submerge the crests ~2.3 km — the "fix" works
+visually while destroying the datum; (b) freeboard is outrun ~10:1 (mean
+freeboard blows out to +21..+35 km, flooded share collapses to ~0), which
+settles the issue's option 3: the continental anchor cannot condition full
+tracking, with or without a per-step convergence check. The per-step solve
+never degenerates (each bisection sees a fixed hypsometry); the failure is
+the dynamics of the lagged pair, i.e. the drift the issue scoped as the
+risk.
+
+There is also a conservation argument for why no UNIFORM tracking factor
+can work: at any equilibrium of a `floor = f·sea + curve` family, the
+flooded oceanic geometry satisfies `V_oc((1−f)·sea) = W − V_c`, so the
+effective sea-against-curve level `(1−f)·sea` — which is what sets
+crest submergence — is pinned by the same inventory at (almost) the same
+value as today, minus only the V_c slack (≤ ~0.6 km of the needed ~2 km).
+Partial tracking would stabilize the datum and leave the chains standing.
+
+### The shipped shape: sea-keyed crest, absolute abyss, rescaled slope
+
+`seaKeyedOceanicDepthForAge(age, offset)` (bathymetry.ts): the crest caps
+at `seaLevelM − OCEAN_RIDGE_MIN_SUBMERGENCE_M` (500 m — set AT the arc
+maturation gate depth; the calibration story is under "Measured" below),
+never shallower than the −2500 m design crest and never below the abyss;
+the abyssal end stays at −6000 m absolute; the √age slope rescales so the
+curve still reaches the abyss at 100 Myr. All five consumers of the
+age-depth reference read through it (subsidence target, trench pinning,
+divergent gap fill, consolidation island flips, sediment shelf room), so
+trench/arc exemptions and `sedimentM` stacking ride with it. Offset 0
+(flag off / pre-onset) returns the design curve bit-exactly — the
+byte-identity path the main goldens pin. A sea above
+`OCEAN_RIDGE_DEPTH_M − OCEAN_RIDGE_MIN_SUBMERGENCE_M` (−2000 m) leaves
+the curve untouched, so the mechanism engages smoothly as the deep-time
+sea falls past that level, with no onset shock.
+
+Why this shape survives the budget: only the young ridge flank (<100 Myr)
+tracks the sea, with weight fading to zero at the abyssal age — a small,
+bounded volume (~0.1 km-equivalent at the equilibrium sea), not a new
+basin to fill. The bulk hypsometry stays absolutely anchored, so the
+sea-level solve keeps its slope by construction — the conditioning the
+issue demanded, delivered by construction instead of demonstration. The
+cost is honest and stated: ridge-to-abyss relief compresses from 3.5 km
+to `(crest − abyss) = seaLevelM + 5500` ≈ 1.7–2 km at the equilibrium
+sea, and crests sit shallower than Earth's 2.5 km — Earth gets both full
+relief and full submergence by having ~0.9 km-equivalent more ocean than
+this world; buying a deeper crest means revisiting the #33 water
+inventory, which is its own issue.
+
+### Measured (paired, full stack, 3 golden seeds, 4.5 Gyr, N=64)
+
+Stack-on (`seaLevelDatums + freeboard + bathymetryDatum`) vs
+stack-off-this-flag, late-time aggregates (≥ 1.5 Gyr, 31 checkpoints at
+100 Myr cadence), mean [min..max]. "crest below sea" is the mean elevation
+of <5 Myr oceanic crust relative to `seaLevelM` (positive = submerged);
+"emergent young" is the share of <20 Myr oceanic crust above the sea — the
+visible chains:
+
+| seed | arm | sea (m) | crest below sea (m) | emergent young | cont. crust | submerged cont. share | land % |
+|---|---|---|---|---|---|---|---|
+| 1 | off | −3503 | **−560** (proud) | **43.3%** [0..99.6] | 28.9% | 58.5% | 14.5% |
+| 1 | on | −3567 | **+738** [534..896] | **1.7%** [0.0..6.0] | 26.7% | 54.0% | 13.3% |
+| 42 | off | −3419 | **−481** (proud) | **37.3%** [0..98.7] | 27.5% | 43.9% | 18.0% |
+| 42 | on | −3579 | **+723** [499..831] | **1.9%** [0.0..4.2] | 27.5% | 46.8% | 15.5% |
+| 1337 | off | −3709 | **−785** (proud) | **64.5%** [0..99.8] | 24.5% | 52.5% | 14.9% |
+| 1337 | on | −3785 | **+686** [472..891] | **2.5%** [0.4..6.7] | 22.8% | 47.4% | 12.5% |
+
+**The chains are gone, and the datum is stationary.** Ridge crests hold
+~0.5–0.9 km below the surface at essentially every late-time checkpoint
+on every seed; emergent young crust collapses from "most spreading
+centers poke out somewhere" (per-checkpoint peaks of 99%+) to a 0–7%
+residual — trench-adjacent and arc cells, #91's territory, not spreading
+centers. `seaLevelM` equilibrates ~100–160 m deeper than baseline (the
+young flank's added capacity) and holds a stable band over 4.5 Gyr on
+all seeds: the crest-cap shape has none of option 1's drift, as the
+absolute-abyss anchor guarantees. Freeboard-side metrics hold within
+seed scatter: continental crust −2.2/0.0/−1.7 points, flooded share
+mixed signs, land −1.2..−2.5 points (the emergent chains WERE land —
+retiring them accounts for most of the land delta).
+
+**Shallow-ocean share and the deep floor** (paired `--crust-stats`
+arms, ≥ 1.5 Gyr means): the <500 m shallow share moves 6.6→5.5% /
+6.8→5.0% / 6.5→5.3% (seeds 1/42/1337) — the baseline's near-surface
+young-flank band thins as the compressed relief drops flanks away from
+the waterline faster, while the sediment-shelf halos (ceiling at
+`seaLevelM − 200`) are untouched; the share stays in the Earth-like
+5–7% band the datum stack restored, far above the pre-stack 1–7% decay.
+Per-keyframe minimum elevation stays at trench order on every arm
+(−6.5..−8.5 km) — the re-key wakes no deep ratchet.
+
+**Calibrating the crest depth: 1000 m was measured first, and lost.**
+The issue guessed an acceptance band of "crests ~1–2.5 km below the
+surface", so the first paired campaign ran
+`OCEAN_RIDGE_MIN_SUBMERGENCE_M = 1000` (all three seeds, 4.5 Gyr). It
+retires the chains just as completely (emergent young 1.8–2.3%, crests
+1.10–1.14 km down, sea stable at −3.7..−3.9 km) — and costs 5–7 points
+of continental crust on seeds 1/42 (28.9→22.2%, 27.5→22.3%, means below
+the 24.6% #101 floor) plus 3–6.6 points of land on every seed.
+Mechanism: in the baseline, the young oceanic flank (−2500 m absolute)
+sat ~1.4 km ABOVE the re-keyed arc-maturation gate (`seaLevelM − 500` ≈
+−3900 m), so a belt arc igniting on young crust was born above the gate
+and matured essentially instantly — the emergent ridge chains had been
+feeding continental creation. A 1000 m crest starts arcs 500 m below the
+gate, and the creation budget starves. Shipping the crest AT the gate —
+`OCEAN_RIDGE_MIN_SUBMERGENCE_M = 500 = |ARC_MATURATION_ELEVATION_M|` —
+keeps arc ignition sites at the maturation threshold the #101 world was
+calibrated with, restores the continental budget (the headline table),
+and retires the chains identically (probe table: seed 42 cont-crust
+27.5→27.5%, emergent young 1.9%). The equality of the two constants is a
+design coupling, not a coincidence: if the maturation gate ever moves,
+the crest should move with it. The stated residual: mean crest
+submergence ~0.7 km sits below the issue's speculative band — that band
+was written against Earth's 2.5 km, which this world's water inventory
+cannot buy (the budget above); the binding acceptance ("emergent ridge
+chains gone; emergent only where arcs justify it") is met.
+
+**#101 re-measured on the combined stack** (the issue's pairing clause):
+`FREEBOARD_TARGET_M = 800` × all three seeds on the full stack. Flooded
+share moves with mixed signs inside the per-checkpoint scatter, land
+holds within ±1.8 points, and the cont-crust regression #101 saw at high
+targets on seed 42 does not reappear. The #101 conclusion transfers
+unchanged to the re-keyed world: the freeboard target is not the
+flooded-share knob, and it stays at its cleanly-anchored 400 m.
+
+**dt-invariance (the lag check the issue asked for):** seed 42, full
+stack at the shipped 500 m crest, `--step-years 0.5e6` vs the 1 Myr
+default, ≥ 2.5 Gyr means: sea −3719 vs −3529 m (Δ190 m ≈ 5%, inside the
+single-run late-time range of −3766..−3134 m), crest submergence 711 vs
+729 m (2.5%); the continental/land means differ at chaotic
+trajectory-scatter level (cont 23.1 vs 26.7%, against a per-checkpoint
+range of 22.1..34.2), as any dt change reshuffles the tectonic
+trajectory. No tolerance was pre-declared by the issue; the operative
+one applied here is "inside the equilibrium's own late-time
+min..max band", which both datum quantities meet with margin. The same
+check during the 1000 m calibration campaign matched to 1.3–1.7% on
+every column. The (sea, floor) equilibrium —
+what the lag could plausibly poison — is dt-robust; the one-step lag is
+observable per-step (as with every lagged read in the kernel) but not
+in the equilibrium. The existing golden/onset suites needed no
+carve-out — they pin fixed step sizes.
+
+**Solver convergence (the issue's per-step ask, translated):** the #33
+solve is a FIXED-count bisection (`SEA_LEVEL_SOLVE_ITERATIONS = 40`,
+deterministic by design — never a convergence loop), so "iteration count
+per step" is constant and the meaningful margin is bracket precision:
+`(maxElev − minElev) / 2^40` ≈ 2×10⁻⁸ m at the observed ~20 km elevation
+range, identical on- and off-stack — degradation would require the
+elevation range to grow by orders of magnitude, which is exactly the
+option-1 drift mode. The conditioning regression test
+(`bathymetryDatum.test.ts`) runs the full stack through the
+fastest-moving first 100 Myr asserting the volume-function slope at every
+solved level stays above 0.2 (it is the flooded fraction, ~0.85 in
+practice) and every per-step sea move stays inside the physical rate
+envelope — the two quantities that would actually degenerate if the
+sea-tracking fraction of the hypsometry approached 1.
+
+**Flipbooks at the shipped 500 m crest** (elevation, all three seeds,
+frames every 250 Myr, re-dumped after the calibration and inspected
+against the #101 baseline set): the baseline's dotted green chains
+crossing every open ocean are gone at mid- and late-time on all seeds —
+spreading centers read as soft submerged ribbons a shade lighter than
+the abyss (seed 1's late-time mid-ocean triple junction is entirely
+underwater). The emergent linear features that remain hug continental
+margins (arcs and shelf-edge peaks, #91's residual, present in both
+arms); trenches, arc belts, and shelf halos stay put, and continents
+stay coherent with emergent cores. Numbers passing AND the chains
+visibly gone — the failure mode the issue warned about did not occur.
+
+**Shipped state:** `bathymetryDatum` default OFF (measurement prototype,
+same posture as the rest of the datum stack), `--bathymetry-datum` CLI
+flag and `--ab bathymetry-datum` arm, web-sidebar toggle via the
+mechanism registry, own golden-spine entry and onset-gating arm, main
+goldens byte-identical. Follow-ups this pass surfaced, each its own
+measurement: the #33 water-inventory revisit (the only route to Earth's
+2.5 km crest submergence AND full ridge relief), and the flooded-share
+overshoot (#101's residual, unchanged by this mechanism).

@@ -44,7 +44,7 @@ export { dot3, cross3, normalize3, perpendicular3, angleBetween, rotateAroundAxi
 export { partitionPlates, applyInitialPlates, plateVelocityAt, type PlateRecord } from './plates';
 export { computeBoundaryStress, dominantOtherPlate, overrides } from './systems/boundaries';
 export { EVENT_KINDS, copyEvents, type SimEvent, type SimEventKind } from './events';
-export { oceanicDepthForAge, oceanicAgeForDepth } from './bathymetry';
+export { oceanicDepthForAge, oceanicAgeForDepth, seaKeyedOceanicDepthForAge } from './bathymetry';
 export {
   step,
   run,

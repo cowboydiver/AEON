@@ -11,7 +11,7 @@
  * than stored as a second field.
  */
 
-import { oceanicDepthForAge } from '../bathymetry';
+import { seaKeyedOceanicDepthForAge } from '../bathymetry';
 import {
   ACTIVE_MARGIN_STRESS_M_PER_YR,
   ARC_CREATION_REFERENCE_GRID_N,
@@ -27,7 +27,7 @@ import {
   OROGENY_WIDTH_CELLS,
   TRENCH_EXTRA_DEPTH_M,
 } from '../constants';
-import { landDatumOffsetM, platformDatumOffsetM } from '../datums';
+import { bathymetryDatumOffsetM, landDatumOffsetM, platformDatumOffsetM } from '../datums';
 import { cellCenterTable, neighborTable } from '../grid';
 import { plateVelocityAt } from '../plates';
 import type { PlanetState } from '../state';
@@ -213,6 +213,11 @@ export function applyConvergentTopography(
   // mechanism it rides the dynamic sea level, and is exactly the absolute
   // constant when the mechanism is off.
   const orogenyCeiling = landDatumOffsetM(state) + OROGENY_MAX_ELEVATION_M;
+  // Sea-level-keyed bathymetry (#102, datums.ts + bathymetry.ts): the trench
+  // hard-set pins below the age-depth reference, whose crest rides the
+  // dynamic sea level under the bathymetryDatum mechanism; offset 0 means
+  // the exact absolute curve.
+  const bathyOffset = bathymetryDatumOffsetM(state);
   // Arc cells that reached maturation elevation this step (#67): maturation
   // is decided in one attachment pass after the margin loop, not inline —
   // see below.
@@ -265,7 +270,7 @@ export function applyConvergentTopography(
     } else {
       // Subducting side is always oceanic (continental crust never loses to
       // oceanic under overrides(), and continent-continent is collision).
-      elevation[i] = oceanicDepthForAge(crustAge[i]!) - TRENCH_EXTRA_DEPTH_M * norm;
+      elevation[i] = seaKeyedOceanicDepthForAge(crustAge[i]!, bathyOffset) - TRENCH_EXTRA_DEPTH_M * norm;
     }
   }
 
