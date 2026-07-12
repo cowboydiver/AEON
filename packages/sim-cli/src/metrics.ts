@@ -66,7 +66,9 @@ export interface CrustStats {
   /** Ocean cells shallower than SHALLOW_OCEAN_DEPTH_M, as a share of the
    *  SPHERE (Earth's shelf seas: ~7-8%). */
   shallowOceanFrac: number;
-  /** Emergent share of the sphere (Earth: ~29%). */
+  /** Emergent share of the sphere (Earth: ~29%). NOTE: measured against the
+   *  dynamic sea level, unlike KeyframeMetrics.landFrac, which keeps its
+   *  historical 0 m-datum definition — don't join the two tables on this. */
   landFrac: number;
   /** Minimum elevation — the buoyancy-floor ratchet tripwire (#101): healthy
    *  is trench order (−6..−9 km), not the pre-floor −17 km runaway. */

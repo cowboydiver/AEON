@@ -332,15 +332,20 @@ keeps consuming.
    not of the datum the mean relaxes toward.
 
 **Couplings verified across all 9 runs** (the issue's watch-list): minimum
-elevation stays at trench order (−6.0..−8.5 km) at every target — the
-−17.8 km ratchet stays dead and `CONTINENTAL_BUOYANCY_FLOOR_M` needed no
-retuning; the shallow-ocean share holds its Earth-like 6–7% of the sphere
-everywhere — the passive-margin shelf level is target-independent, as
-designed; sea level equilibrates at −3.4..−3.7 km in all runs. Flipbooks
-(all three seeds at 400 m, seed 42 at 800 m for the A/B): coherent
-continents with emergent cores, shelf halos and permanent interior seas in
-every run — and the 800 m maps read no more emergent than the 400 m maps,
-corroborating the numbers.
+elevation stays at trench order at every target — the table column is the
+late-time mean of the per-keyframe minima; the per-keyframe extremes
+across all runs span −6.0..−8.5 km, so no single-keyframe excursion hides
+in the average — the −17.8 km ratchet stays dead and
+`CONTINENTAL_BUOYANCY_FLOOR_M` needed no retuning. The shelf band itself
+persists: the depth histogram's 0–150 m (shelf-level) and 150–500 m
+buckets hold 1–2% and 5–13% of submerged continental cells at every
+checkpoint, and the shallow-ocean share holds its Earth-like 6–7% of the
+sphere at every target — the passive-margin shelf level is
+target-independent, as designed. Sea level equilibrates at −3.4..−3.7 km
+in all runs. Flipbooks (all three seeds at both 400 m and 800 m):
+coherent continents with emergent cores, shelf halos and permanent
+interior seas in every run — and the 800 m maps read no more emergent
+than the 400 m maps on any seed, corroborating the numbers.
 
 **Decision: `FREEBOARD_TARGET_M` stays 400 m** — the cleanly-anchored
 value (t=0 construction + Earth's continental mean). Raising it buys
