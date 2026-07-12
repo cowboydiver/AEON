@@ -491,6 +491,16 @@ seed scatter: continental crust −2.2/0.0/−1.7 points, flooded share
 mixed signs, land −1.2..−2.5 points (the emergent chains WERE land —
 retiring them accounts for most of the land delta).
 
+**Shallow-ocean share and the deep floor** (paired `--crust-stats`
+arms, ≥ 1.5 Gyr means): the <500 m shallow share moves 6.6→5.5% /
+6.8→5.0% / 6.5→5.3% (seeds 1/42/1337) — the baseline's near-surface
+young-flank band thins as the compressed relief drops flanks away from
+the waterline faster, while the sediment-shelf halos (ceiling at
+`seaLevelM − 200`) are untouched; the share stays in the Earth-like
+5–7% band the datum stack restored, far above the pre-stack 1–7% decay.
+Per-keyframe minimum elevation stays at trench order on every arm
+(−6.5..−8.5 km) — the re-key wakes no deep ratchet.
+
 **Calibrating the crest depth: 1000 m was measured first, and lost.**
 The issue guessed an acceptance band of "crests ~1–2.5 km below the
 surface", so the first paired campaign ran
