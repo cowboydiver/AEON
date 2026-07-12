@@ -262,12 +262,19 @@ export function encodedKeyframeBytes(gridN: number): number {
 
 /**
  * Main-thread retained-history budget, bytes (#27). The full history's quantized
- * keyframes live in memory for scrubbing; this caps that. 0.5 GB holds 4.5 Gyr @
- * 10 Myr @ N=128 (~0.50 GB now the Phase 3 viz fields are stored — 12 B/cell,
- * up from 7) with a few MB to spare, and `planHistory` coarsens the keyframe
- * interval to stay under it for heavier requests.
+ * keyframes live in memory for scrubbing; this caps that. The headline history —
+ * 4.5 Gyr @ 10 Myr @ N=128 — is 451 keyframes of 9 stored fields (11 B/cell) +
+ * header = ~1.031 MiB each ≈ 0.454 GiB, so it fit the old 0.5 GB ceiling with
+ * only ~45 frames of slack. That margin was too thin to absorb another stored
+ * field (Phase 4's `vegetation`, #39) or a finer keyframe interval, so the
+ * ceiling is 1 GB: ~2.2× the headline history, room to grow the field set and
+ * tighten the cadence. It is a device-memory safety cap (retained `ArrayBuffer`s
+ * on the main thread, plus IndexedDB write-through), not an implementation limit
+ * — nothing here is sized to it. `planHistory` coarsens the keyframe interval to
+ * stay under it for heavier requests. The GPU texture budget is separate (~64 MB,
+ * a handful of resident keyframes) and unaffected by this value.
  */
-export const MAX_RETAINED_HISTORY_BYTES = 0.5 * 1024 * 1024 * 1024;
+export const MAX_RETAINED_HISTORY_BYTES = 1 * 1024 * 1024 * 1024;
 
 export interface HistoryPlan {
   readonly untilYears: number;
@@ -303,11 +310,31 @@ export function planHistory(
   return { untilYears, keyframeIntervalYears: interval, keyframeCount: count, bytes: per * count, clamped: true };
 }
 
+/**
+ * The scalar `globals` carried alongside each keyframe for the app's time-series
+ * panel — the well-mixed reservoirs that drive the systems but live in no per-cell
+ * field (so they are otherwise invisible at render). Sent as metadata, NOT in the
+ * codec payload, so adding them does not touch `HISTORY_FORMAT_VERSION` or any
+ * golden. All are copied straight from `PlanetState.globals`.
+ */
+export interface KeyframeGlobals {
+  /** Atmospheric CO₂, ppm (#34 carbonate–silicate thermostat). */
+  readonly co2: number;
+  /** Global mean surface temperature, K (#30). */
+  readonly meanTemperatureK: number;
+  /** Atmospheric O₂, present-atmospheric-level units (#37 oxygenation). */
+  readonly oxygen: number;
+  /** Eustatic sea level relative to the 0 m datum, m (#33). */
+  readonly seaLevelM: number;
+}
+
 /** One streamed history keyframe: metadata + the transferable encoded payload. */
 export interface EncodedKeyframe {
   /** 0-based index in emission order (0 = initial state). */
   readonly index: number;
   readonly timeYears: number;
+  /** Scalar reservoir globals for the time-series panel (see `KeyframeGlobals`). */
+  readonly globals: KeyframeGlobals;
   /** Fraction of cells above the fixed 0 m datum — derived from elevation, so
    *  the UI needn't decode to show it. NOTE: since #33 this is a *proxy* that no
    *  longer equals `PlanetState.globals.landFraction` (now emergent from the
@@ -338,9 +365,16 @@ export function* encodeHistory(
     const elevation = kf.fields.elevation;
     let land = 0;
     for (let i = 0; i < count; i++) if (elevation[i]! >= 0) land++;
+    const g = kf.globals;
     yield {
       index: index++,
       timeYears: kf.timeYears,
+      globals: {
+        co2: g.co2,
+        meanTemperatureK: g.meanTemperatureK,
+        oxygen: g.oxygen,
+        seaLevelM: g.seaLevelM,
+      },
       landFraction: land / count,
       payload: encodeKeyframe(kf.fields, count),
     };

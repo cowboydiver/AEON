@@ -62,10 +62,35 @@ export function createPlanetUniforms() {
     /** Debug tectonic map: 0 = normal biome surface, 1 = crust-type colours
      *  (oceanic vs continental) with plate boundaries drawn as dark lines. */
     plateDebug: uniform(0),
+    /** Scalar debug field: 0 = off (beauty/plate surface). 1..N selects a
+     *  continuous field (temperature, precipitation, marine life, crust age),
+     *  false-coloured through a viridis ramp — see `DEBUG_FIELDS`. Takes
+     *  precedence over `plateDebug`. */
+    debugField: uniform(0),
+    /** Strength of the marine-productivity green tint on ocean cells (#38);
+     *  0 = plain bathymetry, 1 = full productive-green at marineLife = 1. */
+    marineTint: uniform(0.6),
   };
 }
 
 export type PlanetUniforms = ReturnType<typeof createPlanetUniforms>;
+
+/**
+ * Scalar debug fields, in the order the `debugField` uniform selects them
+ * (index 1..N; 0 = off). `min`/`max` are the DISPLAY normalization range mapped
+ * to the viridis ramp's [0,1] (values clamp outside it); the UI legend reads
+ * these. `crustAge` is in MEGAYEARS — the texture stores years×1e-6 so the value
+ * fits half-float (see textures.ts `CRUST_AGE_TEXTURE_SCALE`), so its range is in
+ * Myr too. The order here MUST match the material's selection fold below.
+ */
+export const DEBUG_FIELDS = [
+  { key: 'temperature', label: 'Temperature', unit: 'K', min: 240, max: 320 },
+  { key: 'precipitation', label: 'Precipitation', unit: 'kg/m²/yr', min: 0, max: 3000 },
+  { key: 'marineLife', label: 'Marine life', unit: '', min: 0, max: 1 },
+  { key: 'crustAge', label: 'Crust age', unit: 'Myr', min: 0, max: 200 },
+] as const;
+
+export type DebugFieldKey = (typeof DEBUG_FIELDS)[number]['key'];
 
 /** One face's textures from a single keyframe set (A or B). */
 export interface FaceTextures {
@@ -74,6 +99,9 @@ export interface FaceTextures {
   crustType: DataTexture;
   biome: DataTexture;
   iceFraction: DataTexture;
+  /** RGBA pack of the debug scalars: R=temperature, G=precipitation, B=marineLife,
+   *  A=crustAge (Myr). See textures.ts `DEBUG_SCALAR_FIELDS`. */
+  debugScalars: DataTexture;
 }
 
 // Ocean depth ramp anchors (linear-ish sRGB values).
@@ -91,6 +119,22 @@ const OCEANIC_CRUST_COLOR = vec3(0.09, 0.32, 0.55);
 const CONTINENTAL_CRUST_COLOR = vec3(0.76, 0.6, 0.32);
 // Plate boundaries: near-black cartographic lines, high-contrast on both crusts.
 const PLATE_BOUNDARY_COLOR = vec3(0.02, 0.02, 0.03);
+
+// Marine-productivity tint: ocean cells green toward this as `marineLife` → 1
+// (#38). A teal-leaning green that reads as "living sea" without erasing the
+// bathymetric depth gradient it modulates.
+const PRODUCTIVE_OCEAN = vec3(0.13, 0.5, 0.42);
+
+// Viridis anchors (perceptually-uniform, colour-blind-safe), low→high. Used for
+// every scalar debug field so "brighter/yellower = larger value" is a single
+// consistent reading; the legend supplies each field's units and range.
+const VIRIDIS: Vec3Node[] = [
+  vec3(0.267, 0.005, 0.329), // #440154
+  vec3(0.231, 0.322, 0.545), // #3b528b
+  vec3(0.129, 0.565, 0.553), // #21908d
+  vec3(0.365, 0.784, 0.388), // #5dc863
+  vec3(0.993, 0.906, 0.144), // #fde725
+];
 
 // The general TSL node types (`Node<"vec3">` / `Node<"float">`), named via the
 // return of `select` instantiated at each — a `vec3(...)` anchor (a VarNode) and
@@ -165,6 +209,21 @@ function plateBoundary(plateId: DataTexture, coord: ReturnType<typeof uv>, texel
   return select(maxDiff.greaterThan(0.5), float(1), float(0));
 }
 
+/**
+ * Map a normalized scalar `t` ∈ [0,1] through the viridis ramp as four clamped
+ * mixes across the five anchors — the same multi-stop-gradient technique the CLI
+ * dump uses, on the GPU. `t` outside [0,1] is caller-clamped, so the ends hold
+ * the first/last anchor.
+ */
+function viridis(t: FloatNode): Vec3Node {
+  const s = t.mul(VIRIDIS.length - 1); // 0..4 across the anchor spans
+  let color: Vec3Node = VIRIDIS[0]!;
+  for (let i = 1; i < VIRIDIS.length; i++) {
+    color = mix(color, VIRIDIS[i]!, clamp(s.sub(i - 1), 0, 1));
+  }
+  return color;
+}
+
 export function createPlanetMaterial(
   a: FaceTextures,
   b: FaceTextures,
@@ -201,7 +260,17 @@ export function createPlanetMaterial(
   const biome = sampleNearest(a.biome, b.biome);
   const biomeColor = biomePalette(biome);
   const depthT = clamp(elevation.div(-INITIAL_OCEAN_DEPTH_M), 0, 1);
-  const oceanColor = mix(SHALLOW_OCEAN, DEEP_OCEAN, depthT);
+  const bathyColor = mix(SHALLOW_OCEAN, DEEP_OCEAN, depthT);
+  // Debug scalars, blended A→B once and reused: R=temperature, G=precipitation,
+  // B=marineLife, A=crustAge (Myr) — see textures.ts `DEBUG_SCALAR_FIELDS`.
+  const debugA = texture(a.debugScalars, coord);
+  const debugB = texture(b.debugScalars, coord);
+  const debugScalars = mix(debugA, debugB, uniforms.blend);
+  // Marine-productivity tint (#38): green the sea by the blended `marineLife`
+  // (B channel; continuous, 0 on land so land is untouched even before the ocean
+  // mask). `marineTint` scales it, so 0 restores plain bathymetry.
+  const marine = clamp(debugScalars.b, 0, 1);
+  const oceanColor = mix(bathyColor, PRODUCTIVE_OCEAN, marine.mul(uniforms.marineTint));
   const albedo = select(biome.lessThan(0.5), oceanColor, biomeColor);
 
   // Categorical: nearest-pick the plate id (never lerp) and modulate the albedo
@@ -235,7 +304,31 @@ export function createPlanetMaterial(
 
   // `plateDebug` is 0/1, so this is a clean swap between the biome surface and the
   // crust-type + boundary map (a single uniform flip, no texture re-upload).
-  const surface = mix(iced, debugSurface, uniforms.plateDebug);
+  const beautyOrPlate = mix(iced, debugSurface, uniforms.plateDebug);
+
+  // Scalar debug fields: read each blended channel (R/G/B/A), normalize to the
+  // DISPLAY range in DEBUG_FIELDS, and false-colour through viridis. `crustAge`
+  // (A) is stored in Myr in its texture (years×1e-6, see textures.ts), so its
+  // range is Myr too. One field shows at a time, picked by the `debugField`
+  // uniform via a threshold fold (default = the last field; lower thresholds
+  // override) — the SAME pattern as `biomePalette`. Channel order MUST match
+  // DEBUG_FIELDS / textures.ts `DEBUG_SCALAR_FIELDS`.
+  const norm = (value: FloatNode, lo: number, hi: number): FloatNode =>
+    clamp(value.sub(lo).div(hi - lo), 0, 1);
+  const tTemperature = norm(debugScalars.r, 240, 320);
+  const tPrecipitation = norm(debugScalars.g, 0, 3000);
+  const tMarineLife = clamp(debugScalars.b, 0, 1);
+  const tCrustAge = norm(debugScalars.a, 0, 200);
+  let debugT: FloatNode = tCrustAge; // 4
+  debugT = select(uniforms.debugField.lessThan(3.5), tMarineLife, debugT); // 3
+  debugT = select(uniforms.debugField.lessThan(2.5), tPrecipitation, debugT); // 2
+  debugT = select(uniforms.debugField.lessThan(1.5), tTemperature, debugT); // 1
+  const scalarSurface = viridis(debugT);
+
+  // `debugField > 0` shows the scalar false-colour map and wins over the
+  // beauty/plate surface. Displacement and shading are unchanged, so the field
+  // reads as relief-lit false colour on the same globe.
+  const surface = select(uniforms.debugField.greaterThan(0.5), scalarSurface, beautyOrPlate);
 
   // Lambert-ish: geometric (radial) normal against the sun uniform + ambient.
   const nDotL = normalWorld.dot(uniforms.sunDirection).max(0);

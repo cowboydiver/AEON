@@ -21,6 +21,7 @@ import {
   KERNEL_BEHAVIOR_VERSION,
   MECHANISMS,
   defaultMechanismToggles,
+  type KeyframeGlobals,
   type MechanismToggles,
 } from 'sim-kernel';
 
@@ -28,6 +29,15 @@ const DB_NAME = 'aeon-history';
 const DB_VERSION = 1;
 const MANIFEST_STORE = 'manifests';
 const KEYFRAME_STORE = 'keyframes';
+
+/**
+ * Cache-record schema version, folded into the key. Bump when the stored
+ * `CachedKeyframe` shape changes in a way that isn't covered by
+ * HISTORY_FORMAT_VERSION (which tracks only the codec payload). v2 added the
+ * `globals` metadata (co2/temperature/oxygen/sea level) for the time-series
+ * panel, so v1 records — which lack it — must miss and re-stream.
+ */
+const CACHE_SCHEMA_VERSION = 2;
 
 export interface HistoryCacheConfig {
   seed: number;
@@ -44,6 +54,8 @@ export interface CachedKeyframe {
   index: number;
   timeYears: number;
   landFraction: number;
+  /** Scalar reservoir globals for the time-series panel (see `KeyframeGlobals`). */
+  globals: KeyframeGlobals;
   payload: ArrayBuffer;
 }
 
@@ -73,6 +85,7 @@ export function historyCacheKey(cfg: HistoryCacheConfig): string {
     cfg.keyframeIntervalYears,
     HISTORY_FORMAT_VERSION,
     KERNEL_BEHAVIOR_VERSION,
+    `c${CACHE_SCHEMA_VERSION}`,
     // One entry per mechanism whose toggle differs from the kernel default,
     // in registry order (deterministic). All-defaults keeps the clean key;
     // the KERNEL_BEHAVIOR_VERSION component above already retires every
@@ -166,10 +179,11 @@ export class HistoryCache {
       }
 
       void this.touch(key); // best-effort LRU bump; a failure must not fail the hit
-      return records.map(({ index, timeYears, landFraction, payload }) => ({
+      return records.map(({ index, timeYears, landFraction, globals, payload }) => ({
         index,
         timeYears,
         landFraction,
+        globals,
         payload,
       }));
     } catch {

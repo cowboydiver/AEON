@@ -85,6 +85,7 @@ export function createPlanetMesh(gridN: number, radiusMeters: number): PlanetHan
           crustType: fieldsA.crustType[face]!,
           biome: fieldsA.biome[face]!,
           iceFraction: fieldsA.iceFraction[face]!,
+          debugScalars: fieldsA.debugScalars[face]!,
         },
         {
           elevation: fieldsB.elevation[face]!,
@@ -92,6 +93,7 @@ export function createPlanetMesh(gridN: number, radiusMeters: number): PlanetHan
           crustType: fieldsB.crustType[face]!,
           biome: fieldsB.biome[face]!,
           iceFraction: fieldsB.iceFraction[face]!,
+          debugScalars: fieldsB.debugScalars[face]!,
         },
         uniforms,
         radiusMeters,

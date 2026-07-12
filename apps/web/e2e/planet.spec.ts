@@ -232,6 +232,46 @@ test('plate-debug toggle repaints the globe with the crust-type + boundary map',
   expect(diffFraction(terrain, back), 'toggling off restores terrain').toBeLessThan(0.02);
 });
 
+test('scalar debug-field selector false-colours the globe and reverts', async ({ page }) => {
+  await page.goto('/?until=100e6');
+  await page.waitForSelector('[data-planet-ready="1"]', { timeout: 90_000 });
+  await expect(page.locator('[data-history-progress]')).toHaveAttribute(
+    'data-history-progress',
+    'done',
+    { timeout: 60_000 },
+  );
+
+  const canvas = page.locator('canvas');
+  const select = page.locator('[data-debug-field]');
+  mkdirSync(ARTIFACTS_DIR, { recursive: true });
+
+  // Beauty view first.
+  await expect(select).toHaveValue('0');
+  await settle(page);
+  const beauty = await canvas.screenshot({ path: join(ARTIFACTS_DIR, 'field-off.png') });
+
+  // Temperature (index 1): the whole globe becomes a viridis false-colour map —
+  // a wholesale surface swap, so a large share of pixels change. The legend appears.
+  await select.selectOption('1');
+  await expect(page.locator('[data-debug-legend]')).toBeVisible();
+  await settle(page);
+  const temperature = await canvas.screenshot({ path: join(ARTIFACTS_DIR, 'field-temperature.png') });
+  expect(diffFraction(beauty, temperature), 'temperature map repaints the globe').toBeGreaterThan(0.05);
+
+  // Marine life (index 3) differs from temperature — a different field, different map.
+  await select.selectOption('3');
+  await settle(page);
+  const marine = await canvas.screenshot({ path: join(ARTIFACTS_DIR, 'field-marineLife.png') });
+  expect(diffFraction(temperature, marine), 'marine-life map differs from temperature').toBeGreaterThan(0.02);
+
+  // Back to Off restores the beauty frame (uniform flip only — deterministic).
+  await select.selectOption('0');
+  await expect(page.locator('[data-debug-legend]')).toHaveCount(0);
+  await settle(page);
+  const back = await canvas.screenshot();
+  expect(diffFraction(beauty, back), 'Off restores the beauty view').toBeLessThan(0.02);
+});
+
 test('renders the dual-sample blend material without stalling (Spike B)', async ({ page }) => {
   await page.goto('/?until=100e6');
   await page.waitForSelector('[data-planet-ready="1"]', { timeout: 90_000 });

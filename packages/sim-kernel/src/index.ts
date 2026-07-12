@@ -29,6 +29,7 @@ export {
   type StoredFieldName,
   type DecodedKeyframe,
   type EncodedKeyframe,
+  type KeyframeGlobals,
   type HistoryPlan,
 } from './codec';
 export {

@@ -12,10 +12,13 @@ interface PlanetSceneProps {
   blend: RenderBlend | null;
   /** Debug overlay: plate boundaries + crust-type colours (oceanic vs continental). */
   plateDebug: boolean;
+  /** Scalar debug field index: 0 = off, 1..N = false-colour that continuous
+   *  field (see `DEBUG_FIELDS`); takes precedence over `plateDebug`. */
+  debugField: number;
   onFirstFrame: () => void;
 }
 
-export function PlanetScene({ gridN, blend, plateDebug, onFirstFrame }: PlanetSceneProps) {
+export function PlanetScene({ gridN, blend, plateDebug, debugField, onFirstFrame }: PlanetSceneProps) {
   const { camera, gl } = useThree();
   const planet = useMemo(() => createPlanetMesh(gridN, EARTH_RADIUS_M), [gridN]);
   // Ping-pong residency between the two texture sets: re-uploads only the set
@@ -40,6 +43,13 @@ export function PlanetScene({ gridN, blend, plateDebug, onFirstFrame }: PlanetSc
   useEffect(() => {
     planet.uniforms.plateDebug.value = plateDebug ? 1 : 0;
   }, [planet, plateDebug]);
+
+  // Drive the scalar debug-field uniform (0 = off). Like plateDebug, this flips a
+  // single uniform — no re-upload — and the material false-colours the selected
+  // continuous field through viridis.
+  useEffect(() => {
+    planet.uniforms.debugField.value = debugField;
+  }, [planet, debugField]);
 
   useEffect(() => {
     const controls = new OrbitControls(camera, gl.domElement);
