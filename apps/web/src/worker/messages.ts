@@ -8,7 +8,7 @@
  * keyframes, so both are honored within one keyframe's step budget.
  */
 
-import type { MechanismToggles } from 'sim-kernel';
+import type { KeyframeGlobals, MechanismToggles } from 'sim-kernel';
 
 /** Main thread -> worker: generate the full history for a seed. */
 export interface RunHistoryRequest {
@@ -38,6 +38,9 @@ export interface HistoryKeyframeMessage {
   index: number;
   timeYears: number;
   landFraction: number;
+  /** Scalar reservoir globals (co2/temperature/oxygen/sea level) for the
+   *  time-series panel — metadata, not part of the transferred `payload`. */
+  globals: KeyframeGlobals;
   payload: ArrayBuffer;
 }
 

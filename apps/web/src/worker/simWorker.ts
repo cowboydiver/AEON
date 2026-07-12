@@ -56,6 +56,7 @@ async function streamHistory(req: RunHistoryRequest): Promise<void> {
       index: kf.index,
       timeYears: kf.timeYears,
       landFraction: kf.landFraction,
+      globals: kf.globals,
       payload: kf.payload,
     };
     self.postMessage(keyframe, [kf.payload]);

@@ -79,4 +79,18 @@ describe('encodeHistory generator (#23)', () => {
       expect(enc[i]!.landFraction).toBeCloseTo(land / count, 12);
     }
   });
+
+  it('carries the reservoir globals verbatim from each keyframe state', () => {
+    const kfs = [...keyframes(params(), UNTIL)];
+    const enc = [...encodeHistory(params(), UNTIL)];
+    for (let i = 0; i < enc.length; i++) {
+      const g = kfs[i]!.globals;
+      expect(enc[i]!.globals).toEqual({
+        co2: g.co2,
+        meanTemperatureK: g.meanTemperatureK,
+        oxygen: g.oxygen,
+        seaLevelM: g.seaLevelM,
+      });
+    }
+  });
 });

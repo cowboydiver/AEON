@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   HISTORY_FORMAT_VERSION,
+  MAX_RETAINED_HISTORY_BYTES,
   QUANT_TABLE,
   STORED_FIELD_NAMES,
   decodeKeyframe,
@@ -172,12 +173,12 @@ describe('history memory budget (#27)', () => {
   });
 
   it('leaves a within-budget request unclamped', () => {
-    // 4.5 Gyr @ 10 Myr @ N=128 is the headline history; it must fit 0.5 GB.
+    // 4.5 Gyr @ 10 Myr @ N=128 is the headline history; it must fit the budget.
     const plan = planHistory(128, 4.5e9, 10e6);
     expect(plan.clamped).toBe(false);
     expect(plan.keyframeIntervalYears).toBe(10e6);
     expect(plan.keyframeCount).toBe(451); // t=0 plus 450 intervals
-    expect(plan.bytes).toBeLessThanOrEqual(0.5 * 1024 * 1024 * 1024);
+    expect(plan.bytes).toBeLessThanOrEqual(MAX_RETAINED_HISTORY_BYTES);
   });
 
   it('coarsens the interval by an integer factor to fit a tight budget', () => {

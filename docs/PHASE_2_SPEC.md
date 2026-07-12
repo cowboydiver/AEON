@@ -140,7 +140,11 @@ estimate and ~5× smaller than the 1.6 GB raw.
 
 - **Main-thread retained history:** hard ceiling **≤ 0.5 GB** (0.31 GB quantized
   at 10 Myr fits with headroom). If a requested history would bust it, warn and
-  clamp (coarser interval or shorter `untilYears`).
+  clamp (coarser interval or shorter `untilYears`). *(Post-Phase-3 update: the
+  Phase 3 viz fields grew the payload to 11 B/cell — 0.454 GB for the headline
+  history, ~91% of this ceiling — so `MAX_RETAINED_HISTORY_BYTES` was raised to
+  1 GB to leave room for the Phase 4 `vegetation` field and finer cadence. See
+  `ARCHITECTURE.md` "memory budget" for current numbers.)*
 - **GPU texture residency:** hard ceiling **≤ 64 MB**. Realistic footprint is
   tiny — 2–3 resident sets × 6 faces × the display fields at (N+2)² R16F/R8 is
   ~1–2 MB — so the ceiling is comfortable; it exists to catch regressions

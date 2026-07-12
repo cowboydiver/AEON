@@ -943,14 +943,19 @@ nothing) and the interpolated `timeYears`/`landFraction` drive the HUD.
 
 The default extent is the full 4.5 Gyr @ 10 Myr. A **memory budget** (#27)
 guards it: `planHistory(gridN, untilYears, interval, budget = MAX_RETAINED_HISTORY_BYTES)`
-sizes the retained history against `MAX_RETAINED_HISTORY_BYTES` (0.5 GB) using
+sizes the retained history against `MAX_RETAINED_HISTORY_BYTES` (1 GB) using
 `encodedKeyframeBytes(gridN)` — the exact byte size of one encoded keyframe,
 derived from the same layout `encodeKeyframe` writes. If the request fits it is
 passed through unchanged (`clamped: false`); if not, the interval is coarsened by
 an integer factor (never below the requested one, so cadence stays a multiple of
 the ask) until the whole span fits — the tail of history is never dropped, only
 sampled more sparsely, and the app flags the coarser step. At N=128, 4.5 Gyr @
-10 Myr is 451 keyframes ≈ 0.35 GB, so it streams as asked.
+10 Myr is 451 keyframes of 9 stored fields (11 B/cell) ≈ 0.454 GB, well inside
+the 1 GB ceiling. The ceiling was 0.5 GB through Phase 3 (which the headline
+history filled to ~91%); it was raised to 1 GB so the stored field set can grow
+(Phase 4's `vegetation`, #39) and the cadence can tighten without coarsening. It
+is a device-memory safety cap, not an implementation limit — nothing is sized to
+it — and the GPU texture budget (≤ 64 MB) is separate.
 
 A streamed history is persisted to **IndexedDB** (`history/historyCache.ts`, #24)
 so a same-context reload hydrates the whole timeline instantly with no worker run.

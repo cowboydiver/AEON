@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { decodeKeyframe, type FieldName, type MechanismToggles } from 'sim-kernel';
+import { decodeKeyframe, type FieldName, type KeyframeGlobals, type MechanismToggles } from 'sim-kernel';
 import { historyCache, historyCacheKey } from './history/historyCache';
 import type { RunHistoryRequest, WorkerRequest, WorkerResponse } from './worker/messages';
 
@@ -32,6 +32,8 @@ export interface HistoryEntry {
   index: number;
   timeYears: number;
   landFraction: number;
+  /** Scalar reservoir globals for the time-series panel (see `KeyframeGlobals`). */
+  globals: KeyframeGlobals;
   payload: ArrayBuffer;
 }
 
@@ -143,6 +145,7 @@ export function usePlanetWorker({
             index: msg.index,
             timeYears: msg.timeYears,
             landFraction: msg.landFraction,
+            globals: msg.globals,
             payload: msg.payload,
           };
           historyRef.current.push(entry);
@@ -207,6 +210,7 @@ export function usePlanetWorker({
               index: kf.index,
               timeYears: kf.timeYears,
               landFraction: kf.landFraction,
+              globals: kf.globals,
               payload: kf.payload,
             });
           }

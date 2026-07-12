@@ -4,6 +4,18 @@
 > Phase 5 milestone (`renderer` + `ui` + `phase-5`). This doc is the working
 > draft; #83 is the tracked issue. Raised by the #36 acceptance review — see
 > `PHASE_3_REPORT.md`.
+>
+> **Partially delivered early** (project sanity-check pass): a scalar debug-field
+> selector now false-colours `temperature`, `precipitation`, `marineLife` and
+> `crustAge` on the globe through a viridis ramp with a range legend, plus an
+> opt-in marine-productivity ocean tint (#38, off by default so the beauty
+> surface stays byte-identical) and a reservoir time-series panel
+> (CO₂/temperature/O₂/sea level). Sampled-texture budget was the constraint — the
+> four scalars are packed into one RGBA keyframe texture to stay within WebGPU's
+> 16-per-stage limit. **Still open on #83:** the `windU`/`windV` vector view
+> (winds are recomputed-at-render, not on the wire since #37) and the `?view=`
+> URL param; the debug ramp here is viridis, not yet the CLI's per-field
+> `render.ts` palettes (the #83 "palettes match `--dump`" acceptance criterion).
 
 ## Motivation
 

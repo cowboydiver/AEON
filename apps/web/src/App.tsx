@@ -9,8 +9,9 @@ import {
   type MechanismKey,
   type MechanismToggles,
 } from 'sim-kernel';
+import { DEBUG_FIELDS } from 'planet-renderer';
 import { PlanetScene } from './PlanetScene';
-import { usePlanetWorker } from './usePlanetWorker';
+import { usePlanetWorker, type HistoryEntry } from './usePlanetWorker';
 
 const DEFAULT_SEED = 42;
 
@@ -47,6 +48,13 @@ export function App() {
   const [ready, setReady] = useState(false);
   // Debug view: colour-code the individual tectonic plates instead of terrain.
   const [plateDebug, setPlateDebug] = useState(false);
+  // Scalar debug field: 0 = off, 1..N false-colour a continuous field (viridis).
+  const [debugField, setDebugField] = useState(0);
+  // Tint the ocean by marine productivity in the beauty render (#38). Off by
+  // default so the beauty surface stays byte-identical to the pre-#38 render.
+  const [oceanLife, setOceanLife] = useState(false);
+  // Show the reservoir time-series panel (co2/temperature/oxygen/sea level).
+  const [showGraphs, setShowGraphs] = useState(false);
   // Mechanism toggle states (#84, #88-#91): seeded from the kernel defaults
   // so the sidebar always shows what is actually simulating; `?iso=1` links
   // start with the #84 prototype on.
@@ -60,7 +68,7 @@ export function App() {
     () => planHistory(DEFAULT_GRID_N, url.untilYears, DEFAULT_KEYFRAME_INTERVAL_YEARS),
     [url.untilYears],
   );
-  const { blend, progress, done, keyframeCount, pinnedPosition, source, generate, select } =
+  const { blend, progress, done, keyframeCount, pinnedPosition, source, generate, select, history } =
     usePlanetWorker({
       gridN: DEFAULT_GRID_N,
       untilYears: plan.untilYears,
@@ -127,6 +135,8 @@ export function App() {
           gridN={DEFAULT_GRID_N}
           blend={blend}
           plateDebug={plateDebug}
+          debugField={debugField}
+          oceanLife={oceanLife}
           onFirstFrame={() => setReady(true)}
         />
       </Canvas>
@@ -169,6 +179,49 @@ export function App() {
           />
           Plates
         </label>
+        <label
+          title="False-colour a single continuous field over the globe (debug view). Overrides the beauty/plate surface."
+          style={{ display: 'flex', alignItems: 'center', gap: 4 }}
+        >
+          Field
+          <select
+            data-debug-field
+            value={debugField}
+            onChange={(e) => setDebugField(Number(e.target.value))}
+            style={{ background: '#0b1020', color: 'inherit', border: '1px solid #33405e', borderRadius: 4, padding: '3px 4px' }}
+          >
+            <option value={0}>Off</option>
+            {DEBUG_FIELDS.map((f, i) => (
+              <option key={f.key} value={i + 1}>
+                {f.label}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label
+          title="Tint the ocean green by marine productivity (#38). Off leaves the beauty view unchanged."
+          style={{ display: 'flex', alignItems: 'center', gap: 4, cursor: 'pointer', userSelect: 'none' }}
+        >
+          <input
+            type="checkbox"
+            data-ocean-life
+            checked={oceanLife}
+            onChange={(e) => setOceanLife(e.target.checked)}
+          />
+          Ocean life
+        </label>
+        <label
+          title="Show the reservoir time-series panel: CO₂, temperature, O₂, sea level over deep time"
+          style={{ display: 'flex', alignItems: 'center', gap: 4, cursor: 'pointer', userSelect: 'none' }}
+        >
+          <input
+            type="checkbox"
+            data-graphs-toggle
+            checked={showGraphs}
+            onChange={(e) => setShowGraphs(e.target.checked)}
+          />
+          Graphs
+        </label>
         {blend ? (
           <span style={{ opacity: 0.7 }}>
             {(blend.timeYears / 1e9).toFixed(2)} Gyr · land {(blend.landFraction * 100).toFixed(1)}%
@@ -199,6 +252,17 @@ export function App() {
           </span>
         ) : null}
       </div>
+
+      {debugField > 0 ? <DebugFieldLegend index={debugField} /> : null}
+
+      {showGraphs ? (
+        <TimeSeriesPanel
+          history={history.current}
+          count={keyframeCount}
+          currentYears={blend?.timeYears ?? 0}
+          untilYears={plan.untilYears}
+        />
+      ) : null}
 
       <MechanismSidebar toggles={mechanisms} onToggle={toggleMechanism} streaming={streaming} />
 
@@ -333,6 +397,159 @@ function Timeline({ keyframeCount, pinnedPosition, currentYears, onScrub }: Time
       <span style={{ fontVariantNumeric: 'tabular-nums', opacity: 0.85, minWidth: 96, textAlign: 'right' }}>
         {(currentYears / 1e9).toFixed(2)} Gyr
       </span>
+    </div>
+  );
+}
+
+// Viridis anchors, matching the material's scalar debug ramp — the legend and the
+// globe must read as the same colour scale.
+const VIRIDIS_CSS = 'linear-gradient(90deg, #440154, #3b528b, #21908d, #5dc863, #fde725)';
+
+/** Legend for the active scalar debug field: the viridis ramp and its display
+ *  range (the same normalization the material applies), so the false colours on
+ *  the globe are quantitatively readable. */
+function DebugFieldLegend({ index }: { index: number }) {
+  const field = DEBUG_FIELDS[index - 1];
+  if (!field) return null;
+  const unit = field.unit ? ` ${field.unit}` : '';
+  return (
+    <div
+      data-debug-legend
+      style={{
+        position: 'absolute',
+        top: 60,
+        left: 12,
+        width: 220,
+        background: 'rgba(10, 14, 24, 0.75)',
+        padding: '8px 12px',
+        borderRadius: 8,
+        fontSize: 12,
+      }}
+    >
+      <div style={{ fontWeight: 600, marginBottom: 6 }}>{field.label}</div>
+      <div style={{ height: 12, borderRadius: 3, background: VIRIDIS_CSS }} />
+      <div style={{ display: 'flex', justifyContent: 'space-between', opacity: 0.75, marginTop: 3 }}>
+        <span>
+          {field.min}
+          {unit}
+        </span>
+        <span>
+          {field.max}
+          {unit}
+        </span>
+      </div>
+    </div>
+  );
+}
+
+interface SeriesSpec {
+  label: string;
+  unit: string;
+  color: string;
+  /** Pull the scalar from a keyframe's globals. */
+  value: (e: HistoryEntry) => number;
+  /** Sparkline on a log axis (for CO₂, which spans an order of magnitude). */
+  log?: boolean;
+  /** Format the current value for the readout. */
+  format: (v: number) => string;
+}
+
+const TIME_SERIES: readonly SeriesSpec[] = [
+  { label: 'CO₂', unit: 'ppm', color: '#e0894f', value: (e) => e.globals.co2, log: true, format: (v) => v.toFixed(0) },
+  { label: 'Temp', unit: 'K', color: '#e05f7a', value: (e) => e.globals.meanTemperatureK, format: (v) => v.toFixed(1) },
+  { label: 'O₂', unit: 'PAL', color: '#6fae6f', value: (e) => e.globals.oxygen, format: (v) => v.toFixed(3) },
+  { label: 'Sea', unit: 'm', color: '#5aa9e0', value: (e) => e.globals.seaLevelM, format: (v) => v.toFixed(0) },
+];
+
+const SPARK_W = 200;
+const SPARK_H = 26;
+
+/** Build an SVG polyline (in `SPARK_W`×`SPARK_H` space) for one series over the
+ *  history, normalized to its own min/max (log-scaled when asked). Flat when the
+ *  series is constant. */
+function sparkPoints(history: HistoryEntry[], spec: SeriesSpec, untilYears: number): string {
+  if (history.length === 0) return '';
+  const tx = (v: number) => (spec.log ? Math.log10(Math.max(v, 1e-9)) : v);
+  let lo = Infinity;
+  let hi = -Infinity;
+  for (const e of history) {
+    const v = tx(spec.value(e));
+    if (v < lo) lo = v;
+    if (v > hi) hi = v;
+  }
+  const span = hi - lo;
+  return history
+    .map((e) => {
+      const x = untilYears > 0 ? (e.timeYears / untilYears) * SPARK_W : 0;
+      const norm = span > 0 ? (tx(spec.value(e)) - lo) / span : 0.5;
+      const y = SPARK_H - norm * (SPARK_H - 2) - 1; // 1px padding top/bottom
+      return `${x.toFixed(1)},${y.toFixed(1)}`;
+    })
+    .join(' ');
+}
+
+interface TimeSeriesPanelProps {
+  history: HistoryEntry[];
+  /** Keyframe count — a state value, so the panel re-renders as the (ref-held)
+   *  history grows during streaming. */
+  count: number;
+  currentYears: number;
+  untilYears: number;
+}
+
+/**
+ * Small-multiples sparklines for the well-mixed reservoir globals — CO₂, mean
+ * temperature, O₂, sea level — the scalars that drive the carbon/climate/
+ * oxygenation systems but live in no per-cell field, so they are otherwise
+ * invisible at render. Each row is normalized to its own range; a shared marker
+ * tracks the scrubbed time, and the readout shows the value there.
+ */
+function TimeSeriesPanel({ history, count, currentYears, untilYears }: TimeSeriesPanelProps) {
+  // `count` participates in render so the ref-held history redraws while streaming.
+  void count;
+  if (history.length === 0) return null;
+  // Nearest keyframe to the playhead, for the per-series value readout.
+  let nearest = history[0]!;
+  for (const e of history) {
+    if (Math.abs(e.timeYears - currentYears) < Math.abs(nearest.timeYears - currentYears)) nearest = e;
+  }
+  const markerX = untilYears > 0 ? (currentYears / untilYears) * SPARK_W : 0;
+  return (
+    <div
+      data-timeseries
+      style={{
+        position: 'absolute',
+        bottom: 76,
+        left: 16,
+        width: 268,
+        background: 'rgba(10, 14, 24, 0.8)',
+        padding: '10px 12px',
+        borderRadius: 8,
+        fontSize: 12,
+        display: 'flex',
+        flexDirection: 'column',
+        gap: 6,
+      }}
+    >
+      <div style={{ fontWeight: 600, opacity: 0.85 }}>Reservoirs</div>
+      {TIME_SERIES.map((spec) => (
+        <div key={spec.label} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+          <span style={{ width: 30, color: spec.color }}>{spec.label}</span>
+          <svg width={SPARK_W} height={SPARK_H} style={{ display: 'block', flexShrink: 0 }}>
+            <polyline
+              points={sparkPoints(history, spec, untilYears)}
+              fill="none"
+              stroke={spec.color}
+              strokeWidth={1.2}
+            />
+            <line x1={markerX} y1={0} x2={markerX} y2={SPARK_H} stroke="#ffffff" strokeWidth={0.6} opacity={0.5} />
+          </svg>
+          <span style={{ width: 46, textAlign: 'right', fontVariantNumeric: 'tabular-nums', opacity: 0.85 }}>
+            {spec.format(spec.value(nearest))}
+          </span>
+        </div>
+      ))}
+      <div style={{ opacity: 0.5, fontSize: 10 }}>Each row scaled to its own range · white line = playhead</div>
     </div>
   );
 }
