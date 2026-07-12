@@ -462,5 +462,52 @@ revisiting the #33 water inventory, which is its own issue.
 
 ### Measured (paired, full stack, 3 golden seeds, 4.5 Gyr, N=64)
 
-_The paired stack-on/stack-off table, dt-halving check, and flipbook
-verdicts land with the measurement pass below._
+Stack-on (`seaLevelDatums + freeboard + bathymetryDatum`) vs
+stack-off-this-flag, late-time aggregates (≥ 1.5 Gyr, 31 checkpoints at
+100 Myr cadence), mean [min..max]. "crest below sea" is the mean elevation
+of <5 Myr oceanic crust relative to `seaLevelM` (positive = submerged);
+"emergent young" is the share of <20 Myr oceanic crust above the sea — the
+visible chains:
+
+| seed | arm | sea (m) | crest below sea (m) | emergent young | cont. crust | submerged cont. share | land % |
+|---|---|---|---|---|---|---|---|
+| 1 | off | −3503 | **−560** (proud) | **43.3%** [0..99.6] | 28.9% | 58.5% | 14.5% |
+| 1 | on | −3688 | **+1142** [941..1538] | **1.8%** [0.1..7.6] | 22.2% | 51.0% | 11.8% |
+| 42 | off | −3419 | **−481** (proud) | **37.3%** [0..98.7] | 27.5% | 43.9% | 18.0% |
+| 42 | on | −3820 | **+1129** [1003..1242] | **2.2%** [0.2..7.4] | 22.3% | 51.2% | 11.4% |
+| 1337 | off | −3709 | **−785** (proud) | **64.5%** [0..99.8] | 24.5% | 52.5% | 14.9% |
+| 1337 | on | −3868 | **+1105** [990..1218] | **2.3%** [0.0..7.0] | 24.4% | 54.9% | 11.7% |
+
+**The chains are gone, and the datum is stationary.** Ridge crests hold
+1.0–1.5 km below the surface at essentially every late-time checkpoint on
+every seed (the acceptance band); emergent young crust collapses from
+"most spreading centers poke out somewhere" (per-checkpoint peaks of
+99%+) to a 0–7% residual — trench-adjacent and arc cells, #91's
+territory, not spreading centers. `seaLevelM` equilibrates ~200–400 m
+deeper than baseline (the young flank's added capacity) and holds a
+stable ±300 m band over 4.5 Gyr on all seeds: the crest-cap shape has
+none of option 1's drift, as the absolute-abyss anchor guarantees.
+
+**dt-invariance (the lag check the issue asked for):** seed 42, full
+stack, `--step-years 0.5e6` vs the 1 Myr default, ≥ 2.5 Gyr means: sea
+−3743 vs −3794 (1.3%), crest submergence 1155 vs 1136 m (1.7%), flooded
+share 51.8 vs 49.3%, land 12.6 vs 11.9% — the (sea, floor) equilibrium is
+dt-robust to halving; the one-step lag is observable per-step (as with
+every lagged read in the kernel) but not in the equilibrium. The existing
+golden/onset suites needed no carve-out — they pin fixed step sizes.
+
+**The honest cost: the continental-creation budget thins.** Two of three
+seeds lose 5–7 points of continental crust (28.9→22.2%, 27.5→22.3%;
+seed 1337 unchanged at 24.5→24.4%) and all three lose 3–6.6 points of
+land. Mechanism: in the baseline the young oceanic flank (−2500 m
+absolute) sat ~1.4 km ABOVE the re-keyed arc-maturation gate
+(`seaLevelM − 500` ≈ −3900 m), so a belt arc igniting on young crust was
+born above the gate and matured essentially instantly — the emergent
+ridge chains were feeding continental creation. The sea-keyed flank
+starts at `seaLevelM − 1000..−1500`, below the gate, so arcs must climb
+500–1000 m before maturing. The re-key is the more physical regime (arc
+maturation should be earned, not inherited from an artifact), but it
+means the #102 stack re-tunes what #101 measured — reported here rather
+than silently absorbed, per the issue's pairing clause. The flooded share
+itself moves within seed scatter (mixed signs), and mean freeboard stays
+in its documented oscillation regime on all seeds.
