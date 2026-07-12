@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef } from 'react';
 import { useFrame, useThree } from '@react-three/fiber';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
-import { KeyframeBlender, createPlanetMesh, createStarfield } from 'planet-renderer';
+import { KeyframeBlender, MARINE_TINT_ON, createPlanetMesh, createStarfield } from 'planet-renderer';
 import { EARTH_RADIUS_M } from 'sim-kernel';
 import type { RenderBlend } from './usePlanetWorker';
 
@@ -15,10 +15,13 @@ interface PlanetSceneProps {
   /** Scalar debug field index: 0 = off, 1..N = false-colour that continuous
    *  field (see `DEBUG_FIELDS`); takes precedence over `plateDebug`. */
   debugField: number;
+  /** Tint the ocean green by marine productivity in the beauty render (#38).
+   *  Off leaves the surface byte-identical to the pre-#38 render. */
+  oceanLife: boolean;
   onFirstFrame: () => void;
 }
 
-export function PlanetScene({ gridN, blend, plateDebug, debugField, onFirstFrame }: PlanetSceneProps) {
+export function PlanetScene({ gridN, blend, plateDebug, debugField, oceanLife, onFirstFrame }: PlanetSceneProps) {
   const { camera, gl } = useThree();
   const planet = useMemo(() => createPlanetMesh(gridN, EARTH_RADIUS_M), [gridN]);
   // Ping-pong residency between the two texture sets: re-uploads only the set
@@ -50,6 +53,12 @@ export function PlanetScene({ gridN, blend, plateDebug, debugField, onFirstFrame
   useEffect(() => {
     planet.uniforms.debugField.value = debugField;
   }, [planet, debugField]);
+
+  // Marine-productivity ocean tint (#38): a uniform flip, no re-upload. Off (0)
+  // keeps the beauty surface byte-identical to the pre-#38 render.
+  useEffect(() => {
+    planet.uniforms.marineTint.value = oceanLife ? MARINE_TINT_ON : 0;
+  }, [planet, oceanLife]);
 
   useEffect(() => {
     const controls = new OrbitControls(camera, gl.domElement);

@@ -50,6 +50,9 @@ export function App() {
   const [plateDebug, setPlateDebug] = useState(false);
   // Scalar debug field: 0 = off, 1..N false-colour a continuous field (viridis).
   const [debugField, setDebugField] = useState(0);
+  // Tint the ocean by marine productivity in the beauty render (#38). Off by
+  // default so the beauty surface stays byte-identical to the pre-#38 render.
+  const [oceanLife, setOceanLife] = useState(false);
   // Show the reservoir time-series panel (co2/temperature/oxygen/sea level).
   const [showGraphs, setShowGraphs] = useState(false);
   // Mechanism toggle states (#84, #88-#91): seeded from the kernel defaults
@@ -133,6 +136,7 @@ export function App() {
           blend={blend}
           plateDebug={plateDebug}
           debugField={debugField}
+          oceanLife={oceanLife}
           onFirstFrame={() => setReady(true)}
         />
       </Canvas>
@@ -193,6 +197,18 @@ export function App() {
               </option>
             ))}
           </select>
+        </label>
+        <label
+          title="Tint the ocean green by marine productivity (#38). Off leaves the beauty view unchanged."
+          style={{ display: 'flex', alignItems: 'center', gap: 4, cursor: 'pointer', userSelect: 'none' }}
+        >
+          <input
+            type="checkbox"
+            data-ocean-life
+            checked={oceanLife}
+            onChange={(e) => setOceanLife(e.target.checked)}
+          />
+          Ocean life
         </label>
         <label
           title="Show the reservoir time-series panel: CO₂, temperature, O₂, sea level over deep time"

@@ -67,9 +67,11 @@ export function createPlanetUniforms() {
      *  false-coloured through a viridis ramp — see `DEBUG_FIELDS`. Takes
      *  precedence over `plateDebug`. */
     debugField: uniform(0),
-    /** Strength of the marine-productivity green tint on ocean cells (#38);
-     *  0 = plain bathymetry, 1 = full productive-green at marineLife = 1. */
-    marineTint: uniform(0.6),
+    /** Strength of the marine-productivity green tint on ocean cells (#38).
+     *  DEFAULT 0 so the beauty surface is byte-identical to the pre-#38 render
+     *  (the "Ocean life" control raises it); 1 = full productive-green at
+     *  marineLife = 1. */
+    marineTint: uniform(0),
   };
 }
 
@@ -91,6 +93,9 @@ export const DEBUG_FIELDS = [
 ] as const;
 
 export type DebugFieldKey = (typeof DEBUG_FIELDS)[number]['key'];
+
+/** `marineTint` strength when the "Ocean life" tint is enabled (default is 0). */
+export const MARINE_TINT_ON = 0.6;
 
 /** One face's textures from a single keyframe set (A or B). */
 export interface FaceTextures {
@@ -313,12 +318,15 @@ export function createPlanetMaterial(
   // uniform via a threshold fold (default = the last field; lower thresholds
   // override) — the SAME pattern as `biomePalette`. Channel order MUST match
   // DEBUG_FIELDS / textures.ts `DEBUG_SCALAR_FIELDS`.
-  const norm = (value: FloatNode, lo: number, hi: number): FloatNode =>
-    clamp(value.sub(lo).div(hi - lo), 0, 1);
-  const tTemperature = norm(debugScalars.r, 240, 320);
-  const tPrecipitation = norm(debugScalars.g, 0, 3000);
-  const tMarineLife = clamp(debugScalars.b, 0, 1);
-  const tCrustAge = norm(debugScalars.a, 0, 200);
+  // Normalize by each field's DISPLAY range straight from DEBUG_FIELDS — the SAME
+  // numbers the legend renders — so the globe and legend can never drift apart.
+  // Channel order (R,G,B,A) matches DEBUG_FIELDS / textures.ts DEBUG_SCALAR_FIELDS.
+  const norm = (value: FloatNode, field: (typeof DEBUG_FIELDS)[number]): FloatNode =>
+    clamp(value.sub(field.min).div(field.max - field.min), 0, 1);
+  const tTemperature = norm(debugScalars.r, DEBUG_FIELDS[0]);
+  const tPrecipitation = norm(debugScalars.g, DEBUG_FIELDS[1]);
+  const tMarineLife = norm(debugScalars.b, DEBUG_FIELDS[2]);
+  const tCrustAge = norm(debugScalars.a, DEBUG_FIELDS[3]);
   let debugT: FloatNode = tCrustAge; // 4
   debugT = select(uniforms.debugField.lessThan(3.5), tMarineLife, debugT); // 3
   debugT = select(uniforms.debugField.lessThan(2.5), tPrecipitation, debugT); // 2

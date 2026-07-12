@@ -270,6 +270,15 @@ test('scalar debug-field selector false-colours the globe and reverts', async ({
   await settle(page);
   const back = await canvas.screenshot();
   expect(diffFraction(beauty, back), 'Off restores the beauty view').toBeLessThan(0.02);
+
+  // The Ocean-life tint is opt-in: default-off keeps the beauty view unchanged,
+  // and toggling it greens the productive ocean (a visible but partial change).
+  const oceanLife = page.locator('[data-ocean-life]');
+  await expect(oceanLife).not.toBeChecked();
+  await oceanLife.check();
+  await settle(page);
+  const tinted = await canvas.screenshot({ path: join(ARTIFACTS_DIR, 'ocean-life-on.png') });
+  expect(diffFraction(back, tinted), 'ocean-life tint greens the sea').toBeGreaterThan(0.01);
 });
 
 test('renders the dual-sample blend material without stalling (Spike B)', async ({ page }) => {

@@ -3,6 +3,7 @@ export {
   createPlanetMaterial,
   createPlanetUniforms,
   DEBUG_FIELDS,
+  MARINE_TINT_ON,
   type PlanetUniforms,
   type FaceTextures,
   type DebugFieldKey,
