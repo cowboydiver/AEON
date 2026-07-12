@@ -668,6 +668,16 @@ export const ARC_EMERGENT_GROWTH_FACTOR = 0.05;
  * — land mean +840 m over ~75% of it, flooded shelf ~−130 m over the rest —
  * averages a few hundred metres. 400 m makes the mechanism near-inert at t=0
  * and engages it exactly as the basin-maturation sea-level fall opens a gap.
+ *
+ * Calibrated and kept at 400 by the #101 sweep ({400, 600, 800} × the golden
+ * seeds, N=64, 4.5 Gyr, with seaLevelDatums — the designed pairing): the
+ * late-time flooded share is INSENSITIVE to this target (~44–59% submerged at
+ * every value; the ~2× Earth overshoot is structural, not a target question),
+ * because the continental mean rides 1–2 km above any of these targets most
+ * of deep time and the flooded lobe sits 2–2.5 km deep against the buoyancy
+ * floor, far below a few hundred metres of datum shift. Raising it buys no
+ * land and costs continental crust on seed 42 (22.6–23.3% vs 27.5% at 400).
+ * Measured numbers in docs/SEA_LEVEL_DATUM_FINDINGS.md, "#101 sweep".
  */
 export const FREEBOARD_TARGET_M = 400;
 
