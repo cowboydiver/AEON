@@ -268,6 +268,28 @@ exports[`golden field hashes: #88-#91 mechanism prototypes on > seaLevelDatums o
 }
 `;
 
+exports[`golden field hashes: bathymetryDatum engaged (#102) > seed 42, N=32: after 100 steps, with the sea below the engagement level 1`] = `
+{
+  "after100Steps": {
+    "biome": "ba712ab8",
+    "boundaryStress": "3266293d",
+    "crustAge": "647cc282",
+    "crustType": "e89956a8",
+    "elevation": "c07efeec",
+    "iceFraction": "5f0ed9fe",
+    "marineLife": "b5b10c2e",
+    "plateId": "7a1aeadb",
+    "precipitation": "70d25b59",
+    "sedimentM": "f595b731",
+    "sutureYears": "fc481361",
+    "temperature": "9b94ff69",
+    "timeYears": 100000000,
+    "windU": "61993e75",
+    "windV": "99ba9f05",
+  },
+}
+`;
+
 exports[`golden field hashes: blockIsostasy on (#84) > seed 1: after 10 steps 1`] = `
 {
   "after10Steps": {

@@ -114,6 +114,37 @@ describe('golden field hashes: blockIsostasy on (#84)', () => {
  * One seed per mechanism keeps the suite's step budget flat; the
  * onset-gating tests cover the param plumbing on the others.
  */
+/**
+ * Engaged spine for the #102 bathymetryDatum mechanism. The 10-step arm in
+ * the block below pins only the pre-engagement path: the sea-keyed crest cap
+ * activates once seaLevelM falls below OCEAN_RIDGE_DEPTH_M −
+ * OCEAN_RIDGE_MIN_SUBMERGENCE_M (−2000 m), which takes ~40–60 Myr of basin
+ * maturation — ten default steps only reach ~−900 m, where flag-on is
+ * byte-identical to flag-off BY DESIGN. This run goes deep enough (N=32
+ * keeps it cheap) that the sea-keyed code path provably shapes the hashes;
+ * the seaLevelM assertion guards that engagement, so a future constant
+ * change can never leave this spine silently pinning an inert path.
+ */
+describe('golden field hashes: bathymetryDatum engaged (#102)', () => {
+  it('seed 42, N=32: after 100 steps, with the sea below the engagement level', () => {
+    const params = createPlanetParams({
+      seed: 42,
+      gridN: 32,
+      ...ALL_MECHANISMS_OFF,
+      bathymetryDatum: true,
+    });
+    const ctx: SimContext = { rng: createRng(params.seed).fork('sim') };
+    let stepped = createInitialState(params);
+    for (let i = 0; i < 100; i++) {
+      stepped = step(stepped, params.stepYears, ctx);
+    }
+    expect(stepped.globals.seaLevelM).toBeLessThan(-2000);
+    expect({
+      after100Steps: { timeYears: stepped.timeYears, ...fieldHashes(stepped) },
+    }).toMatchSnapshot();
+  });
+});
+
 describe('golden field hashes: #88-#91 mechanism prototypes on', () => {
   const MECHS = [
     ['crustFates', { crustFates: true }],

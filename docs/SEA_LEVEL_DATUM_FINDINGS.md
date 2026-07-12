@@ -527,16 +527,35 @@ flooded-share knob, and it stays at its cleanly-anchored 400 m.
 
 **dt-invariance (the lag check the issue asked for):** seed 42, full
 stack at the shipped 500 m crest, `--step-years 0.5e6` vs the 1 Myr
-default, ≥ 2.5 Gyr means: sea −3719 vs −3529 (within the equilibrium
-band's own width), crest submergence 711 vs 729 m (2.5%); the
-continental/land means differ at chaotic trajectory-scatter level
-(cont 23.1 vs 26.7%), as any dt change reshuffles the tectonic
-trajectory. The same check during the 1000 m calibration campaign
-matched to 1.3–1.7% on every column. The (sea, floor) equilibrium —
+default, ≥ 2.5 Gyr means: sea −3719 vs −3529 m (Δ190 m ≈ 5%, inside the
+single-run late-time range of −3766..−3134 m), crest submergence 711 vs
+729 m (2.5%); the continental/land means differ at chaotic
+trajectory-scatter level (cont 23.1 vs 26.7%, against a per-checkpoint
+range of 22.1..34.2), as any dt change reshuffles the tectonic
+trajectory. No tolerance was pre-declared by the issue; the operative
+one applied here is "inside the equilibrium's own late-time
+min..max band", which both datum quantities meet with margin. The same
+check during the 1000 m calibration campaign matched to 1.3–1.7% on
+every column. The (sea, floor) equilibrium —
 what the lag could plausibly poison — is dt-robust; the one-step lag is
 observable per-step (as with every lagged read in the kernel) but not
 in the equilibrium. The existing golden/onset suites needed no
 carve-out — they pin fixed step sizes.
+
+**Solver convergence (the issue's per-step ask, translated):** the #33
+solve is a FIXED-count bisection (`SEA_LEVEL_SOLVE_ITERATIONS = 40`,
+deterministic by design — never a convergence loop), so "iteration count
+per step" is constant and the meaningful margin is bracket precision:
+`(maxElev − minElev) / 2^40` ≈ 2×10⁻⁸ m at the observed ~20 km elevation
+range, identical on- and off-stack — degradation would require the
+elevation range to grow by orders of magnitude, which is exactly the
+option-1 drift mode. The conditioning regression test
+(`bathymetryDatum.test.ts`) runs the full stack through the
+fastest-moving first 100 Myr asserting the volume-function slope at every
+solved level stays above 0.2 (it is the flooded fraction, ~0.85 in
+practice) and every per-step sea move stays inside the physical rate
+envelope — the two quantities that would actually degenerate if the
+sea-tracking fraction of the hypsometry approached 1.
 
 **Flipbooks at the shipped 500 m crest** (elevation, all three seeds,
 frames every 250 Myr, re-dumped after the calibration and inspected
