@@ -119,6 +119,27 @@ export interface PlanetParams {
    *  Default 0. */
   emergentArcTaperOnsetYears: number;
   /**
+   * Re-key the platform/arc datum constants to the dynamic sea level
+   * (`globals.seaLevelM`, previous step's value — the standard explicit lag)
+   * instead of the fixed 0 m crust datum. Affects the microcontinent founder
+   * level, the sediment shelf ceiling, the arc maturation gate and island
+   * ceiling, the crustFates founder/retirement levels, the marinePlanation
+   * target, and the blockIsostasy cap ramp. Motivation
+   * (docs/SEA_LEVEL_DATUM_FINDINGS.md): sea level falls ~3 km over the first
+   * 500 Myr as the ocean basins mature, stranding every absolute-datum
+   * "submerged platform" constant kilometres above the real waterline —
+   * foundered fragments stand as dry islands, filled shelves as coastal
+   * plain, and no continental crust stays flooded. The oceanic age-depth
+   * curve deliberately stays absolute: re-keying it would make the seafloor
+   * chase the falling sea level in an unbounded feedback (see the findings
+   * doc). Default OFF — measurement prototype, same posture as #84/#88-#91.
+   */
+  seaLevelDatums: boolean;
+  /** Sim year before which seaLevelDatums is inert even when enabled — the
+   *  branched-A/B onset, same contract as blockIsostasyOnsetYears.
+   *  Default 0. */
+  seaLevelDatumsOnsetYears: number;
+  /**
    * Enable the biosphere (#37, Phase 4): ocean life, oxygenation, and — from
    * #39 — land vegetation. The ablation switch, **default `true`** (the
    * biosphere is a shipped feature, not a prototype). When `false` the life
@@ -239,6 +260,8 @@ export function createPlanetParams(partial: Partial<PlanetParams> & { seed: numb
     marinePlanationOnsetYears: 0,
     emergentArcTaper: false,
     emergentArcTaperOnsetYears: 0,
+    seaLevelDatums: false,
+    seaLevelDatumsOnsetYears: 0,
     biosphereEnabled: true,
     abiogenesisRatePerYear: ABIOGENESIS_RATE_PER_YR,
     initialOxygenPAL: INITIAL_OXYGEN_PAL,

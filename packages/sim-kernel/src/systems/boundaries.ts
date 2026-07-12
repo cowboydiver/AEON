@@ -27,6 +27,7 @@ import {
   OROGENY_WIDTH_CELLS,
   TRENCH_EXTRA_DEPTH_M,
 } from '../constants';
+import { platformDatumOffsetM } from '../datums';
 import { cellCenterTable, neighborTable } from '../grid';
 import { plateVelocityAt } from '../plates';
 import type { PlanetState } from '../state';
@@ -200,6 +201,13 @@ export function applyConvergentTopography(
   // pre-topography crust map, so creation grows blobs instead of chains.
   const compactArcs =
     state.params.compactArcs && state.timeYears >= state.params.compactArcsOnsetYears;
+  // Sea-level-anchored datums (datums.ts): the arc island ceiling and the
+  // maturation gate are physically sea-level-relative ("a 1 km island",
+  // "matures 500 m before emerging"); the offset anchors them to the dynamic
+  // sea level when the mechanism is on, and is exactly 0 when off.
+  const datumOffset = platformDatumOffsetM(state);
+  const arcCeiling = datumOffset + ARC_MAX_ELEVATION_M;
+  const maturationGate = datumOffset + ARC_MATURATION_ELEVATION_M;
   // Arc cells that reached maturation elevation this step (#67): maturation
   // is decided in one attachment pass after the margin loop, not inline —
   // see below.
@@ -243,11 +251,11 @@ export function applyConvergentTopography(
             const submerged = Math.max(0, seaLevel - e);
             grown = Math.max(e, seaLevel) + (full - submerged) * ARC_EMERGENT_GROWTH_FACTOR;
           }
-          elevation[i] = Math.min(grown, ARC_MAX_ELEVATION_M);
+          elevation[i] = Math.min(grown, arcCeiling);
         } else {
-          elevation[i] = Math.min(elevation[i]! + arcGrowthRate * dtYears * norm, ARC_MAX_ELEVATION_M);
+          elevation[i] = Math.min(elevation[i]! + arcGrowthRate * dtYears * norm, arcCeiling);
         }
-        if (elevation[i]! >= ARC_MATURATION_ELEVATION_M) matureCandidates.push(i);
+        if (elevation[i]! >= maturationGate) matureCandidates.push(i);
       }
     } else {
       // Subducting side is always oceanic (continental crust never loses to

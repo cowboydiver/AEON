@@ -38,6 +38,7 @@ import {
   OCEAN_RIDGE_DEPTH_M,
   OROGENY_MAX_ELEVATION_M,
 } from '../constants';
+import { platformDatumOffsetM } from '../datums';
 import { cellCenterTable, cellCount, directionToIndex, neighborTable, type Vec3 } from '../grid';
 import { hash2, hashString } from '../hash';
 import type { PlanetState } from '../state';
@@ -145,7 +146,11 @@ function applyTectonics(state: PlanetState, dtYears: number): PlanetState {
   // 100+ km of land with no cratonic root; it erodes to and below sea level
   // on far shorter timescales than we resolve. The clamp is idempotent and
   // reads only crustType, which is final by this point in the step, so scan
-  // order cannot leak into the result.
+  // order cannot leak into the result. Under seaLevelDatums the founder
+  // level is anchored to the dynamic sea level (previous step's value), so
+  // the fragment is genuinely drowned instead of stranded above a fallen
+  // waterline (datums.ts).
+  const founderLevel = platformDatumOffsetM(next) + MICROCONTINENT_FOUNDER_ELEVATION_M;
   const nbTable = neighborTable(N);
   for (let i = 0; i < crustType.length; i++) {
     if (crustType[i] !== 1) continue;
@@ -155,7 +160,7 @@ function applyTectonics(state: PlanetState, dtYears: number): PlanetState {
       crustType[nbTable[i * 4 + 2]!] !== 1 &&
       crustType[nbTable[i * 4 + 3]!] !== 1
     ) {
-      elevation[i] = Math.min(elevation[i]!, MICROCONTINENT_FOUNDER_ELEVATION_M);
+      elevation[i] = Math.min(elevation[i]!, founderLevel);
     }
   }
 

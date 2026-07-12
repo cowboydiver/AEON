@@ -64,6 +64,7 @@ export {
   type MechanismKey,
   type MechanismToggles,
 } from './mechanisms';
+export { platformDatumOffsetM } from './datums';
 export { labelContinentalComponents, type ContinentalComponents } from './components';
 export { erosionSystem } from './systems/erosion';
 export { wilsonSystem } from './systems/wilson';

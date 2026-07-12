@@ -56,9 +56,16 @@ Options:
                               long-lived subduction builds emergent +1 km arc
                               chains; young margins stay submerged (default off
                               — measured negative: collapses land fraction)
+  --sea-level-datums          anchor the platform/arc datums (founder level,
+                              shelf ceiling, arc maturation gate + island
+                              ceiling) to the dynamic sea level instead of the
+                              fixed 0 m datum, so drowned platforms and shallow
+                              shelves survive the deep-time sea-level fall
+                              (default off — prototype; see
+                              docs/SEA_LEVEL_DATUM_FINDINGS.md)
   --no-<mechanism>            disable a default-on mechanism for this run,
                               e.g. --no-crust-fates --no-marine-planation;
-                              all five --no-* forms exist. Composable with the
+                              all six --no-* forms exist. Composable with the
                               positive flags for any on/off combination.
   --ab <mechanism>            paired branched A/B (PR #87 instrument): run
                               flag-off and flag-on-with-onset arms that are
@@ -68,7 +75,8 @@ Options:
                               divergence swamps it. Trust the first few
                               hundred Myr after the branch most. Mechanisms:
                               block-isostasy, crust-fates, compact-arcs,
-                              marine-planation, emergent-arc-taper.
+                              marine-planation, emergent-arc-taper,
+                              sea-level-datums.
                               Mutually exclusive with the single-arm mechanism
                               flags and --dump. Since the #88-#91 promotion
                               BOTH arms inherit the promoted defaults for the
@@ -101,11 +109,13 @@ const { values } = parseArgs({
     'compact-arcs': { type: 'boolean', default: false },
     'marine-planation': { type: 'boolean', default: false },
     'emergent-arc-taper': { type: 'boolean', default: false },
+    'sea-level-datums': { type: 'boolean', default: false },
     'no-block-isostasy': { type: 'boolean', default: false },
     'no-crust-fates': { type: 'boolean', default: false },
     'no-compact-arcs': { type: 'boolean', default: false },
     'no-marine-planation': { type: 'boolean', default: false },
     'no-emergent-arc-taper': { type: 'boolean', default: false },
+    'no-sea-level-datums': { type: 'boolean', default: false },
     ab: { type: 'string' },
     'ab-branch': { type: 'string' },
     'ab-block-isostasy': { type: 'string' },
@@ -153,9 +163,15 @@ const MECHANISMS: Record<string, (on: boolean, onsetYears: number) => Partial<Pl
   'compact-arcs': (on, onset) => ({ compactArcs: on, compactArcsOnsetYears: onset }),
   'marine-planation': (on, onset) => ({ marinePlanation: on, marinePlanationOnsetYears: onset }),
   'emergent-arc-taper': (on, onset) => ({ emergentArcTaper: on, emergentArcTaperOnsetYears: onset }),
+  'sea-level-datums': (on, onset) => ({ seaLevelDatums: on, seaLevelDatumsOnsetYears: onset }),
 };
 const MECHANISM_FLAGS = Object.keys(MECHANISMS) as ReadonlyArray<
-  'block-isostasy' | 'crust-fates' | 'compact-arcs' | 'marine-planation' | 'emergent-arc-taper'
+  | 'block-isostasy'
+  | 'crust-fates'
+  | 'compact-arcs'
+  | 'marine-planation'
+  | 'emergent-arc-taper'
+  | 'sea-level-datums'
 >;
 
 // --ab-block-isostasy <years> predates --ab and is kept as its alias.

@@ -501,6 +501,31 @@ key:
   stands emergent +1 km chains. Margin age is integrated by dwell time; no
   new field. Submarine growth and the −500 m maturation gate are untouched,
   so the continental-creation budget is unaffected by construction.
+- **`seaLevelDatums` (no tracking issue — specified and measured in
+  `SEA_LEVEL_DATUM_FINDINGS.md`; cross-cutting, `datums.ts`):** re-keys the
+  platform/arc datum constants to the **dynamic sea level**. The #33 sea
+  level falls ~3 km over the first 500 Myr as ocean basins mature, which
+  beaches every absolute-datum "submerged platform" constant: measured on
+  seed 42/N=64, the submerged share of continental crust collapses 25% →
+  0% by 0.5 Gyr and never recovers, so late-time oceans sit exclusively on
+  oceanic crust (Earth floods ~25% of its continental crust). With the flag
+  on, the affected call sites add `platformDatumOffsetM(state)` (= previous
+  step's `seaLevelM`, the usual lag; exactly 0 flag-off) to the founder
+  clamp (tectonics), the sediment shelf ceiling + marine-planation target
+  (erosion), the arc maturation gate + island ceiling (boundaries), the
+  crustFates founder/retirement level — restoring the "no land-mask pop"
+  retirement semantics — and the whole `blockElevationCap` ramp. The
+  oceanic **age-depth curve stays absolute**: the sea-level solve fills the
+  hypsometry with a conserved volume, so a seafloor target that tracked sea
+  level would chase it downward without bound (see the findings doc — the
+  emergent-ridge artifact survives this prototype and belongs to the
+  freeboard-regulation follow-up, together with the land-relief constants
+  `OROGENY_MAX_ELEVATION_M`/`OROGENIC_ROOT_REFERENCE_M`). Measured flag-on
+  (seed 42/N=64/4.5 Gyr): the shallow-ocean share recovers from a 1–7%
+  decay to a sustained 7–13% (real shelf fringes) and arc maturation
+  re-submerges, but flooded *continental* crust does not return — drowned
+  platforms are transient (crustFates retires them) and large continents
+  still never subside, which is the freeboard follow-up's job.
 
 `energyBalance` (#30): the Phase 3 climate hub. A Budyko–Sellers **zonal
 energy-balance model** solved on `ENERGY_BALANCE_BANDS` (90) equal-area
@@ -762,8 +787,9 @@ PlanetParams = { seed, radiusMeters, gridN, stepYears, keyframeIntervalYears,
                  numPlates,
                  starLuminosity, dayLengthHours, obliquityDeg,
                  initialCo2Ppm,
-                 // mechanism toggles (#84/#88-#91): blockIsostasy, crustFates,
-                 //   compactArcs, marinePlanation, emergentArcTaper + *OnsetYears
+                 // mechanism toggles (#84/#88-#91 + datum re-key): blockIsostasy,
+                 //   crustFates, compactArcs, marinePlanation, emergentArcTaper,
+                 //   seaLevelDatums + *OnsetYears
                  // biosphere (#37): biosphereEnabled (default true — the ablation
                  //   switch), abiogenesisRatePerYear, initialOxygenPAL
                }   // immutable per run

@@ -46,6 +46,7 @@ import {
   MICROCONTINENT_FOUNDER_ELEVATION_M,
   OROGENY_MAX_ELEVATION_M,
 } from '../constants';
+import { platformDatumOffsetM } from '../datums';
 import { cellCount } from '../grid';
 import type { System } from '../step';
 
@@ -53,14 +54,19 @@ import type { System } from '../step';
  * Elevation ceiling for a continental block of the given area, m. Continuous
  * and monotonic in area: founder level below BLOCK_FOUNDER_AREA_M2, the full
  * orogeny ceiling at and above BLOCK_FULL_OROGENY_AREA_M2, a sqrt ramp
- * between. Exported for the contract test.
+ * between. Exported for the contract test. `datumOffsetM` shifts the whole
+ * ramp: the cap is physically a freeboard — the topography a block of this
+ * area can hold relative to the ocean surface — so under seaLevelDatums it
+ * anchors to the dynamic sea level (datums.ts); the default 0 preserves the
+ * original absolute-datum behavior.
  */
-export function blockElevationCap(areaM2: number): number {
+export function blockElevationCap(areaM2: number, datumOffsetM = 0): number {
   const t =
     (areaM2 - BLOCK_FOUNDER_AREA_M2) / (BLOCK_FULL_OROGENY_AREA_M2 - BLOCK_FOUNDER_AREA_M2);
-  if (t <= 0) return MICROCONTINENT_FOUNDER_ELEVATION_M;
-  if (t >= 1) return OROGENY_MAX_ELEVATION_M;
+  if (t <= 0) return datumOffsetM + MICROCONTINENT_FOUNDER_ELEVATION_M;
+  if (t >= 1) return datumOffsetM + OROGENY_MAX_ELEVATION_M;
   return (
+    datumOffsetM +
     MICROCONTINENT_FOUNDER_ELEVATION_M +
     (OROGENY_MAX_ELEVATION_M - MICROCONTINENT_FOUNDER_ELEVATION_M) * Math.sqrt(t)
   );
@@ -86,7 +92,7 @@ export const blockIsostasySystem: System = {
     );
     if (areasM2.length === 0) return state;
 
-    const caps = areasM2.map((area) => blockElevationCap(area));
+    const caps = areasM2.map((area) => blockElevationCap(area, platformDatumOffsetM(state)));
 
     // Rate-bounded subsidence toward the cap; never raises. The elevation
     // array is copied lazily so an all-continents-huge step (caps inert)

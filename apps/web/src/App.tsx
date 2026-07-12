@@ -268,7 +268,9 @@ function MechanismSidebar({ toggles, onToggle, streaming }: MechanismSidebarProp
               {m.label}
               {nonDefault ? ' *' : ''}
             </span>
-            <span style={{ opacity: 0.5, marginLeft: 'auto' }}>#{m.issue}</span>
+            {m.issue !== undefined && (
+              <span style={{ opacity: 0.5, marginLeft: 'auto' }}>#{m.issue}</span>
+            )}
           </label>
         );
       })}

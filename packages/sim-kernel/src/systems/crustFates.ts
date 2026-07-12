@@ -51,6 +51,7 @@ import {
   CRUST_FATE_SUBSIDENCE_M_PER_YR,
   MICROCONTINENT_FOUNDER_ELEVATION_M,
 } from '../constants';
+import { platformDatumOffsetM } from '../datums';
 import { cellCount, neighborTable } from '../grid';
 import type { PlanetState } from '../state';
 import type { System } from '../step';
@@ -74,6 +75,13 @@ export const crustFatesSystem: System = {
     );
     const nComps = areasM2.length;
     if (nComps === 0) return state;
+    // Sea-level-anchored datums (datums.ts): the founder/retirement level is
+    // physically sea-level-relative (a drowned platform sits below the
+    // WAVES); the offset anchors it to the dynamic sea level when the
+    // mechanism is on — which is what keeps retirement "already invisible in
+    // the land mask" true after the deep-time sea-level fall — and is
+    // exactly 0 when off.
+    const founderLevel = platformDatumOffsetM(state) + MICROCONTINENT_FOUNDER_ELEVATION_M;
     const isSmall = areasM2.map((a) => a < CRUST_FATE_SMALL_AREA_M2);
     // An all-small world has no docking target, and foundering every crust
     // record would be planet-scale destruction, not consolidation — bail.
@@ -189,7 +197,7 @@ export const crustFatesSystem: System = {
       // already sits at or below it — never a visible land-mask pop.
       let maxElev = -Infinity;
       for (const m of cells) if (pre.elevation[m]! > maxElev) maxElev = pre.elevation[m]!;
-      if (maxElev <= MICROCONTINENT_FOUNDER_ELEVATION_M) {
+      if (maxElev <= founderLevel) {
         crustType ??= pre.crustType.slice();
         sutureYears ??= pre.sutureYears.slice();
         for (const m of cells) {
@@ -203,9 +211,9 @@ export const crustFatesSystem: System = {
         const relax = CRUST_FATE_SUBSIDENCE_M_PER_YR * dtYears;
         for (const m of cells) {
           const e = (elevation ?? pre.elevation)[m]!;
-          if (e <= MICROCONTINENT_FOUNDER_ELEVATION_M) continue;
+          if (e <= founderLevel) continue;
           elevation ??= pre.elevation.slice();
-          elevation[m] = Math.max(MICROCONTINENT_FOUNDER_ELEVATION_M, e - relax);
+          elevation[m] = Math.max(founderLevel, e - relax);
         }
       }
     }

@@ -202,6 +202,28 @@ exports[`golden field hashes: #88-#91 mechanism prototypes on > marinePlanation 
 }
 `;
 
+exports[`golden field hashes: #88-#91 mechanism prototypes on > seaLevelDatums on, seed 42: after 10 steps 1`] = `
+{
+  "after10Steps": {
+    "biome": "02bce448",
+    "boundaryStress": "18e7e76f",
+    "crustAge": "f784a166",
+    "crustType": "23d4a595",
+    "elevation": "6c735458",
+    "iceFraction": "c3516af4",
+    "marineLife": "f7ac5feb",
+    "plateId": "691bdb92",
+    "precipitation": "b010fb10",
+    "sedimentM": "10c16b38",
+    "sutureYears": "b0549dc5",
+    "temperature": "dedc2ba7",
+    "timeYears": 10000000,
+    "windU": "e1fac275",
+    "windV": "4b3e2ae5",
+  },
+}
+`;
+
 exports[`golden field hashes: blockIsostasy on (#84) > seed 1: after 10 steps 1`] = `
 {
   "after10Steps": {
