@@ -1,8 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import { cellCount, faceRCToIndex, FIELD_NAMES, type Fields, type Keyframe } from 'sim-kernel';
 import {
+  computeCrustStats,
   computeKeyframeMetrics,
   DISPERSED_MAX_PLATE_FRAC,
+  SHALLOW_OCEAN_DEPTH_M,
   summarizeMetrics,
   summarizePairedMetrics,
   type KeyframeMetrics,
@@ -99,6 +101,73 @@ describe('computeKeyframeMetrics', () => {
     const m = metricsOf(kf);
     expect(m.landFrac).toBeCloseTo(10 / count, 10);
     expect(m.maxPlateFrac).toBeCloseTo((count - 1) / count, 10);
+  });
+});
+
+describe('computeCrustStats (#101 calibration harness)', () => {
+  it('computes the flooding shares against the dynamic sea level on a painted map', () => {
+    const kf = emptyKeyframe(2e9);
+    const count = cellCount(N);
+    kf.globals.seaLevelM = -3000;
+    // Ocean floor everywhere at −6000 m (from emptyKeyframe's fill at −4000).
+    kf.fields.elevation.fill(-6000);
+    // Five continental cells: three emergent at −2000 m, one flooded shelf at
+    // −3400 m (400 m deep — shallow), one flooded interior at −3600 m (600 m
+    // deep — below the shallow cutoff). Mean cont elevation −2600 m ⇒ mean
+    // freeboard exactly +400 m over the −3000 m sea.
+    const cont: Array<[number, number]> = [
+      [0, -2000],
+      [1, -2000],
+      [2, -2000],
+      [3, -3400],
+      [4, -3600],
+    ];
+    for (const [i, e] of cont) {
+      kf.fields.crustType[i] = 1;
+      kf.fields.elevation[i] = e;
+    }
+    // One emergent oceanic ridge crest above the fallen sea: land, not ocean.
+    kf.fields.elevation[10] = -2500;
+
+    const s = computeCrustStats(kf);
+    expect(s.timeYears).toBe(2e9);
+    expect(s.seaLevelM).toBe(-3000);
+    expect(s.contFrac).toBeCloseTo(5 / count, 10);
+    expect(s.meanFreeboardM).toBeCloseTo(400, 6);
+    // 2 of 5 continental cells sit below the sea.
+    expect(s.submergedContFrac).toBeCloseTo(2 / 5, 10);
+    // Ocean = cells below the sea: count − 3 emergent cont − 1 ridge.
+    expect(s.oceanOnContFrac).toBeCloseTo(2 / (count - 4), 10);
+    // Only the −3400 m shelf cell is within SHALLOW_OCEAN_DEPTH_M of the sea
+    // (the −3600 m interior is 600 m deep); share of the SPHERE, per #101.
+    expect(SHALLOW_OCEAN_DEPTH_M).toBe(500);
+    expect(s.shallowOceanFrac).toBeCloseTo(1 / count, 10);
+    expect(s.landFrac).toBeCloseTo(4 / count, 10);
+    expect(s.minElevationM).toBe(-6000);
+  });
+
+  it('a waterworld reports zero freeboard and zero flooding shares, not NaN', () => {
+    const kf = emptyKeyframe(0);
+    kf.globals.seaLevelM = -3000;
+    const s = computeCrustStats(kf);
+    expect(s.contFrac).toBe(0);
+    expect(s.meanFreeboardM).toBe(0);
+    expect(s.submergedContFrac).toBe(0);
+    expect(s.oceanOnContFrac).toBeCloseTo(0, 10);
+    expect(s.landFrac).toBe(0);
+  });
+
+  it('an all-land world reports zero ocean shares, not NaN', () => {
+    const kf = emptyKeyframe(0);
+    kf.globals.seaLevelM = -3000;
+    kf.fields.crustType.fill(1);
+    kf.fields.elevation.fill(0);
+    const s = computeCrustStats(kf);
+    expect(s.landFrac).toBe(1);
+    expect(s.submergedContFrac).toBe(0);
+    expect(s.oceanOnContFrac).toBe(0);
+    expect(s.shallowOceanFrac).toBe(0);
+    expect(s.meanFreeboardM).toBeCloseTo(3000, 6);
   });
 });
 
