@@ -59,6 +59,18 @@ import type { System } from '../step';
  * area can hold relative to the ocean surface — so under seaLevelDatums it
  * anchors to the dynamic sea level (datums.ts); the default 0 preserves the
  * original absolute-datum behavior.
+ *
+ * Known mechanism interaction: the ramp takes ONE offset, and the call site
+ * passes `platformDatumOffsetM` (the base of the ramp is the platform
+ * founder level, which that mechanism owns). Its TOP end reuses
+ * `OROGENY_MAX_ELEVATION_M`, which the `freeboard` mechanism separately
+ * re-keys at the orogeny/collision cap sites via `landDatumOffsetM` — so
+ * running freeboard WITHOUT seaLevelDatums leaves this cap's top absolute
+ * while the orogeny ceiling rides the sea, a disagreement of `seaLevelM`.
+ * Accepted: #84 is default-off and superseded by crustFates, and the two
+ * datum mechanisms are designed to be enabled together (the findings doc's
+ * pairing note); splitting the ramp across two offsets is not worth it for
+ * a superseded prototype.
  */
 export function blockElevationCap(areaM2: number, datumOffsetM = 0): number {
   const t =
