@@ -375,7 +375,9 @@ export const CONTINENTAL_INITIAL_AGE_YEARS = 2e9;
  * Convergence speed above which a boundary cell counts as an active margin
  * (trench/arc/orogeny; oceanic cells here are exempt from the thermal
  * subsidence hard-set), m/yr. 0.005 = 0.5 cm/yr, well below any deliberate
- * convergence but above transform noise.
+ * convergence but above transform noise. Also the exclusion gate for the
+ * freeboard passive-margin band (freeboard.ts): a coast converging faster
+ * than this is orogeny's, not thermal subsidence's.
  */
 export const ACTIVE_MARGIN_STRESS_M_PER_YR = 0.005;
 
