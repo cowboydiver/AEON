@@ -856,8 +856,10 @@ PlanetParams = { seed, radiusMeters, gridN, stepYears, keyframeIntervalYears,
                  //   bathymetryDatum + *OnsetYears
                  // biosphere (#37): biosphereEnabled (default true — the ablation
                  //   switch), abiogenesisRatePerYear, initialOxygenPAL
-                 // planet knobs: waterInventoryScale (#105, default 1.0 —
-                 //   dimensionless multiplier on the derived water inventory)
+                 // planet knobs: initialLandFraction (#106, default 0.3 — t=0
+                 //   coastline: the sea quantile), waterInventoryScale (#105,
+                 //   default 1.0 — dimensionless multiplier on the derived water
+                 //   inventory). They compose as base(landFraction) × scale.
                }   // immutable per run
 Globals     = { landFraction, co2, meanTemperatureK, seaLevelM, waterInventoryM,
                 oxygen, oxygenReductant, abiogenesisYear }
@@ -873,13 +875,27 @@ energy balance reads it as the greenhouse forcing and maintains
 `globals.seaLevelM` (dynamic sea level) and `globals.waterInventoryM` (the
 conserved total-water global-equivalent layer thickness) are the #33 sea-level
 state: the inventory is calibrated once at init from the initial ocean volume at
-the 0 m datum (so t=0 sea level is exactly 0 and the ~30% tuned land fraction is
-preserved), then held constant while `seaLevel` re-solves `seaLevelM` each step.
+the 0 m datum (so t=0 sea level is exactly 0 and the `initialLandFraction` land
+share is preserved), then held constant while `seaLevel` re-solves `seaLevelM`
+each step.
+The `initialLandFraction` parameter (#106, default 0.3) sets that t=0 coastline:
+`applyInitialTerrain` places its sea quantile at `1 − initialLandFraction`, so a
+planet can start ocean-dominated (low fraction) or land-dominated (high). It must
+stay strictly below `CONTINENTAL_CRUST_FRACTION` (0.4): the gap between the two is
+the initial submerged continental shelf (25% of continental crust flooded at the
+default 0.3 — the Earth-like #101/#102 construction), and continental crust is
+pinned at the Cogley 40% while the land fraction varies, so the initial flooded
+share moves with it (less land ⇒ more shelf; 75% flooded at 0.1, 2.5% at 0.39).
+At land fraction ≥ crust fraction every continental cell is emergent, oceanic
+highs snap down in the plates pass, and the shelf starves — the CLI validates
+`0 < f < 0.4`; the kernel trusts the value like `numPlates`. The default is the
+`0.3` literal, so a default planet's t=0 fields are byte-identical to the pre-#106
+kernel.
 The `waterInventoryScale` parameter (#105, default 1.0) multiplies that derived
 base, making the planet's water endowment a chosen property rather than an
-artifact of the terrain noise. The base is still derived (so the scale composes
-with a companion `initialLandFraction` (#106) and grid resolution as base ×
-scale); the
+artifact of the terrain noise. The base is still derived (so the two init knobs
+compose — land fraction shapes the world, water scale sets the endowment relative
+to it — and it also adapts to grid resolution, all as base × scale); the
 default 1.0 multiplies by exactly 1.0, so the inventory — and every field — is
 byte-identical to the pre-#105 kernel (`--water-scale` validates > 0 at the CLI
 boundary). Scale > 1 raises the deep-time sea and

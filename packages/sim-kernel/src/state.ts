@@ -1,5 +1,6 @@
 import {
   ABIOGENESIS_RATE_PER_YR,
+  DEFAULT_INITIAL_LAND_FRACTION,
   DEFAULT_KEYFRAME_INTERVAL_YEARS,
   DEFAULT_NUM_PLATES,
   DEFAULT_STEP_YEARS,
@@ -213,6 +214,29 @@ export interface PlanetParams {
    *  Default `INITIAL_OXYGEN_PAL` (≈0). */
   initialOxygenPAL: number;
   /**
+   * Fraction of cells the initial terrain places above the 0 m datum (#106):
+   * the t=0 coastline, chosen instead of pinned at 30%, so a planet can start
+   * ocean-dominated or land-dominated. `applyInitialTerrain` places its sea
+   * quantile at `1 − initialLandFraction`; the conserved water inventory is
+   * then derived from the ocean volume below that coastline (see
+   * `createInitialState`), so t=0 sea level stays exactly 0 at any value and a
+   * lower land fraction re-derives a larger, self-consistent inventory. This is
+   * why it composes with `waterInventoryScale` (#105): land fraction shapes the
+   * initial world (the derived base), water scale sets the endowment relative to
+   * it (base × scale). Init-time only, no RNG, no mechanism flag/onset — a
+   * `PlanetParams` number like `numPlates`. Default
+   * **`DEFAULT_INITIAL_LAND_FRACTION`** (0.3, the literal): the sea quantile is
+   * unchanged, so every t=0 field — and the main goldens — is byte-identical to
+   * the pre-#106 kernel by construction. Must satisfy
+   * `0 < initialLandFraction < CONTINENTAL_CRUST_FRACTION` (0.4): the gap to the
+   * crust fraction is the initial submerged shelf, and at land fraction ≥ crust
+   * fraction every continental cell is emergent and the shelf constructions
+   * starve. Enforced at the boundary by the `--initial-land-fraction` CLI flag;
+   * like `numPlates`, the kernel trusts the value (an out-of-range fraction is a
+   * caller bug).
+   */
+  initialLandFraction: number;
+  /**
    * Dimensionless multiplier on the derived water inventory (#105): planets
    * accumulate different amounts of water during formation, so the endowment
    * is a chosen property, not an artifact of the terrain noise. The base is
@@ -260,9 +284,10 @@ export interface Globals {
   /** Conserved total water inventory as a global-equivalent layer thickness, m
    *  (#33) — ocean liquid + grounded ice water-equivalent, spread over the
    *  whole sphere (cell-count mean). Set once at init from the initial ocean
-   *  volume at the 0 m datum (so t=0 sea level is exactly 0 and the ~30% tuned
-   *  initial land share is preserved), then held constant; the water-mass
-   *  invariant checks `oceanVolume(seaLevelM) + lockedIce = this`. */
+   *  volume at the 0 m datum (so t=0 sea level is exactly 0 and the
+   *  `initialLandFraction` land share (#106, default ~30%) is preserved), then
+   *  held constant; the water-mass invariant checks
+   *  `oceanVolume(seaLevelM) + lockedIce = this`. */
   waterInventoryM: number;
   /** Atmospheric O₂ as a fraction of the present atmospheric level, PAL — the
    *  slow biosphere reservoir (#37). The `oxygen` system integrates it each step
@@ -341,6 +366,7 @@ export function createPlanetParams(partial: Partial<PlanetParams> & { seed: numb
     biosphereEnabled: true,
     abiogenesisRatePerYear: ABIOGENESIS_RATE_PER_YR,
     initialOxygenPAL: INITIAL_OXYGEN_PAL,
+    initialLandFraction: DEFAULT_INITIAL_LAND_FRACTION,
     waterInventoryScale: 1,
     ...partial,
   };
@@ -381,10 +407,13 @@ export function createInitialState(params: PlanetParams): PlanetState {
   // Calibrate the conserved water inventory (#33) from the initial coastline:
   // the ocean volume at the 0 m datum, as a global-equivalent layer thickness
   // (cell-count mean of depth below the datum). This makes t=0 sea level
-  // exactly 0 and preserves the ~30% land fraction the initial terrain is tuned
-  // for, rather than imposing a free ocean-inventory constant that would
-  // generally place the initial shoreline away from that datum. The inventory
-  // is then held constant and the water-mass invariant checks it (§5).
+  // exactly 0 and preserves the `initialLandFraction` land share (#106, default
+  // ~30%) the initial terrain placed, rather than imposing a free
+  // ocean-inventory constant that would generally place the initial shoreline
+  // away from that datum. Because the base is derived from the shaped terrain, a
+  // lower land fraction (more ocean below the datum) re-derives a larger,
+  // self-consistent inventory automatically — the two init knobs compose. The
+  // inventory is then held constant and the water-mass invariant checks it (§5).
   //
   // `waterInventoryScale` (#105) then multiplies this derived base to give the
   // planet a chosen water endowment. At the default 1.0 the multiply is exact

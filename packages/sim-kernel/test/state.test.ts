@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { INITIAL_LAND_FRACTION } from '../src/constants';
+import { DEFAULT_INITIAL_LAND_FRACTION } from '../src/constants';
 import { FIELD_NAMES } from '../src/fields';
 import { cellCount, neighbors } from '../src/grid';
 import { hashFloat32Array } from '../src/hash';
@@ -25,8 +25,8 @@ describe('createInitialState', () => {
     let land = 0;
     for (const e of elevation) if (e >= 0) land++;
     const fraction = land / elevation.length;
-    expect(fraction).toBeGreaterThan(INITIAL_LAND_FRACTION - 0.02);
-    expect(fraction).toBeLessThan(INITIAL_LAND_FRACTION + 0.02);
+    expect(fraction).toBeGreaterThan(DEFAULT_INITIAL_LAND_FRACTION - 0.02);
+    expect(fraction).toBeLessThan(DEFAULT_INITIAL_LAND_FRACTION + 0.02);
     expect(state.globals.landFraction).toBeCloseTo(fraction, 3);
   });
 

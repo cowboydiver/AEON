@@ -356,6 +356,44 @@ exports[`golden field hashes: blockIsostasy on (#84) > seed 1337: after 10 steps
 }
 `;
 
+exports[`golden field hashes: initialLandFraction 0.15 (#106) > seed 42: initial state and after 10 steps, ocean-dominated start 1`] = `
+{
+  "after10Steps": {
+    "biome": "6ae41df8",
+    "boundaryStress": "0351d216",
+    "crustAge": "53547515",
+    "crustType": "4b430735",
+    "elevation": "317efc57",
+    "iceFraction": "b7dd068a",
+    "marineLife": "4580d7b4",
+    "plateId": "369794f5",
+    "precipitation": "8dd74cc2",
+    "sedimentM": "fe8066fd",
+    "sutureYears": "2114dba8",
+    "temperature": "732e939e",
+    "timeYears": 10000000,
+    "windU": "1b9357e5",
+    "windV": "e141a555",
+  },
+  "initial": {
+    "biome": "20b77ed8",
+    "boundaryStress": "b0549dc5",
+    "crustAge": "d976b11d",
+    "crustType": "041eea65",
+    "elevation": "55ba84a0",
+    "iceFraction": "b0549dc5",
+    "marineLife": "b0549dc5",
+    "plateId": "93938d05",
+    "precipitation": "f6e0034d",
+    "sedimentM": "b0549dc5",
+    "sutureYears": "b0549dc5",
+    "temperature": "61bb89ab",
+    "windU": "385956b5",
+    "windV": "cecee9e5",
+  },
+}
+`;
+
 exports[`golden field hashes: legacy all-mechanisms-off > seed 1: initial state and after 10 steps 1`] = `
 {
   "after10Steps": {

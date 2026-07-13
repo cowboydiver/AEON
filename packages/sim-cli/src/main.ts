@@ -3,6 +3,7 @@ import { join, resolve } from 'node:path';
 import { parseArgs } from 'node:util';
 import { PNG } from 'pngjs';
 import {
+  CONTINENTAL_CRUST_FRACTION,
   EVENT_KINDS,
   FIELD_NAMES,
   createPlanetParams,
@@ -94,6 +95,15 @@ Options:
                               the ridge crests natively (~2.6 ≈ Earth, ~3.4–4.7
                               submerges 1–2.5 km); see
                               docs/SEA_LEVEL_DATUM_FINDINGS.md
+  --initial-land-fraction <f> fraction of cells above the 0 m datum at t=0
+                              (#106): the initial coastline as a chosen property
+                              rather than fixed at 30% (default 0.3, must be
+                              0 < f < 0.4 = the continental crust fraction; the
+                              gap to it is the initial submerged shelf). Lower f
+                              starts an ocean-dominated world with a larger
+                              derived water inventory; composes with
+                              --water-scale as base × scale. See
+                              docs/SEA_LEVEL_DATUM_FINDINGS.md
   --no-<mechanism>            disable a default-on mechanism for this run,
                               e.g. --no-crust-fates --no-marine-planation;
                               all eight --no-* forms exist. Composable with
@@ -135,6 +145,7 @@ const { values } = parseArgs({
     'grid-n': { type: 'string' },
     'step-years': { type: 'string' },
     'water-scale': { type: 'string' },
+    'initial-land-fraction': { type: 'string' },
     report: { type: 'boolean', default: false },
     metrics: { type: 'boolean', default: false },
     'crust-stats': { type: 'boolean', default: false },
@@ -187,6 +198,16 @@ const stepYears = numArg(values['step-years'], 'step-years');
 const waterScale = numArg(values['water-scale'], 'water-scale');
 if (waterScale !== undefined && waterScale <= 0) {
   console.error(`sim-cli: --water-scale must be > 0: ${waterScale}`);
+  process.exit(2);
+}
+const initialLandFraction = numArg(values['initial-land-fraction'], 'initial-land-fraction');
+// Range: 0 < f < CONTINENTAL_CRUST_FRACTION. At f ≥ the crust fraction every
+// continental cell would be emergent and the initial submerged shelf (the gap
+// between the two) starves; at f ≤ 0 there is no land to place a coastline for.
+if (initialLandFraction !== undefined && !(initialLandFraction > 0 && initialLandFraction < CONTINENTAL_CRUST_FRACTION)) {
+  console.error(
+    `sim-cli: --initial-land-fraction must be in (0, ${CONTINENTAL_CRUST_FRACTION}): ${initialLandFraction}`,
+  );
   process.exit(2);
 }
 const dumpEvery = Math.max(1, Math.round(numArg(values['dump-every'], 'dump-every') ?? 1));
@@ -255,6 +276,7 @@ const params = createPlanetParams({
   ...(keyframeIntervalYears !== undefined ? { keyframeIntervalYears } : {}),
   ...(stepYears !== undefined ? { stepYears } : {}),
   ...(waterScale !== undefined ? { waterInventoryScale: waterScale } : {}),
+  ...(initialLandFraction !== undefined ? { initialLandFraction } : {}),
   // Single-arm mechanism flags compose (e.g. --block-isostasy --crust-fates
   // measures the pair together); --no-* forms disable a default-on mechanism.
   // The paired --ab harness takes one at a time.
@@ -480,6 +502,7 @@ if (abMechanism !== undefined && abBranchYears !== undefined) {
       ...(keyframeIntervalYears !== undefined ? { keyframeIntervalYears } : {}),
       ...(stepYears !== undefined ? { stepYears } : {}),
       ...(waterScale !== undefined ? { waterInventoryScale: waterScale } : {}),
+      ...(initialLandFraction !== undefined ? { initialLandFraction } : {}),
       ...mechanismParams(on, abBranchYears),
     });
     const series: KeyframeMetrics[] = [];

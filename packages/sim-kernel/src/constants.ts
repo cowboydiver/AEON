@@ -263,8 +263,22 @@ export const EARTH_OBLIQUITY_DEG = 23.44;
 /** Standard atmosphere tropospheric lapse rate, K/m (ICAO: 6.5 K/km). */
 export const LAPSE_RATE_K_PER_M = 0.0065;
 
-/** Fraction of cells above the 0 m datum targeted by initial terrain (spec: ~30%). */
-export const INITIAL_LAND_FRACTION = 0.3;
+/**
+ * Default fraction of cells above the 0 m datum targeted by initial terrain
+ * (spec: ~30%). Since #106 this is the DEFAULT of the `initialLandFraction`
+ * `PlanetParams` number, not a fixed constant: initial terrain places its sea
+ * quantile so this fraction of cells sit above the datum, and the conserved
+ * water inventory is derived from the ocean volume below that coastline
+ * (`createInitialState`), so a lower/higher land fraction re-derives a
+ * self-consistent inventory automatically (t=0 sea stays exactly 0 at any
+ * value). Must stay strictly below `CONTINENTAL_CRUST_FRACTION` — the 10-point
+ * gap IS the initial submerged shelf (25% of continental crust flooded at the
+ * default); at land fraction ≥ crust fraction every continental cell would be
+ * emergent and the shelf constructions starve (the CLI clamps it). The value is
+ * the literal `0.3`, so a default run's sea quantile is byte-identical to the
+ * pre-#106 kernel by construction.
+ */
+export const DEFAULT_INITIAL_LAND_FRACTION = 0.3;
 
 /** Deepest initial ocean floor below datum, m (order of Earth's abyssal plains). */
 export const INITIAL_OCEAN_DEPTH_M = 6000;
@@ -302,6 +316,16 @@ export const TERRAIN_NOISE_OFFSET: readonly [number, number, number] = [17.13, 4
  * Fraction of the surface that is continental crust (including submerged
  * shelves). Earth: ~41% of surface area is continental crust (Cogley 1984);
  * rounded. Initial crustType is the elevation quantile at this fraction.
+ *
+ * Deliberately pinned at the Cogley-anchored 40% while `initialLandFraction`
+ * (#106) varies (issue-106 decision (a)): the gap between this and the land
+ * fraction is the initial submerged continental shelf (25% of continental
+ * crust flooded at the default 0.3 land fraction, the Earth-like #101/#102
+ * construction). Holding it fixed means the initial flooded share VARIES with
+ * the land parameter — less land ⇒ more shelf, which is physical — and adds no
+ * second knob. It is the hard upper edge for `initialLandFraction`: at land
+ * fraction ≥ this every continental cell is emergent and the shelf constructions
+ * starve, so the CLI validates `0 < initialLandFraction < this`.
  */
 export const CONTINENTAL_CRUST_FRACTION = 0.4;
 
