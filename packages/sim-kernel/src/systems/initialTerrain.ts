@@ -1,5 +1,4 @@
 import {
-  INITIAL_LAND_FRACTION,
   INITIAL_LAND_HEIGHT_M,
   INITIAL_OCEAN_DEPTH_M,
   TERRAIN_BASE_FREQUENCY,
@@ -15,10 +14,14 @@ import type { PlanetState } from '../state';
 /**
  * Phase 0 placeholder terrain: seeded fractal value noise sampled at each
  * cell's center direction, with sea level chosen as the exact
- * (1 - INITIAL_LAND_FRACTION) quantile of the noise so ~30% of cells sit
- * above the 0 m datum. Ocean depth is linear below the threshold; land uses
- * a ^TERRAIN_LAND_EXPONENT curve so most land is lowland with sparse peaks
- * (Earth-like hypsometry, throwaway physics, real plumbing).
+ * (1 - params.initialLandFraction) quantile of the noise so that fraction of
+ * cells sit above the 0 m datum (#106; default ~30%). Ocean depth is linear
+ * below the threshold; land uses a ^TERRAIN_LAND_EXPONENT curve so most land is
+ * lowland with sparse peaks (Earth-like hypsometry, throwaway physics, real
+ * plumbing). The land-height/ocean-depth/exponent constants are calibrated
+ * against the 30% split but keep the hypsometry coherent across the tested
+ * in-range {0.1, 0.3, 0.39} triple (f = 0.5 is the degenerate over-edge case —
+ * docs/SEA_LEVEL_DATUM_FINDINGS.md, the #106 t=0 checks).
  *
  * Temperature is set afterwards by the Phase 3 energy balance (#30) inside
  * `createInitialState`; this pass only lays down elevation and the land count.
@@ -42,9 +45,13 @@ export function applyInitialTerrain(state: PlanetState): PlanetState {
   }
 
   // Exact land-fraction quantile as sea level. Float32Array#sort is numeric
-  // ascending by spec and allocates no boxed numbers.
+  // ascending by spec and allocates no boxed numbers. At the default 0.3 the
+  // computation is bit-identical to the pre-#106 constant path (same `0.3`
+  // literal); at f → 0 the index clamps to count−1 (one max cell as "land"),
+  // and near the crust fraction the coastline rides just below the crust
+  // quantile (thin submerged shelf) — the edge cases the #106 tests pin.
   const sorted = noise.slice().sort();
-  const seaIndex = Math.min(count - 1, Math.floor(count * (1 - INITIAL_LAND_FRACTION)));
+  const seaIndex = Math.min(count - 1, Math.floor(count * (1 - params.initialLandFraction)));
   const seaLevel = sorted[seaIndex]!;
   // Guard degenerate ranges (ties at the quantile on tiny/pathological
   // grids): a zero denominator would put NaN into elevation, temperature and

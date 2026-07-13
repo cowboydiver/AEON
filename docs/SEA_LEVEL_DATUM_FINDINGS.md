@@ -740,3 +740,137 @@ submerge the crests natively (scale ≳ 2.0) the #102 crest cap is redundant —
 candidate for simplifying the datum stack on high-water worlds — and the
 continental-crust cost of high water (the loser column) is worth its own
 tectonic-budget study.
+
+## The initial-land-fraction parameter (#106): the t=0 coastline as a chosen property
+
+`INITIAL_LAND_FRACTION = 0.3` fixed every planet's t=0 coastline — the initial
+terrain placed its sea quantile so ~30% of cells stood above the 0 m datum. That
+was a scaffold-spec number, not a physical constraint. `initialLandFraction`
+(default **0.3**) makes it a `PlanetParams` knob: `applyInitialTerrain` places
+the sea quantile at `1 − initialLandFraction`, so a planet can start
+ocean-dominated or land-dominated. The default is the same `0.3` literal, so a
+default planet's t=0 fields — and the main goldens — are byte-identical to the
+pre-#106 kernel.
+
+It is the companion to `waterInventoryScale` (#105) and composes with it by
+construction. The conserved water inventory is *derived* from the shaped
+coastline (the ocean volume below the datum, `createInitialState`), so a lower
+land fraction re-derives a larger, self-consistent inventory automatically —
+t=0 sea level stays exactly 0 at any value. Land fraction shapes the initial
+world (the derived base); water scale sets the endowment relative to it (base ×
+scale). This is why #105 factored its knob as a scale rather than an absolute.
+
+**The crust-fraction hard edge (issue decision (2), option (a)).**
+`CONTINENTAL_CRUST_FRACTION` stays pinned at the Cogley-anchored 40% while the
+land fraction varies — one literature-anchored value, no second knob. The gap
+between the two is the initial submerged continental shelf, so holding crust
+fraction fixed makes the initial flooded share *vary* with the land parameter
+(less land ⇒ more shelf — physical). At land fraction ≥ crust fraction the sea
+quantile falls below the crust quantile: every continental cell is emergent, the
+oceanic highs between the two quantiles snap down onto the age-depth curve in the
+plates pass, and the shelf starves. So `initialLandFraction` is validated to
+`0 < f < 0.4` at the CLI (the kernel trusts the value, like `numPlates`).
+
+### The t=0 construction across the range (seed 42, N=64, sea level 0 by construction)
+
+| start land | measured land | cont. crust | flooded cont. | shallow % | flooded = (0.4−f)/0.4 |
+|---|---|---|---|---|---|
+| 0.10 | 10.0% | 40.0% | 75.0% | 9.1% | 75.0% ✓ |
+| 0.30 | 30.0% | 40.0% | 25.0% | 10.0% | 25.0% ✓ |
+| 0.39 | 39.0% | 40.0% | 2.5% | 1.0% | 2.5% ✓ |
+
+The measured coastline lands exactly on the requested fraction, and the flooded
+shelf share tracks `(0.4 − f)/0.4` to the grid quantum — the shelf is 75% of the
+continental crust at an ocean-dominated 0.1 start, the Earth-like 25% at the
+default, and a thin 2.5% at the land-dominated edge. The t=0 elevation dumps at
+{0.1, 0.3, 0.39} are the *same* seed-42 terrain with the waterline riding up or
+down the identical noise: coherent coastlines, Earth-like hypsometry (green
+lowland fringes, sparse brown interior peaks, shelf halos), no static-noise
+speckle — the land-height/ocean-depth/exponent constants calibrated against the
+30% split stay coherent across the range. **The over-edge case, measured:** at
+`f = 0.5` (> the 0.4 crust fraction) the real emergent land caps at ~40% (the
+oceanic highs snap down) and *no* continental crust is submerged — the shelf is
+gone. `globals.landFraction` still reads ~0.5 (terrain sets it before the plates
+snap), the tell that the regime is inconsistent, and exactly why the knob is
+clamped below the crust fraction.
+
+### The deep-time convergence sweep: does the planet forget its coastline?
+
+The interesting question: after 4.5 Gyr, does the *initial* land fraction still
+matter, or does the tectonic continental-crust equilibrium erase it? Sweep:
+initial land {0.1, 0.3, 0.39} × the golden seeds, 4.5 Gyr, full datum stack
+(`seaLevelDatums + freeboard + bathymetryDatum`, `crustFates + marinePlanation`
+default-on), N=64. Late-time aggregates are ≥ 1.5 Gyr means (100 Myr cadence),
+against the dynamic sea level. (Cross-check: the seed-42 / 0.3 row below —
+the shipped default — reproduces the #105 scale-1.0 baseline to under a percent:
+sea −3579 vs −3583, land 15.5 vs 15.6%, crust 27.5%, flooded 46.8 vs 46.5%. The
+harness agrees with the prior campaign.)
+
+| seed | start land | late sea (m) | late land % | late cont. crust | late flooded cont. | late land min |
+|---|---|---|---|---|---|---|
+| 1 | 10% | −3143 | 9.7% | 21.5% | 58.0% | 6.9% |
+| 1 | 30% | −3567 | 13.3% | 26.7% | 54.0% | 9.5% |
+| 1 | 39% | −3762 | 11.0% | 23.0% | 54.2% | 8.5% |
+| 42 | 10% | −3315 | 10.9% | 21.9% | 53.6% | 7.7% |
+| 42 | 30% | −3579 | 15.5% | 27.5% | 46.8% | 10.6% |
+| 42 | 39% | −3690 | 15.1% | 26.8% | 48.8% | 9.7% |
+| 1337 | 10% | −3245 | 11.9% | 23.3% | 51.8% | 9.9% |
+| 1337 | 30% | −3785 | 12.5% | 22.8% | 47.4% | 8.9% |
+| 1337 | 39% | −3904 | 12.0% | 25.8% | 56.4% | 9.4% |
+
+**The answer is partial convergence, and it splits by variable:**
+
+- **Continental crust strongly converges to the tectonic attractor.** A 29-point
+  starting spread (10% → 39% land, a 4× range) collapses to a late-time crust
+  band of 21.5–27.5% across all nine runs (per-seed spread 3.0–5.6 points). The
+  start ordering is largely erased — on seed 1337 it even inverts (the 0.1 start
+  ends with *more* crust than the 0.3 start, 23.3 vs 22.8%). The continental
+  budget is set by tectonic creation/destruction equilibrium, and it forgets the
+  coastline it started from. For late-time continental crust the parameter is
+  **mostly cosmetic** — an honest finding.
+- **Late sea level does NOT converge — it stays monotonic in the start on every
+  seed.** −3143/−3567/−3762 (seed 1), −3315/−3579/−3690 (seed 42),
+  −3245/−3785/−3904 (seed 1337): ~600 m of surviving spread, always higher sea
+  for the lower land fraction. This is the *water-endowment* signature, not the
+  coastline geometry — the low-land start derived a larger inventory and the
+  extra water is still on the planet 4.5 Gyr later. It is the same lever #105
+  pulls directly, reached here through the geometry.
+- **Late land fraction: the low-land (high-water) start ends lowest on all three
+  seeds** (9.7 / 10.9 / 11.9% vs 11–15.5% for the 0.3/0.39 starts). The endowment
+  coupling — more water ⇒ more flooding ⇒ less emergent land, retiring crust
+  through marine planation — survives deep time. The 0.3 and 0.39 starts, by
+  contrast, land within seed-scatter of each other (seed 42: 15.5 vs 15.1%): they
+  begin at the same 40% crust with only a thin-shelf difference and near-equal
+  inventories, so that difference IS forgotten. Only the ocean-dominated start,
+  which is genuinely a high-water world, stays distinguishable.
+
+**The reconciliation:** `initialLandFraction` is a water-endowment knob in
+disguise, because the inventory is derived from the coastline. Late worlds
+remember the *endowment* (a monotonic sea-level offset and a persistent low-land
+tilt on ocean-dominated starts), not the *shape* (continental crust is pulled to
+the tectonic attractor regardless). So it is neither purely cosmetic nor a strong
+late-time land-diversity knob: it is a modest, physically-grounded diversity knob
+for late-time sea level and emergent land, and it does its work through the water
+inventory rather than through the initial continental geometry.
+
+**The loser, stated:** the 0.1 start pushes the late-time land *minimum* to
+6.9–9.9% — below the informal 10% land floor on seeds 1 and 42 — the same
+near-waterworld cost #105 documents for high `waterInventoryScale`, reached here
+from the other side. An ocean-dominated start is a real, if not free, planet
+choice.
+
+### Shipped state
+
+`initialLandFraction` default 0.3 (byte-identical goldens — the sea quantile uses
+the same `0.3` literal, so the main goldens pin it unregenerated),
+`--initial-land-fraction` CLI flag (validated `0 < f < CONTINENTAL_CRUST_FRACTION`),
+a non-default golden arm (0.15, seed 42, 10 steps, with a `landFraction ≈ 0.15`
+engagement assertion pinning the ocean-dominated path). Unit tests pin the
+default byte-identity, the measured coastline and pinned t=0 sea level across the
+range, the derived-inventory monotonicity, the `base(f) × scale` composition with
+#105, and the quantile edge cases (f → 0 and the degenerate f ≥ crust fraction).
+The t=0 dumps and the convergence sweep above were run at N=64, 4.5 Gyr, full
+datum stack, on all three golden seeds. Follow-up surfaced: the parameter's
+deep-time reach is the derived water inventory it sets, so on the continental
+budget it and `waterInventoryScale` are two handles on one lever — a candidate
+for documenting them jointly as "the endowment" rather than as independent knobs.

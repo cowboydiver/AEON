@@ -87,6 +87,39 @@ describe('golden field hashes: waterInventoryScale 2.0 (#105)', () => {
 });
 
 /**
+ * Non-default golden arm for the #106 initial-land-fraction parameter. Like the
+ * #105 water arm this is a base `PlanetParams` number, pinned on the shipped
+ * DEFAULT world with only `initialLandFraction` changed. The default 0.3 is
+ * byte-identical to the pre-#106 kernel (the sea quantile uses the same `0.3`
+ * literal), so the MAIN goldens above pin it and it needs no arm. This arm pins
+ * an ocean-dominated 0.15 start. UNLIKE the water arm, the parameter moves the
+ * t=0 elevation quantile itself, so EVERY t=0 field differs from the default —
+ * hence both the initial and stepped hashes are pinned. The `landFraction ≈ 0.15`
+ * assertion guards ENGAGEMENT: it proves the coastline quantile actually shifted
+ * to the ocean-dominated regime (vs the default 0.30), so this spine can never
+ * silently pin the default path (the #102/#105 engaged-golden precedent).
+ */
+describe('golden field hashes: initialLandFraction 0.15 (#106)', () => {
+  it('seed 42: initial state and after 10 steps, ocean-dominated start', () => {
+    const params = createPlanetParams({ seed: 42, initialLandFraction: 0.15 });
+    const initial = createInitialState(params);
+    const ctx: SimContext = { rng: createRng(params.seed).fork('sim') };
+    let stepped = initial;
+    for (let i = 0; i < 10; i++) {
+      stepped = step(stepped, params.stepYears, ctx);
+    }
+    // Engagement: the t=0 coastline is the ocean-dominated 15%, not the default
+    // 30% — the sea quantile provably moved.
+    expect(initial.globals.landFraction).toBeGreaterThan(0.13);
+    expect(initial.globals.landFraction).toBeLessThan(0.17);
+    expect({
+      initial: fieldHashes(initial),
+      after10Steps: { timeYears: stepped.timeYears, ...fieldHashes(stepped) },
+    }).toMatchSnapshot();
+  });
+});
+
+/**
  * Legacy spine: the pre-promotion kernel path with every mechanism off.
  * These hashes are the values the MAIN goldens carried before the #88-#91
  * default-on promotion (copied over verbatim, not regenerated), so they pin
