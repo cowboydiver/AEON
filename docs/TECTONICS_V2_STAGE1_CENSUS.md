@@ -5,9 +5,9 @@ against the Stage 0 baseline (`docs/TECTONICS_V2_STAGE0_CENSUS.md`) and records 
 full #111 gate campaign. Runs were produced on branch `claude/tectonics-v2-stage1`
 with `--force-kinematics --plate-census --report --metrics --dump elevation,crustType,crustAge`.
 
-Acceptance grid: seeds {1, 42, 1337} at N=64, 4.5 Gyr each. (The N=128 seed-42
-confirmation is deferred — see "Open decision" below; it cannot change the blocking
-finding, which is grid-independent.)
+Acceptance grid: seeds {1, 42, 1337} at N=64, 4.5 Gyr each, plus the seed-42 N=128
+confirmation (recorded below — it corroborates every N=64 result and, as predicted,
+the blocking oc/cont-ratio finding is grid-independent).
 
 ## Headline
 
@@ -39,6 +39,48 @@ rather than tuned. No thermal runaway; flipbooks show coherent geology, not nois
 Dispersal per-Gyr buckets: seed 42 `1.00/0.93/0.74/0.76/0.55`; seed 1
 `1.00/0.85/0.77/0.55/1.00`; seed 1337 `0.74/0.93/1.00/0.92/0.88`. The 5th bucket is
 a half-Gyr (4.0–4.5) partial window.
+
+## N=128 seed-42 confirmation (4.5 Gyr, means past 1 Gyr over 351 keyframes)
+
+Run with the same flags at `--grid-n 128`. Corroborates the N=64 grid and settles
+the grid-independence question the blocking finding raised.
+
+| Gate (target) | N=128 seed 42 | N=64 seed 42 |
+|---|---|---|
+| census speed median, cm/yr (2–6) | **4.55 ✓** | 4.67 ✓ |
+| census speed min / max, cm/yr | 2.37 / 9.05 | 2.26 / 10.31 |
+| **oc/cont speed ratio (1.5–4)** | **0.02 ✗** | 0.38 ✗ |
+| speed–continentality corr (want < 0) | +0.192 (deep-time wash) | +0.015 |
+| pole stability (mean cosine; want < 1) | 0.9971 | 0.9963 |
+| land min, % (≥ 10) | **17.7 ✓** | 21.2 ✓ |
+| dispersal, every Gyr bucket ≥ 0.7 | **0.74/0.80/0.97/0.75/0.98 — all ✓** | 5th = 0.55 ✗ |
+| tempo, Myr/plate (100–300) | **133 ✓** | 141 ✓ |
+| seafloor age median / mean, Myr | 103 / 168 | 99 / 161 |
+| seafloor share > 200 Myr | 27.5% | 24.6% |
+| mean T range over run, K | 279–285 (no drift) | 279–291 |
+
+Findings:
+
+- **Every stage-1 core gate holds at N=128** — speed regime, envelope ends, pole
+  migration, land, tempo all in-band, mean T stable, no NaN, speed correctly
+  capped. The result is grid-robust.
+- **The oc/cont ratio is *lower* at N=128 (0.02 vs 0.38), not higher.** This is the
+  decisive corroboration of the blocking finding: the finer grid forms even larger,
+  more thoroughly-mixed plates, so the "continent-dominated" (≥50% continental)
+  partition is empty in essentially every keyframe and the ratio collapses further
+  toward 0. No physics or drag retune can move a structurally-empty partition; the
+  degeneracy is a property of the metric under a dispersed few-plate geometry, and
+  it is grid-independent (in fact grid-*monotone* toward 0). The decision on #111
+  stands unchanged; the N=128 data cannot resolve it in the executor's favor.
+- **The secondary dispersal miss does NOT reproduce at N=128 seed 42** — every
+  per-Gyr bucket is ≥ 0.74 (0.74/0.80/0.97/0.75/0.98), no 0.55 dip. The N=64 dips
+  look like a coarse-grid / small-sample excursion rather than a genuine
+  supercontinent-lock precursor; longest >85%-monopoly window is 0 Myr.
+- **Flipbooks inspected** (elevation, crustType, crustAge at 0.15 Gyr cadence):
+  coherent dispersed continents with margin mountain belts, spreading-ridge arcs,
+  polar ice, and a structured young-ridge/old-interior seafloor-age field. The large
+  old (cream) seafloor regions are the known trench-rollback deferral (§3), not
+  noise.
 
 ## What passes (stage-1 core objectives)
 
