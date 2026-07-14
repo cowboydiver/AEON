@@ -192,6 +192,23 @@ export interface PlanetParams {
    *  Default 0. */
   bathymetryDatumOnsetYears: number;
   /**
+   * Enable force-balance plate kinematics (Tectonics V2 stage 1, #111,
+   * proposal §2). When on, the `plateDynamics` system makes each plate's
+   * angular velocity ω⃗ *derived state*: every step it relaxes toward the
+   * terminal velocity of a boundary-integrated rigid-plate torque balance
+   * (slab pull, slab suction, ridge push, collision damping, closed by basal
+   * drag with a continental-keel multiplier), replacing the immutable random
+   * Euler vector drawn once at creation. Zero new RNG draws. Default **OFF** —
+   * a default-off mechanism prototype in the standard onset pattern; the
+   * physics pass lands in stage-1 chunk 2 and the main goldens stay
+   * byte-identical while off.
+   */
+  forceKinematics: boolean;
+  /** Sim year before which forceKinematics is inert even when enabled — the
+   *  #111 branched-A/B onset, same contract as blockIsostasyOnsetYears.
+   *  Default 0. */
+  forceKinematicsOnsetYears: number;
+  /**
    * Enable the biosphere (#37, Phase 4): ocean life, oxygenation, and — from
    * #39 — land vegetation. The ablation switch, **default `true`** (the
    * biosphere is a shipped feature, not a prototype). When `false` the life
@@ -351,6 +368,13 @@ export interface Globals {
    *  over alive owning plates (the Forsyth & Uyeda sign test — expected
    *  negative once the balance runs). 0 when < 2 plates or zero variance. */
   speedContinentalityCorr: number;
+  /** Pearson correlation of per-plate speed vs attached-slab driving stress
+   *  (`slabPullN`/plate area) over alive owning plates — the Forsyth & Uyeda
+   *  slab-attachment test the stage-1 gate is written against (#111; want ≥
+   *  +0.3). Positive ⇒ plates with more attached down-going slab move faster;
+   *  unlike the continentality proxy it stays discriminating in the deep-time
+   *  mixed-plate steady state. 0 when < 2 plates or zero variance (flag-off). */
+  speedSlabAttachmentCorr: number;
   /** Count-mean over alive owning plates of the cosine between this step's
    *  Euler pole and the previous census step's (`prevEulerPole`) — the
    *  pole-stability seed for the stage-1 autocorrelation diagnostic (§8 risk 1).
@@ -418,6 +442,8 @@ export function createPlanetParams(partial: Partial<PlanetParams> & { seed: numb
     freeboardOnsetYears: 0,
     bathymetryDatum: false,
     bathymetryDatumOnsetYears: 0,
+    forceKinematics: false,
+    forceKinematicsOnsetYears: 0,
     biosphereEnabled: true,
     abiogenesisRatePerYear: ABIOGENESIS_RATE_PER_YR,
     initialOxygenPAL: INITIAL_OXYGEN_PAL,
@@ -457,6 +483,7 @@ export function createInitialState(params: PlanetParams): PlanetState {
       plateSpeedMaxMPerYr: 0,
       oceanicContinentalSpeedRatio: 0,
       speedContinentalityCorr: 0,
+      speedSlabAttachmentCorr: 0,
       poleStability: 0,
       marginConsolidationFlipsTotal: 0,
     },

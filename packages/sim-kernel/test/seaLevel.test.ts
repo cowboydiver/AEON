@@ -51,6 +51,7 @@ function bathyState(
       plateSpeedMaxMPerYr: 0,
       oceanicContinentalSpeedRatio: 0,
       speedContinentalityCorr: 0,
+      speedSlabAttachmentCorr: 0,
       poleStability: 0,
       marginConsolidationFlipsTotal: 0,
     },

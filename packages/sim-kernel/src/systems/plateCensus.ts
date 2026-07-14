@@ -24,7 +24,14 @@
  *    (current continental fraction < 0.5) ÷ mean speed of continent-dominated
  *    plates (≥ 0.5) — Forsyth & Uyeda's ratio (§3 target 1.5–4);
  *  - speed-vs-continentality Pearson correlation (their sign test — expected
- *    negative once the balance runs);
+ *    negative once the balance runs; a proxy that washes to 0 in the deep-time
+ *    mixed-plate steady state, so no longer the stage-1 gate);
+ *  - speed-vs-slab-attachment Pearson correlation — the Forsyth & Uyeda variable
+ *    the stage-1 gate is now written against (#111 owner decision). Each plate's
+ *    attached down-going slab-pull force `slabPullN` (set by `plateDynamics`) is
+ *    normalized to an intensive driving stress `slabPullN/(cells·cellA)` so it
+ *    compares fairly across plate sizes; expected positive and PERSISTENT (dense
+ *    old slabs pull their plate faster) where the continentality proxy decays;
  *  - pole stability: count-mean cosine between this step's Euler pole and the
  *    previous census step's (`prevEulerPole`) — the seed for the stage-1
  *    autocorrelation diagnostic; exactly 1.0 on the immutable-pole baseline.
@@ -35,7 +42,7 @@
  * iteration order; same seed + params ⇒ bit-identical census on every machine.
  */
 
-import { cellCount } from './../grid';
+import { cellAreaM2, cellCount } from './../grid';
 import type { PlanetState } from './../state';
 import type { System } from './../step';
 import { dot3 } from './../vec';
@@ -51,6 +58,7 @@ export interface PlateCensus {
   readonly plateSpeedMaxMPerYr: number;
   readonly oceanicContinentalSpeedRatio: number;
   readonly speedContinentalityCorr: number;
+  readonly speedSlabAttachmentCorr: number;
   readonly poleStability: number;
 }
 
@@ -62,6 +70,7 @@ const EMPTY_CENSUS: PlateCensus = {
   plateSpeedMaxMPerYr: 0,
   oceanicContinentalSpeedRatio: 0,
   speedContinentalityCorr: 0,
+  speedSlabAttachmentCorr: 0,
   poleStability: 0,
 };
 
@@ -133,8 +142,12 @@ export function computePlateCensus(state: PlanetState): PlateCensus {
   }
 
   const R = state.params.radiusMeters;
+  // Equal-area cell area — normalizes the per-plate attached slab force into
+  // an intensive driving stress (shared grid helper; the #4 "shared truth").
+  const cellA = cellAreaM2(state.params.gridN, R);
   const speeds: number[] = [];
   const contFracs: number[] = [];
+  const slabStresses: number[] = [];
   let oceanicSum = 0;
   let oceanicN = 0;
   let continentalSum = 0;
@@ -149,8 +162,12 @@ export function computePlateCensus(state: PlanetState): PlateCensus {
 
     const speed = Math.abs(plate.angularVelRadPerYr) * R;
     const frac = continental[p]! / own;
+    // Intensive attached-slab driving stress (N/m²): total attached slab-pull
+    // force spread over the plate's area, so it compares across plate sizes.
+    const slabStress = plate.slabPullN / (own * cellA);
     speeds.push(speed);
     contFracs.push(frac);
+    slabStresses.push(slabStress);
 
     if (frac < CONTINENT_DOMINATED_FRACTION) {
       oceanicSum += speed;
@@ -191,6 +208,7 @@ export function computePlateCensus(state: PlanetState): PlateCensus {
     plateSpeedMaxMPerYr: max,
     oceanicContinentalSpeedRatio: ratio,
     speedContinentalityCorr: pearson(speeds, contFracs),
+    speedSlabAttachmentCorr: pearson(speeds, slabStresses),
     poleStability: poleN > 0 ? poleDotSum / poleN : 0,
   };
 }

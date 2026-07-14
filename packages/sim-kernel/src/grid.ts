@@ -61,6 +61,16 @@ export function cellCount(N: number): number {
   return 6 * N * N;
 }
 
+/**
+ * Equal-area area of one cube-sphere cell, m² — the whole sphere's area
+ * (4πR²) split evenly over its `cellCount(N)` cells. The single home for this
+ * grid formula (CLAUDE.md rule 4, "the grid is shared truth"); force- and
+ * census-side code must derive per-cell area from here, never re-inline it.
+ */
+export function cellAreaM2(N: number, radiusMeters: number): number {
+  return (4 * Math.PI * radiusMeters * radiusMeters) / cellCount(N);
+}
+
 export function indexToFaceRC(i: number, N: number): [face: number, row: number, col: number] {
   const perFace = N * N;
   const face = Math.floor(i / perFace);

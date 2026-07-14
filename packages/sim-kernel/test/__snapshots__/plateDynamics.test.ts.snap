@@ -1,0 +1,67 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`flag-on golden + engaged spine (#102 pattern) > seed 1: engaged (≥1 plate speed changed > 20%) and pinned 1`] = `
+{
+  "after100": {
+    "biome": "962ff028",
+    "boundaryStress": "72cbdc59",
+    "crustAge": "e991b7a7",
+    "crustType": "6f90cd65",
+    "elevation": "0606f821",
+    "iceFraction": "4a3dabb4",
+    "marineLife": "f21ce677",
+    "plateId": "73341a65",
+    "precipitation": "f93c6813",
+    "sedimentM": "4369c59c",
+    "sutureYears": "f70a0591",
+    "temperature": "7e422158",
+    "timeYears": 100000000,
+    "windU": "b7486665",
+    "windV": "53e92835",
+  },
+}
+`;
+
+exports[`flag-on golden + engaged spine (#102 pattern) > seed 42: engaged (≥1 plate speed changed > 20%) and pinned 1`] = `
+{
+  "after100": {
+    "biome": "00ddff85",
+    "boundaryStress": "f8be2d35",
+    "crustAge": "1a96d08c",
+    "crustType": "6cd6e138",
+    "elevation": "cbec2d46",
+    "iceFraction": "791ff150",
+    "marineLife": "b554856d",
+    "plateId": "0ccb3858",
+    "precipitation": "161a225c",
+    "sedimentM": "45c9a079",
+    "sutureYears": "3159a197",
+    "temperature": "6cb69107",
+    "timeYears": 100000000,
+    "windU": "3e401bc5",
+    "windV": "30d5a165",
+  },
+}
+`;
+
+exports[`flag-on golden + engaged spine (#102 pattern) > seed 1337: engaged (≥1 plate speed changed > 20%) and pinned 1`] = `
+{
+  "after100": {
+    "biome": "9e4a18c8",
+    "boundaryStress": "e03d3066",
+    "crustAge": "8e0eb03a",
+    "crustType": "2a7a37d5",
+    "elevation": "031ee678",
+    "iceFraction": "f1653658",
+    "marineLife": "f4101dc5",
+    "plateId": "6f144ae5",
+    "precipitation": "b2884974",
+    "sedimentM": "feb7379f",
+    "sutureYears": "3cc3bca9",
+    "temperature": "0854ad6f",
+    "timeYears": 100000000,
+    "windU": "3a9f3dd5",
+    "windV": "28a35345",
+  },
+}
+`;

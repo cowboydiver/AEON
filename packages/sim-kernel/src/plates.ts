@@ -63,6 +63,38 @@ export interface PlateRecord {
   /** Dead plates (consumed by suturing, #18) keep their slot so ids stay stable. */
   alive: boolean;
   /**
+   * ω⃗ in rad/yr — the plate's angular-velocity vector and THE kinematic state
+   * under `forceKinematics` (Tectonics V2 stage 1, #111, proposal §2.2). The
+   * `plateDynamics` system relaxes it toward a boundary-integrated torque
+   * balance each step and then derives `eulerPole`/`angularVelRadPerYr` from
+   * it, so every existing consumer is unchanged. All-zero on the default
+   * (flag-off) path — the drawn `eulerPole`/`angularVelRadPerYr` remain the
+   * permanent kinematics and nothing reads `omegaVec`. */
+  omegaVec: Vec3;
+  /**
+   * Diagnostic: gross − |net| boundary driving force on the plate, N — the
+   * scalar `tensionRift` (stage 3) will convert into a rift hazard. 0 flag-off
+   * and until `plateDynamics` writes it. */
+  tensionN: number;
+  /**
+   * Diagnostic: total attached down-going slab-pull force on the plate, N —
+   * the sum of the `∝√age` slab-pull magnitudes over the boundary cells where
+   * this plate is the *subducting* (non-overriding) oceanic side. This is the
+   * Forsyth & Uyeda slab-attachment variable the stage-1 speed–slab-attachment
+   * census correlation is built on (#111 owner decision "Option 2 variant 2");
+   * slab *suction* on the overrider is excluded by design. 0 flag-off and until
+   * `plateDynamics` writes it. Not read by any physics — pure diagnostic. */
+  slabPullN: number;
+  /**
+   * `emergentSuture` (stage 2) memory: sim time at which the plate's current
+   * stalled continental contact began, yr (0 = not currently stalled). 0
+   * flag-off and until stage 2 writes it. */
+  stallSinceYears: number;
+  /**
+   * `tensionRift` (stage 3) memory: accumulated supercontinent thermal-blanket
+   * age, yr. 0 flag-off and until stage 3 writes it. */
+  blanketYears: number;
+  /**
    * Previous census step's Euler pole, for the `poleStability` diagnostic
    * (Tectonics V2 stage 0, #110). Set ONLY by `plateCensusSystem` when
    * `params.plateCensus` is on; `undefined` on every plate otherwise, so the
@@ -213,6 +245,13 @@ export function applyInitialPlates(state: PlanetState): PlanetState {
       sutureLockUntilYears: 0,
       continentalFraction: continentalCells[p]! / plateCells[p]!,
       alive: true,
+      // Force-balance kinematics state (#111): zero flag-off, so the drawn
+      // eulerPole/omega above stay the permanent kinematics.
+      omegaVec: [0, 0, 0],
+      tensionN: 0,
+      slabPullN: 0,
+      stallSinceYears: 0,
+      blanketYears: 0,
     });
   }
 
