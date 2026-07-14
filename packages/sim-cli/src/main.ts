@@ -99,6 +99,13 @@ Options:
                               oceans as emergent island chains (default off —
                               prototype; measure with --sea-level-datums
                               --freeboard also on)
+  --force-kinematics          enable force-driven plate kinematics (Tectonics
+                              V2 stage 1, #111): a per-step rigid-plate torque
+                              balance (slab pull, ridge push, collision damping,
+                              basal drag) makes each plate's angular velocity
+                              derived state instead of a fixed random draw
+                              (default off — measure with --ab force-kinematics
+                              and --plate-census)
   --step-years <years>        simulation step size (default 1e6); use e.g.
                               0.5e6 for dt-halving checks of lagged datums
   --water-scale <factor>      dimensionless multiplier on the derived water
@@ -172,6 +179,7 @@ const { values } = parseArgs({
     'sea-level-datums': { type: 'boolean', default: false },
     freeboard: { type: 'boolean', default: false },
     'bathymetry-datum': { type: 'boolean', default: false },
+    'force-kinematics': { type: 'boolean', default: false },
     'no-block-isostasy': { type: 'boolean', default: false },
     'no-crust-fates': { type: 'boolean', default: false },
     'no-compact-arcs': { type: 'boolean', default: false },
@@ -180,6 +188,7 @@ const { values } = parseArgs({
     'no-sea-level-datums': { type: 'boolean', default: false },
     'no-freeboard': { type: 'boolean', default: false },
     'no-bathymetry-datum': { type: 'boolean', default: false },
+    'no-force-kinematics': { type: 'boolean', default: false },
     ab: { type: 'string' },
     'ab-branch': { type: 'string' },
     'ab-block-isostasy': { type: 'string' },
@@ -246,6 +255,7 @@ const MECHANISMS: Record<string, (on: boolean, onsetYears: number) => Partial<Pl
   'sea-level-datums': (on, onset) => ({ seaLevelDatums: on, seaLevelDatumsOnsetYears: onset }),
   freeboard: (on, onset) => ({ freeboard: on, freeboardOnsetYears: onset }),
   'bathymetry-datum': (on, onset) => ({ bathymetryDatum: on, bathymetryDatumOnsetYears: onset }),
+  'force-kinematics': (on, onset) => ({ forceKinematics: on, forceKinematicsOnsetYears: onset }),
 };
 const MECHANISM_FLAGS = Object.keys(MECHANISMS) as ReadonlyArray<
   | 'block-isostasy'
@@ -256,6 +266,7 @@ const MECHANISM_FLAGS = Object.keys(MECHANISMS) as ReadonlyArray<
   | 'sea-level-datums'
   | 'freeboard'
   | 'bathymetry-datum'
+  | 'force-kinematics'
 >;
 
 // --ab-block-isostasy <years> predates --ab and is kept as its alias.
