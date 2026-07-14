@@ -35,7 +35,7 @@ function emptyKeyframe(timeYears: number): Keyframe {
   fields.elevation.fill(-4000);
   // computeKeyframeMetrics reads only `.fields`; globals is required by the
   // Keyframe type but unused here, so a zeroed set suffices.
-  const globals = { landFraction: 0, co2: 0, meanTemperatureK: 0, seaLevelM: 0, waterInventoryM: 0, oxygen: 0, oxygenReductant: 0, abiogenesisYear: -1, plateSpeedMedianMPerYr: 0, plateSpeedMinMPerYr: 0, plateSpeedMaxMPerYr: 0, oceanicContinentalSpeedRatio: 0, speedContinentalityCorr: 0, poleStability: 0, marginConsolidationFlipsTotal: 0 };
+  const globals = { landFraction: 0, co2: 0, meanTemperatureK: 0, seaLevelM: 0, waterInventoryM: 0, oxygen: 0, oxygenReductant: 0, abiogenesisYear: -1, plateSpeedMedianMPerYr: 0, plateSpeedMinMPerYr: 0, plateSpeedMaxMPerYr: 0, oceanicContinentalSpeedRatio: 0, speedContinentalityCorr: 0, speedSlabAttachmentCorr: 0, poleStability: 0, marginConsolidationFlipsTotal: 0 };
   return { timeYears, fields, globals, events: [] };
 }
 
@@ -372,6 +372,7 @@ describe('summarizePlateCensus', () => {
       speedMaxMPerYr: 0,
       oceanicContinentalSpeedRatio: 0,
       speedContinentalityCorr: 0,
+      speedSlabAttachmentCorr: 0,
       poleStability: 0,
       marginConsolidationFlipsTotal: 0,
       seafloorAgeMeanYr: 0,

@@ -252,6 +252,41 @@ describe('the India test (slab-driven convergence, then the ocean closes)', () =
   });
 });
 
+describe('slabPullN diagnostic (the census slab-attachment predictor, #111)', () => {
+  it('accumulates on the subducting plate, stays 0 on the overrider, and scales with √age', () => {
+    // Same geometry as the India test: plate 0 OLD oceanic subducts under the
+    // YOUNG oceanic plate 1. Plate 0 is the down-going side → it accrues slab
+    // pull; plate 1 overrides and receives only slab SUCTION, which is excluded
+    // from slabPullN by design → it stays exactly 0.
+    const params = createPlanetParams({ seed: 11, gridN: 16, numPlates: 2, forceKinematics: true });
+    let state = createInitialState(params);
+    const count = cellCount(params.gridN);
+    const plateId = state.fields.plateId;
+    const crustType = new Float32Array(count).fill(0); // all oceanic
+    const oldAge = new Float32Array(count);
+    for (let i = 0; i < count; i++) oldAge[i] = plateId[i] === 0 ? 1.5e8 : 1e7;
+    state = { ...state, fields: { ...state.fields, crustType, crustAge: oldAge } };
+    state = { ...state, fields: { ...state.fields, boundaryStress: computeBoundaryStress(state) } };
+    const ctx = makeCtx(params.seed);
+    const dt = params.stepYears;
+
+    const afterOld = step(state, dt, ctx, ONLY_DYNAMICS);
+    expect(afterOld.plates[0]!.slabPullN).toBeGreaterThan(0); // subducting side attached
+    expect(afterOld.plates[1]!.slabPullN).toBe(0); // overrider: suction only, excluded
+
+    // Halve the subducting plate's age. Slab pull ∝ √age·ramp, so with both
+    // factors still saturated the attached force must strictly shrink — the
+    // density/age weighting the correlation depends on is live in slabPullN.
+    const youngerAge = new Float32Array(count);
+    for (let i = 0; i < count; i++) youngerAge[i] = plateId[i] === 0 ? 0.6e8 : 1e7;
+    let s2 = { ...state, fields: { ...state.fields, crustAge: youngerAge } };
+    s2 = { ...s2, fields: { ...s2.fields, boundaryStress: computeBoundaryStress(s2) } };
+    const afterYoung = step(s2, dt, ctx, ONLY_DYNAMICS);
+    expect(afterYoung.plates[0]!.slabPullN).toBeGreaterThan(0);
+    expect(afterYoung.plates[0]!.slabPullN).toBeLessThan(afterOld.plates[0]!.slabPullN);
+  });
+});
+
 describe('speed envelope on a full small run', () => {
   it('every live plate stays in [0, 20] cm/yr with a plausible median', () => {
     // Full pipeline, forceKinematics on, N=16 to 1 Gyr. The census speed target

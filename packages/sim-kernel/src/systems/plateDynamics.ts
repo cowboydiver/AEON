@@ -171,6 +171,11 @@ function apply(state: PlanetState, dtYears: number): PlanetState {
   const nety = new Float64Array(nPlates);
   const netz = new Float64Array(nPlates);
   const gross = new Float64Array(nPlates);
+  // Attached down-going slab-pull force per plate (N) — the Forsyth & Uyeda
+  // slab-attachment variable the census correlates speed against (#111). Only
+  // the subducting side's own pull is summed; slab suction (a drive on the
+  // overrider) is excluded by design.
+  const slabPull = new Float64Array(nPlates);
 
   // Pass 1 — one ascending-index sweep. Fixed summation order ⇒ deterministic.
   for (let i = 0; i < plateId.length; i++) {
@@ -243,6 +248,9 @@ function apply(state: PlanetState, dtYears: number): PlanetState {
         fx = u[0] * pull;
         fy = u[1] * pull;
         fz = u[2] * pull;
+        // Attached-slab diagnostic: sum the pull magnitude on this (subducting)
+        // plate. |û|=1 ⇒ |f| = pull. Census correlate; not a physics term.
+        slabPull[p]! += pull;
         // Slab suction: a fraction of that pull also drags the OVERRIDING
         // plate trench-ward (from its cell toward this subducting plate),
         // so the margin organizes both plates. Added straight to the
@@ -288,7 +296,8 @@ function apply(state: PlanetState, dtYears: number): PlanetState {
 
   const plates = state.plates.map((plate, p) => {
     const trK = kxx[p]! + kyy[p]! + kzz[p]!;
-    if (trK <= 0) return plate; // dead / cell-less plate: kinematics unchanged
+    // dead / cell-less plate: kinematics unchanged, no attached slab this step.
+    if (trK <= 0) return plate.slabPullN === 0 ? plate : { ...plate, slabPullN: 0 };
 
     // Regularize the (PSD) drag tensor: add REG·tr(K)/3 to its diagonal so a
     // near-point plate's singular radial spin-axis is pinned deterministically,
@@ -331,7 +340,13 @@ function apply(state: PlanetState, dtYears: number): PlanetState {
     if (mag < OMEGA_REST_THRESHOLD_RAD_PER_YR) {
       // At rest: keep the previous pole direction (can't normalize ~0), zero
       // speed. A revived torque next step lifts it off rest again.
-      return { ...plate, omegaVec: [0, 0, 0] as Vec3, angularVelRadPerYr: 0, tensionN };
+      return {
+        ...plate,
+        omegaVec: [0, 0, 0] as Vec3,
+        angularVelRadPerYr: 0,
+        tensionN,
+        slabPullN: slabPull[p]!,
+      };
     }
     const inv = 1 / mag;
     return {
@@ -340,6 +355,7 @@ function apply(state: PlanetState, dtYears: number): PlanetState {
       eulerPole: [ox * inv, oy * inv, oz * inv] as Vec3,
       angularVelRadPerYr: mag,
       tensionN,
+      slabPullN: slabPull[p]!,
     };
   });
 

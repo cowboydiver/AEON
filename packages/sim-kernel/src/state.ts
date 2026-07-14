@@ -368,6 +368,13 @@ export interface Globals {
    *  over alive owning plates (the Forsyth & Uyeda sign test — expected
    *  negative once the balance runs). 0 when < 2 plates or zero variance. */
   speedContinentalityCorr: number;
+  /** Pearson correlation of per-plate speed vs attached-slab driving stress
+   *  (`slabPullN`/plate area) over alive owning plates — the Forsyth & Uyeda
+   *  slab-attachment test the stage-1 gate is written against (#111; want ≥
+   *  +0.3). Positive ⇒ plates with more attached down-going slab move faster;
+   *  unlike the continentality proxy it stays discriminating in the deep-time
+   *  mixed-plate steady state. 0 when < 2 plates or zero variance (flag-off). */
+  speedSlabAttachmentCorr: number;
   /** Count-mean over alive owning plates of the cosine between this step's
    *  Euler pole and the previous census step's (`prevEulerPole`) — the
    *  pole-stability seed for the stage-1 autocorrelation diagnostic (§8 risk 1).
@@ -476,6 +483,7 @@ export function createInitialState(params: PlanetParams): PlanetState {
       plateSpeedMaxMPerYr: 0,
       oceanicContinentalSpeedRatio: 0,
       speedContinentalityCorr: 0,
+      speedSlabAttachmentCorr: 0,
       poleStability: 0,
       marginConsolidationFlipsTotal: 0,
     },

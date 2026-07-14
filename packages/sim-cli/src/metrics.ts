@@ -455,8 +455,11 @@ export interface PlateCensusRow {
   speedMaxMPerYr: number;
   /** Ocean-dominated ÷ continent-dominated mean speed (globals). */
   oceanicContinentalSpeedRatio: number;
-  /** Pearson speed-vs-continentality (globals). */
+  /** Pearson speed-vs-continentality (globals; descriptive, washes to 0 deep-time). */
   speedContinentalityCorr: number;
+  /** Pearson speed-vs-slab-attachment (globals) — the Forsyth & Uyeda stage-1
+   *  gate variable (#111): positive ⇒ more-slab-attached plates move faster. */
+  speedSlabAttachmentCorr: number;
   /** Count-mean cosine between consecutive Euler poles (globals; 1.0 baseline). */
   poleStability: number;
   /** Cumulative #67 margin-consolidation pair-flips since t=0 (globals;
@@ -548,6 +551,7 @@ export function computePlateCensusRow(keyframe: Keyframe): PlateCensusRow {
     speedMaxMPerYr: g.plateSpeedMaxMPerYr,
     oceanicContinentalSpeedRatio: g.oceanicContinentalSpeedRatio,
     speedContinentalityCorr: g.speedContinentalityCorr,
+    speedSlabAttachmentCorr: g.speedSlabAttachmentCorr,
     poleStability: g.poleStability,
     marginConsolidationFlipsTotal: g.marginConsolidationFlipsTotal,
     seafloorAgeMeanYr: oceanCells > 0 ? ageSum / oceanCells : 0,
@@ -576,6 +580,7 @@ export function formatPlateCensusRow(row: PlateCensusRow, prevTotalFlips?: numbe
     `speed cm/yr [min ${cm(row.speedMinMPerYr)} med ${cm(row.speedMedianMPerYr)} max ${cm(row.speedMaxMPerYr)}]  ` +
     `oc/cont ${row.oceanicContinentalSpeedRatio.toFixed(2).padStart(5)}  ` +
     `corr ${row.speedContinentalityCorr.toFixed(2).padStart(5)}  ` +
+    `slab ${row.speedSlabAttachmentCorr.toFixed(2).padStart(5)}  ` +
     `pole ${row.poleStability.toFixed(3)}  ` +
     `sfage Myr [med ${age(row.seafloorAgeMedianYr)} mean ${age(row.seafloorAgeMeanYr)} max ${age(row.seafloorAgeMaxYr)}]  ` +
     `plateness ${row.plateness.toFixed(3)}  ` +
@@ -622,8 +627,9 @@ export function summarizePlateCensus(rows: readonly PlateCensusRow[]): string {
     `  speed cm/yr: min ${cm(mean((r) => r.speedMinMPerYr))} median ${cm(
       mean((r) => r.speedMedianMPerYr),
     )} max ${cm(mean((r) => r.speedMaxMPerYr))}`,
-    `  oceanic/continental speed ratio: ${mean((r) => r.oceanicContinentalSpeedRatio).toFixed(2)}`,
-    `  speed–continentality correlation: ${mean((r) => r.speedContinentalityCorr).toFixed(3)}`,
+    `  oceanic/continental speed ratio: ${mean((r) => r.oceanicContinentalSpeedRatio).toFixed(2)} (descriptive; degenerate under few-plate geometry)`,
+    `  speed–continentality correlation: ${mean((r) => r.speedContinentalityCorr).toFixed(3)} (descriptive; washes to 0 deep-time)`,
+    `  speed–slab-attachment correlation: ${mean((r) => r.speedSlabAttachmentCorr).toFixed(3)} (stage-1 gate, #111; want ≥ +0.3)`,
     `  pole stability (mean cosine): ${mean((r) => r.poleStability).toFixed(4)}`,
     `  seafloor age Myr: median ${(mean((r) => r.seafloorAgeMedianYr) / 1e6).toFixed(0)} mean ${(
       mean((r) => r.seafloorAgeMeanYr) / 1e6

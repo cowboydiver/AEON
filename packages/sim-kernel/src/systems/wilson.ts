@@ -572,6 +572,8 @@ export function riftPlate(state: PlanetState, p: number, riftSeed: number): Plan
     // new divergent margin separates the halves next step). Zero flag-off.
     omegaVec: [...state.plates[p]!.omegaVec],
     tensionN: 0,
+    // Not inherited: recomputed next step from the fragment's own margins.
+    slabPullN: 0,
     stallSinceYears: 0,
     blanketYears: 0,
   });

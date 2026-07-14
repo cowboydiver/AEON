@@ -77,6 +77,15 @@ export interface PlateRecord {
    * and until `plateDynamics` writes it. */
   tensionN: number;
   /**
+   * Diagnostic: total attached down-going slab-pull force on the plate, N —
+   * the sum of the `∝√age` slab-pull magnitudes over the boundary cells where
+   * this plate is the *subducting* (non-overriding) oceanic side. This is the
+   * Forsyth & Uyeda slab-attachment variable the stage-1 speed–slab-attachment
+   * census correlation is built on (#111 owner decision "Option 2 variant 2");
+   * slab *suction* on the overrider is excluded by design. 0 flag-off and until
+   * `plateDynamics` writes it. Not read by any physics — pure diagnostic. */
+  slabPullN: number;
+  /**
    * `emergentSuture` (stage 2) memory: sim time at which the plate's current
    * stalled continental contact began, yr (0 = not currently stalled). 0
    * flag-off and until stage 2 writes it. */
@@ -240,6 +249,7 @@ export function applyInitialPlates(state: PlanetState): PlanetState {
       // eulerPole/omega above stay the permanent kinematics.
       omegaVec: [0, 0, 0],
       tensionN: 0,
+      slabPullN: 0,
       stallSinceYears: 0,
       blanketYears: 0,
     });

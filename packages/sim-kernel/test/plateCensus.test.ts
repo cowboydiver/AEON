@@ -20,6 +20,7 @@ function plate(over: Partial<PlateRecord> & { eulerPole: Vec3; angularVelRadPerY
     alive: true,
     omegaVec: [0, 0, 0],
     tensionN: 0,
+    slabPullN: 0,
     stallSinceYears: 0,
     blanketYears: 0,
     ...over,
@@ -93,6 +94,37 @@ describe('computePlateCensus — speed distribution', () => {
   });
 });
 
+describe('computePlateCensus — speed–slab-attachment correlation (#111 gate)', () => {
+  // Three equal-area plates (8 of a gridN=2 world's 24 cells each) whose speeds
+  // rise in lockstep with their attached slab-pull force. Equal area ⇒ the
+  // intensive slabStress = slabPullN/(cells·cellA) is monotone in slabPullN, so
+  // speed correlates positively with slab attachment — the Forsyth & Uyeda sign.
+  const plates = [
+    plate({ eulerPole: [1, 0, 0], angularVelRadPerYr: 1e-9, slabPullN: 0 }),
+    plate({ eulerPole: [0, 1, 0], angularVelRadPerYr: 3e-9, slabPullN: 5e12 }),
+    plate({ eulerPole: [0, 0, 1], angularVelRadPerYr: 6e-9, slabPullN: 2e13 }),
+  ];
+  const owners: number[] = [];
+  const cont: boolean[] = [];
+  for (let i = 0; i < 24; i++) {
+    owners.push(Math.floor(i / 8));
+    cont.push(false); // all oceanic — isolates the slab signal from continentality
+  }
+
+  it('is strongly positive when speed rises with attached slab', () => {
+    const census = computePlateCensus(fixture(plates, owners, cont));
+    expect(census.speedSlabAttachmentCorr).toBeGreaterThan(0.9);
+  });
+
+  it('is 0 when no plate has attached slab (flag-off / zero-variance path)', () => {
+    // Every slabPullN 0 ⇒ zero variance in the predictor ⇒ pearson reports 0,
+    // never NaN. This is the default (forceKinematics-off) census reading.
+    const flat = plates.map((p) => plate({ ...p, slabPullN: 0 }));
+    const census = computePlateCensus(fixture(flat, owners, cont));
+    expect(census.speedSlabAttachmentCorr).toBe(0);
+  });
+});
+
 describe('computePlateCensus — degenerate cases', () => {
   it('returns all zeros when there are no plates', () => {
     const params = createPlanetParams({ seed: 1, gridN: 2 });
@@ -102,6 +134,7 @@ describe('computePlateCensus — degenerate cases', () => {
     expect(census.poleStability).toBe(0);
     expect(census.oceanicContinentalSpeedRatio).toBe(0);
     expect(census.speedContinentalityCorr).toBe(0);
+    expect(census.speedSlabAttachmentCorr).toBe(0);
   });
 
   it('skips dead plates and plates owning no cells', () => {
