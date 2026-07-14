@@ -1,0 +1,23 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`flag-on golden + engaged spine (#102 pattern) > is deterministic and the balance provably acted (≥1 plate speed changed > 20%) 1`] = `
+{
+  "after100": {
+    "biome": "00ddff85",
+    "boundaryStress": "f8be2d35",
+    "crustAge": "1a96d08c",
+    "crustType": "6cd6e138",
+    "elevation": "cbec2d46",
+    "iceFraction": "791ff150",
+    "marineLife": "b554856d",
+    "plateId": "0ccb3858",
+    "precipitation": "161a225c",
+    "sedimentM": "45c9a079",
+    "sutureYears": "3159a197",
+    "temperature": "6cb69107",
+    "timeYears": 100000000,
+    "windU": "3e401bc5",
+    "windV": "30d5a165",
+  },
+}
+`;
