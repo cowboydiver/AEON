@@ -183,5 +183,9 @@ describe('plateCensusSystem — off is exact identity', () => {
     // And the census actually populated the globals on the "on" arm.
     expect(on.globals.plateSpeedMedianMPerYr).toBeGreaterThan(0);
     expect(off.globals.plateSpeedMedianMPerYr).toBe(0);
+    // The #67 boundary-churn counter accumulates only under the census flag;
+    // the default path holds it at 0 (so default globals are untouched).
+    expect(off.globals.marginConsolidationFlipsTotal).toBe(0);
+    expect(on.globals.marginConsolidationFlipsTotal).toBeGreaterThanOrEqual(0);
   });
 });

@@ -35,7 +35,7 @@ function emptyKeyframe(timeYears: number): Keyframe {
   fields.elevation.fill(-4000);
   // computeKeyframeMetrics reads only `.fields`; globals is required by the
   // Keyframe type but unused here, so a zeroed set suffices.
-  const globals = { landFraction: 0, co2: 0, meanTemperatureK: 0, seaLevelM: 0, waterInventoryM: 0, oxygen: 0, oxygenReductant: 0, abiogenesisYear: -1, plateSpeedMedianMPerYr: 0, plateSpeedMinMPerYr: 0, plateSpeedMaxMPerYr: 0, oceanicContinentalSpeedRatio: 0, speedContinentalityCorr: 0, poleStability: 0 };
+  const globals = { landFraction: 0, co2: 0, meanTemperatureK: 0, seaLevelM: 0, waterInventoryM: 0, oxygen: 0, oxygenReductant: 0, abiogenesisYear: -1, plateSpeedMedianMPerYr: 0, plateSpeedMinMPerYr: 0, plateSpeedMaxMPerYr: 0, oceanicContinentalSpeedRatio: 0, speedContinentalityCorr: 0, poleStability: 0, marginConsolidationFlipsTotal: 0 };
   return { timeYears, fields, globals, events: [] };
 }
 
@@ -373,6 +373,7 @@ describe('summarizePlateCensus', () => {
       oceanicContinentalSpeedRatio: 0,
       speedContinentalityCorr: 0,
       poleStability: 0,
+      marginConsolidationFlipsTotal: 0,
       seafloorAgeMeanYr: 0,
       seafloorAgeMedianYr: 0,
       seafloorAgeMaxYr: 0,
@@ -394,6 +395,17 @@ describe('summarizePlateCensus', () => {
 
   it('handles an empty series without throwing', () => {
     expect(summarizePlateCensus([])).toContain('no keyframes');
+  });
+
+  it('differences the cumulative flip total into a per-100-Myr churn rate', () => {
+    // Cumulative flips 0 -> 30 -> 90 over t=1e9..3e9 (a 2 Gyr span past 1 Gyr):
+    // 90 flips / 2000 Myr * 100 = 4.5 per 100 Myr.
+    const rows = [
+      row(0, {}),
+      row(1e9, { marginConsolidationFlipsTotal: 0 }),
+      row(3e9, { marginConsolidationFlipsTotal: 90 }),
+    ];
+    expect(summarizePlateCensus(rows)).toContain('boundary churn (#67 pair-flips / 100 Myr): 4.50');
   });
 
   // Reference the width const so an accidental unit drift trips a test.

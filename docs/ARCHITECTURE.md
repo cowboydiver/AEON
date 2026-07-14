@@ -873,7 +873,11 @@ Globals     = { landFraction, co2, meanTemperatureK, seaLevelM, waterInventoryM,
                 //   field hashes, so toggling the census is byte-identical.
                 plateSpeedMedianMPerYr, plateSpeedMinMPerYr, plateSpeedMaxMPerYr,
                 oceanicContinentalSpeedRatio, speedContinentalityCorr,
-                poleStability }
+                poleStability,
+                // #67 boundary-churn proxy: cumulative margin-consolidation
+                // pair-flips, accumulated by the tectonics pass under
+                // params.plateCensus (0 otherwise):
+                marginConsolidationFlipsTotal }
 ```
 
 The **plate census** (Tectonics V2 stage 0, #110) is a pure, RNG-free
@@ -886,9 +890,13 @@ count-mean cosine between a plate's current pole and the previous census step's,
 recorded on the diagnostic-only `PlateRecord.prevEulerPole`, exactly 1.0 on the
 immutable-pole baseline). The field-derivable half of the census (seafloor age
 over oceanic crust + age–area histogram, plateness = top-decile boundary-stress
-share) lives in sim-cli's `--plate-census` report. Diagnostics route through
-`globals` because keyframes carry `fields`/`globals`/`events` only — never plate
-records.
+share) lives in sim-cli's `--plate-census` report. The one census scalar the
+kernel accumulates OUTSIDE `plateCensusSystem` is `marginConsolidationFlipsTotal`
+— the tectonics consolidation pass adds its per-step #67 pair-flip count (a
+boundary-churn proxy) to it, but only under `params.plateCensus`, so the default
+path is untouched; the report differences it into a flips-per-100-Myr churn rate.
+Diagnostics route through `globals` because keyframes carry
+`fields`/`globals`/`events` only — never plate records.
 
 `starLuminosity` (insolation) and `obliquityDeg` (annual-mean insolation
 profile) are activated by the #30 energy balance; `dayLengthHours` is activated

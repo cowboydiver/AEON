@@ -86,6 +86,7 @@ function ridgeWorld(gridN: number, windUms: number, ridgePeakM = 3500): PlanetSt
       oceanicContinentalSpeedRatio: 0,
       speedContinentalityCorr: 0,
       poleStability: 0,
+      marginConsolidationFlipsTotal: 0,
     },
     fields,
     plates: [],

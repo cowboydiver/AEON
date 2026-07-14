@@ -459,6 +459,9 @@ export interface PlateCensusRow {
   speedContinentalityCorr: number;
   /** Count-mean cosine between consecutive Euler poles (globals; 1.0 baseline). */
   poleStability: number;
+  /** Cumulative #67 margin-consolidation pair-flips since t=0 (globals;
+   *  boundary-churn proxy). Differenced between keyframes into a rate below. */
+  marginConsolidationFlipsTotal: number;
   /** Mean crustAge over oceanic (crustType 0) cells, yr. NOTE: the current
    *  kernel seeds continental crust at CONTINENTAL_INITIAL_AGE_YEARS (2 Gyr)
    *  and converts continent→ocean at some margins WITHOUT resetting age (only
@@ -546,6 +549,7 @@ export function computePlateCensusRow(keyframe: Keyframe): PlateCensusRow {
     oceanicContinentalSpeedRatio: g.oceanicContinentalSpeedRatio,
     speedContinentalityCorr: g.speedContinentalityCorr,
     poleStability: g.poleStability,
+    marginConsolidationFlipsTotal: g.marginConsolidationFlipsTotal,
     seafloorAgeMeanYr: oceanCells > 0 ? ageSum / oceanCells : 0,
     seafloorAgeMedianYr: ageMedian,
     seafloorAgeMaxYr: ageMax,
@@ -557,11 +561,16 @@ export function computePlateCensusRow(keyframe: Keyframe): PlateCensusRow {
 /** m/yr → cm/yr for the human-facing table (plate speeds read naturally there). */
 const M_PER_YR_TO_CM_PER_YR = 100;
 
-/** One formatted census row (per keyframe). Speeds in cm/yr, ages in Myr. */
-export function formatPlateCensusRow(row: PlateCensusRow): string {
+/** One formatted census row (per keyframe). Speeds in cm/yr, ages in Myr.
+ *  `prevTotalFlips` is the previous keyframe's cumulative flip count, used to
+ *  show this interval's incremental #67 pair-flips (boundary churn); omit it
+ *  for the first row. */
+export function formatPlateCensusRow(row: PlateCensusRow, prevTotalFlips?: number): string {
   const myr = (row.timeYears / 1e6).toFixed(0).padStart(5);
   const cm = (x: number): string => (x * M_PER_YR_TO_CM_PER_YR).toFixed(2).padStart(6);
   const age = (x: number): string => (x / 1e6).toFixed(0).padStart(4);
+  const flips =
+    prevTotalFlips === undefined ? '   -' : String(row.marginConsolidationFlipsTotal - prevTotalFlips).padStart(4);
   return (
     `t=${myr} Myr  ` +
     `speed cm/yr [min ${cm(row.speedMinMPerYr)} med ${cm(row.speedMedianMPerYr)} max ${cm(row.speedMaxMPerYr)}]  ` +
@@ -569,7 +578,8 @@ export function formatPlateCensusRow(row: PlateCensusRow): string {
     `corr ${row.speedContinentalityCorr.toFixed(2).padStart(5)}  ` +
     `pole ${row.poleStability.toFixed(3)}  ` +
     `sfage Myr [med ${age(row.seafloorAgeMedianYr)} mean ${age(row.seafloorAgeMeanYr)} max ${age(row.seafloorAgeMaxYr)}]  ` +
-    `plateness ${row.plateness.toFixed(3)}`
+    `plateness ${row.plateness.toFixed(3)}  ` +
+    `churn ${flips}`
   );
 }
 
@@ -619,6 +629,19 @@ export function summarizePlateCensus(rows: readonly PlateCensusRow[]): string {
       mean((r) => r.seafloorAgeMeanYr) / 1e6
     ).toFixed(0)} max ${(mean((r) => r.seafloorAgeMaxYr) / 1e6).toFixed(0)}`,
     `  plateness (top-decile stress share): ${mean((r) => r.plateness).toFixed(3)}`,
+    `  boundary churn (#67 pair-flips / 100 Myr): ${churnRate(use).toFixed(2)}`,
     `  age–area histogram (Myr bins): ${histLine}`,
   ].join('\n');
+}
+
+/** Mean #67 margin-consolidation pair-flip rate over a keyframe window, flips
+ *  per 100 Myr — the cumulative total differenced across the window's span.
+ *  0 for a degenerate (single-keyframe or zero-span) window. */
+function churnRate(use: readonly PlateCensusRow[]): number {
+  if (use.length < 2) return 0;
+  const first = use[0]!;
+  const last = use[use.length - 1]!;
+  const spanMyr = (last.timeYears - first.timeYears) / 1e6;
+  if (spanMyr <= 0) return 0;
+  return ((last.marginConsolidationFlipsTotal - first.marginConsolidationFlipsTotal) / spanMyr) * 100;
 }

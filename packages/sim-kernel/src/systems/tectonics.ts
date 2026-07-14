@@ -185,6 +185,12 @@ function applyTectonics(state: PlanetState, dtYears: number): PlanetState {
   // together, so scan order cannot leak into the result.
   let crustAgeOut = next.fields.crustAge;
   let sutureYearsOut = next.fields.sutureYears;
+  // #67 pair-flip count this step — surfaced as the boundary-churn census proxy
+  // (§5). Recording it never changes the flips themselves, so behavior is
+  // untouched; it is only accumulated into globals under --plate-census below.
+  // The block below is unconditional, so this is always assigned before the
+  // return reads it.
+  let consolidationFlips: number;
   {
     const islands: number[] = [];
     // Holes with the properties they inherit, snapshotted at decision time —
@@ -217,6 +223,7 @@ function applyTectonics(state: PlanetState, dtYears: number): PlanetState {
       }
     }
     const flips = Math.min(islands.length, holes.length);
+    consolidationFlips = flips;
     if (flips > 0) {
       // crustAge/sutureYears are only copied when a flip actually writes
       // them (most steps flip nothing).
@@ -257,7 +264,15 @@ function applyTectonics(state: PlanetState, dtYears: number): PlanetState {
 
   return {
     ...next,
-    globals: { ...next.globals, landFraction: land / elevation.length },
+    globals: {
+      ...next.globals,
+      landFraction: land / elevation.length,
+      // Boundary-churn proxy (#110/#67): accumulate this step's pair-flips only
+      // under the census flag, so the default path's globals are untouched.
+      marginConsolidationFlipsTotal:
+        next.globals.marginConsolidationFlipsTotal +
+        (state.params.plateCensus ? consolidationFlips : 0),
+    },
     fields: {
       ...next.fields,
       boundaryStress,

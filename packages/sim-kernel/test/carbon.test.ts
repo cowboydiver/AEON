@@ -68,6 +68,7 @@ function carbonState(
       oceanicContinentalSpeedRatio: 0,
       speedContinentalityCorr: 0,
       poleStability: 0,
+      marginConsolidationFlipsTotal: 0,
     },
     fields,
     plates: [],

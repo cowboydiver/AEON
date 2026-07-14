@@ -357,6 +357,14 @@ export interface Globals {
    *  Exactly 1.0 on the immutable-pole baseline (poles never move); < 1 once
    *  `forceKinematics` steers them. 1.0 on the first census step (no prior). */
   poleStability: number;
+  /** Cumulative count of #67 margin-consolidation pair-flips (stray continental
+   *  island ⇄ enclosed oceanic hole) since t=0 — the boundary-churn proxy
+   *  (margin-ledger graft, §5). Accumulated by the tectonics consolidation pass
+   *  ONLY when `params.plateCensus` is set (else it holds 0, so the default path
+   *  is untouched); the `--plate-census` report differences it between keyframes
+   *  into a flips-per-100-Myr churn rate. High = margins flickering — the
+   *  flicker the force balance is meant to quiet. */
+  marginConsolidationFlipsTotal: number;
 }
 
 export interface PlanetState {
@@ -450,6 +458,7 @@ export function createInitialState(params: PlanetParams): PlanetState {
       oceanicContinentalSpeedRatio: 0,
       speedContinentalityCorr: 0,
       poleStability: 0,
+      marginConsolidationFlipsTotal: 0,
     },
     fields,
     plates: [],

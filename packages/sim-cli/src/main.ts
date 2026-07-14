@@ -560,9 +560,10 @@ run(params, untilYears, (keyframe) => {
   if (values['crust-stats']) reportCrustStats(keyframe);
   if (values.metrics) metricsSeries.push(computeKeyframeMetrics(keyframe, params.gridN));
   if (values['plate-census']) {
+    const prevTotal = censusSeries.at(-1)?.marginConsolidationFlipsTotal;
     const row = computePlateCensusRow(keyframe);
     censusSeries.push(row);
-    console.log(formatPlateCensusRow(row));
+    console.log(formatPlateCensusRow(row, prevTotal));
   }
   // Every keyframe passes the tripwire above; --dump-every only thins the
   // PNG series. The final keyframe is always dumped so flipbooks end at the

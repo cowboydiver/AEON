@@ -65,6 +65,7 @@ export function twoPlateState(
       oceanicContinentalSpeedRatio: 0,
       speedContinentalityCorr: 0,
       poleStability: 0,
+      marginConsolidationFlipsTotal: 0,
     },
     fields,
     plates: [makePlate(plate0), makePlate(plate1)],
