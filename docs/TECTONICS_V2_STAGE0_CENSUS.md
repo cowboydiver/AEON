@@ -23,22 +23,28 @@ convention). Raw per-keyframe tables are reproducible with the command above.
 
 | metric | seed 42 / N=128 | seed 42 / N=64 | seed 1 / N=64 | seed 1337 / N=64 | Earth / §3 target |
 |---|---|---|---|---|---|
-| plate speed median (cm/yr) | _pending_ | 1.90 | 1.60 | 2.10 | **2–6** |
-| plate speed min–max (cm/yr) | _pending_ | 0.76–3.49 | 0.65–3.41 | 0.84–3.85 | — |
-| oceanic/continental speed ratio | _pending_ | 0.00 | 0.00 | 0.01 | **1.5–4** |
-| speed–continentality correlation | _pending_ | +0.404 | +0.212 | +0.107 | **negative** (keel drag) |
-| pole stability (mean cosine) | _pending_ | 0.9983 | 0.9995 | 0.9996 | — (immutable ⇒ ~1) |
-| seafloor age median (Myr) | _pending_ | 271 | 326 | 289 | ~60–80 |
-| seafloor age mean (Myr) | _pending_ | 395 | 486 | 439 | — |
-| seafloor age max (Myr) | _pending_ | 4750 | 4750 | 4750 | <200 |
-| ocean area older than 200 Myr | _pending_ | 57.7% | 63.4% | 61.1% | ~0% |
-| plateness (top-decile stress share) | _pending_ | 0.289 | 0.275 | 0.264 | — |
-| boundary churn (#67 pair-flips / 100 Myr) | _pending_ | 371.9 | 321.7 | 320.9 | ↓ under force model |
+| plate speed median (cm/yr) | 2.19 | 1.90 | 1.60 | 2.10 | **2–6** |
+| plate speed min–max (cm/yr) | 0.85–3.81 | 0.76–3.49 | 0.65–3.41 | 0.84–3.85 | — |
+| oceanic/continental speed ratio | 0.06 | 0.00 | 0.00 | 0.01 | **1.5–4** |
+| speed–continentality correlation | +0.307 | +0.404 | +0.212 | +0.107 | **negative** (keel drag) |
+| pole stability (mean cosine) | 0.9999 | 0.9983 | 0.9995 | 0.9996 | — (immutable ⇒ ~1) |
+| seafloor age median (Myr) | 307 | 271 | 326 | 289 | ~60–80 |
+| seafloor age mean (Myr) | 419 | 395 | 486 | 439 | — |
+| seafloor age max (Myr) | 4750 | 4750 | 4750 | 4750 | <200 |
+| ocean area older than 200 Myr | 61.5% | 57.7% | 63.4% | 61.1% | ~0% |
+| plateness (top-decile stress share) | 0.242 | 0.289 | 0.275 | 0.264 | — |
+| boundary churn (#67 pair-flips / 100 Myr) | 1497.7 | 371.9 | 321.7 | 320.9 | ↓ under force model |
 
 Age–area histogram (share of oceanic cells per 20-Myr bin, seed 42 / N=64):
 `0-:6.2% 20-:5.4% 40-:4.9% 60-:4.5% 80-:4.2% 100-:3.9% 120-:3.6% 140-:3.4%
-160-:3.2% 180-:3.0% 200+:57.7%`. Seeds 1 and 1337 match the shape (a thin
-young-floor spread under a dominant >200 Myr spike).
+160-:3.2% 180-:3.0% 200+:57.7%`. N=128 seed 42 matches (`… 200+:61.5%`), as do
+seeds 1 and 1337 (a thin young-floor spread under a dominant >200 Myr spike).
+
+**Churn is a grid-dependent absolute count**, not a rate per unit area: the #67
+pass flips margin flecks, and more cells make more flecks, so the N=128 value
+(~1498) is ~4× the N=64 value (~372) for the same seed. Compare churn only
+within a fixed N; stage 1's `--ab` runs at N=64, where the reference is ~320–372
+pair-flips / 100 Myr.
 
 ## What the baseline says — the pathologies stage 1 is accountable to
 
@@ -97,7 +103,11 @@ All three N=64 seeds agree on every qualitative verdict (slow speeds,
 degenerate oceanic/continental ratio, wrong-sign correlation, frozen poles,
 un-recycled old floor, high churn) and agree quantitatively within a factor
 that leaves ample signal for the stage-1 gates. The seed-42 N=64↔N=128 pair is
-the cross-N control (N=128 row above once the confirmation run lands).
+the cross-N control: the N=128 confirmation reproduces every N=64 verdict
+(median 2.19 vs 1.90 cm/yr, ratio 0.06 vs 0.00, correlation +0.31 vs +0.40,
+pole 0.9999, seafloor median 307 vs 271 Myr, 61.5% vs 57.7% of floor >200 Myr),
+with churn the only metric that shifts materially — because it is a
+grid-dependent absolute count (see above), not a physical divergence.
 
 ## Provenance
 
