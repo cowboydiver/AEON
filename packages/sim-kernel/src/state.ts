@@ -257,6 +257,21 @@ export interface PlanetParams {
    * the kernel trusts the value (a non-positive scale is a caller bug).
    */
   waterInventoryScale: number;
+  /**
+   * Enable the plate-census diagnostic (Tectonics V2 stage 0, #110). A pure,
+   * RNG-free per-step pass (`plateCensusSystem`, runs last in the pipeline)
+   * that reads the current plates + `plateId`/`crustType` fields and writes a
+   * fixed set of scalar aggregates into `globals` (`plateSpeed*`,
+   * `oceanicContinentalSpeedRatio`, `speedContinentalityCorr`, `poleStability`)
+   * so the sim-cli `--plate-census` report can measure the force-balance gates
+   * of §3/§5 without keyframes carrying plate records (they carry
+   * `fields`/`globals`/`events` only — step.ts). Default **false**: when off
+   * the pass is identity and every field, event, and plate record is
+   * byte-identical to the pre-#110 kernel (the census scalars simply hold their
+   * 0 init value), so the main goldens are untouched. Not a mechanism (no
+   * onset/`--ab`): a measurement toggle like a `--dump`, kept out of
+   * `MECHANISMS`. */
+  plateCensus: boolean;
 }
 
 /** Scalar whole-planet quantities, updated by systems as they run. */
@@ -310,6 +325,46 @@ export interface Globals {
    *  `abiogenesis` event) and thereafter read-only — the gate that switches
    *  `marineLife` on and a marker for the report/HUD/narration. */
   abiogenesisYear: number;
+  /**
+   * Plate-census diagnostics (Tectonics V2 stage 0, #110) — written each step
+   * by `plateCensusSystem` ONLY when `params.plateCensus` is set, else they
+   * hold their 0 init value (the pass is identity). Diagnostic-only: nothing in
+   * the kernel reads them back, they never cross the codec, and they are not in
+   * the golden field hashes, so toggling the census is byte-identical to the
+   * pre-#110 kernel. The sim-cli `--plate-census` report reads them off each
+   * keyframe's `globals`. Speeds are a plate's characteristic surface speed
+   * |ω|·R (rad/yr × radiusMeters = m/yr), aggregated over ALIVE plates that own
+   * ≥1 cell; all six are 0 at t=0 (the pipeline is not run at init) and 0 on any
+   * step with no such plates.
+   */
+  /** Median plate characteristic speed |ω|·R, m/yr (§3 target 2–6 cm/yr). */
+  plateSpeedMedianMPerYr: number;
+  /** Slowest plate's characteristic speed |ω|·R, m/yr. */
+  plateSpeedMinMPerYr: number;
+  /** Fastest plate's characteristic speed |ω|·R, m/yr. */
+  plateSpeedMaxMPerYr: number;
+  /** Mean speed of ocean-dominated plates (current continental fraction < 0.5)
+   *  ÷ mean speed of continent-dominated plates (≥ 0.5) — the Forsyth & Uyeda
+   *  ratio (§3 target 1.5–4). 0 when either partition is empty. */
+  oceanicContinentalSpeedRatio: number;
+  /** Pearson correlation of per-plate speed vs current continental fraction
+   *  over alive owning plates (the Forsyth & Uyeda sign test — expected
+   *  negative once the balance runs). 0 when < 2 plates or zero variance. */
+  speedContinentalityCorr: number;
+  /** Count-mean over alive owning plates of the cosine between this step's
+   *  Euler pole and the previous census step's (`prevEulerPole`) — the
+   *  pole-stability seed for the stage-1 autocorrelation diagnostic (§8 risk 1).
+   *  Exactly 1.0 on the immutable-pole baseline (poles never move); < 1 once
+   *  `forceKinematics` steers them. 1.0 on the first census step (no prior). */
+  poleStability: number;
+  /** Cumulative count of #67 margin-consolidation pair-flips (stray continental
+   *  island ⇄ enclosed oceanic hole) since t=0 — the boundary-churn proxy
+   *  (margin-ledger graft, §5). Accumulated by the tectonics consolidation pass
+   *  ONLY when `params.plateCensus` is set (else it holds 0, so the default path
+   *  is untouched); the `--plate-census` report differences it between keyframes
+   *  into a flips-per-100-Myr churn rate. High = margins flickering — the
+   *  flicker the force balance is meant to quiet. */
+  marginConsolidationFlipsTotal: number;
 }
 
 export interface PlanetState {
@@ -368,6 +423,7 @@ export function createPlanetParams(partial: Partial<PlanetParams> & { seed: numb
     initialOxygenPAL: INITIAL_OXYGEN_PAL,
     initialLandFraction: DEFAULT_INITIAL_LAND_FRACTION,
     waterInventoryScale: 1,
+    plateCensus: false,
     ...partial,
   };
 }
@@ -394,6 +450,15 @@ export function createInitialState(params: PlanetParams): PlanetState {
       oxygen: params.initialOxygenPAL,
       oxygenReductant: REDUCTANT_BUFFER_PAL,
       abiogenesisYear: -1,
+      // Plate-census diagnostics (#110): 0 until plateCensusSystem writes them
+      // on step 1 (and only when params.plateCensus is set). Not run at init.
+      plateSpeedMedianMPerYr: 0,
+      plateSpeedMinMPerYr: 0,
+      plateSpeedMaxMPerYr: 0,
+      oceanicContinentalSpeedRatio: 0,
+      speedContinentalityCorr: 0,
+      poleStability: 0,
+      marginConsolidationFlipsTotal: 0,
     },
     fields,
     plates: [],

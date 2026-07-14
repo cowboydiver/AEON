@@ -62,6 +62,14 @@ export interface PlateRecord {
   continentalFraction: number;
   /** Dead plates (consumed by suturing, #18) keep their slot so ids stay stable. */
   alive: boolean;
+  /**
+   * Previous census step's Euler pole, for the `poleStability` diagnostic
+   * (Tectonics V2 stage 0, #110). Set ONLY by `plateCensusSystem` when
+   * `params.plateCensus` is on; `undefined` on every plate otherwise, so the
+   * census toggle never perturbs the plate table on the default path (goldens
+   * hash fields, not plates, but this keeps the records byte-identical too).
+   * Not stochastic, not read by any physics — pure diagnostic memory. */
+  prevEulerPole?: Vec3;
 }
 
 /** Rigid-rotation surface velocity of a plate at unit position `pos`, m/yr. */

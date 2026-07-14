@@ -13,6 +13,7 @@ import { iceSystem } from './systems/ice';
 import { marineLifeSystem } from './systems/marineLife';
 import { moistureSystem } from './systems/moisture';
 import { oxygenSystem } from './systems/oxygen';
+import { plateCensusSystem } from './systems/plateCensus';
 import { seaLevelSystem } from './systems/seaLevel';
 import { tectonicsSystem } from './systems/tectonics';
 import { wilsonSystem } from './systems/wilson';
@@ -96,6 +97,12 @@ export const SYSTEMS: readonly System[] = [
   marineLifeSystem,
   oxygenSystem,
   biomeSystem,
+  // Plate-census diagnostic (Tectonics V2 stage 0, #110): strictly LAST so it
+  // reads the fully-solved plateId/crustType and the current plate table, and
+  // writes only `globals` census scalars (+ each plate's diagnostic
+  // `prevEulerPole`). Exact identity when `params.plateCensus` is off, so the
+  // goldens and every default run are byte-identical.
+  plateCensusSystem,
 ];
 
 /** Advance the state by dtYears through the ordered system pipeline. */

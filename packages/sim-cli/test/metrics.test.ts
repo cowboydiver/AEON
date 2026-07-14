@@ -3,11 +3,17 @@ import { cellCount, faceRCToIndex, FIELD_NAMES, type Fields, type Keyframe } fro
 import {
   computeCrustStats,
   computeKeyframeMetrics,
+  computePlateCensusRow,
   DISPERSED_MAX_PLATE_FRAC,
+  PLATENESS_TOP_DECILE,
+  SEAFLOOR_AGE_BIN_COUNT,
+  SEAFLOOR_AGE_BIN_WIDTH_YR,
   SHALLOW_OCEAN_DEPTH_M,
   summarizeMetrics,
   summarizePairedMetrics,
+  summarizePlateCensus,
   type KeyframeMetrics,
+  type PlateCensusRow,
 } from '../src/metrics';
 
 /**
@@ -29,7 +35,7 @@ function emptyKeyframe(timeYears: number): Keyframe {
   fields.elevation.fill(-4000);
   // computeKeyframeMetrics reads only `.fields`; globals is required by the
   // Keyframe type but unused here, so a zeroed set suffices.
-  const globals = { landFraction: 0, co2: 0, meanTemperatureK: 0, seaLevelM: 0, waterInventoryM: 0, oxygen: 0, oxygenReductant: 0, abiogenesisYear: -1 };
+  const globals = { landFraction: 0, co2: 0, meanTemperatureK: 0, seaLevelM: 0, waterInventoryM: 0, oxygen: 0, oxygenReductant: 0, abiogenesisYear: -1, plateSpeedMedianMPerYr: 0, plateSpeedMinMPerYr: 0, plateSpeedMaxMPerYr: 0, oceanicContinentalSpeedRatio: 0, speedContinentalityCorr: 0, poleStability: 0, marginConsolidationFlipsTotal: 0 };
   return { timeYears, fields, globals, events: [] };
 }
 
@@ -260,5 +266,150 @@ describe('summarizePairedMetrics (#84 branched A/B)', () => {
     const off = [point(0, 5, 0.5)];
     const out = summarizePairedMetrics(off, [], 0);
     expect(out).toContain('not paired');
+  });
+});
+
+describe('computePlateCensusRow — seafloor age (CLI-side, over oceanic crust)', () => {
+  it('reports mean/median/max and an area histogram over oceanic cells', () => {
+    const kf = emptyKeyframe(0); // all cells oceanic (crustType 0) by default
+    const count = cellCount(N);
+    for (let i = 0; i < count; i++) {
+      kf.fields.crustAge[i] = i < count / 2 ? 10e6 : 210e6;
+    }
+    const row = computePlateCensusRow(kf);
+    expect(row.seafloorAgeMeanYr).toBeCloseTo(110e6, -3);
+    expect(row.seafloorAgeMedianYr).toBeCloseTo(110e6, -3); // even count: mean of the two middles
+    expect(row.seafloorAgeMaxYr).toBe(210e6);
+    // Half in bin 0 (0–20 Myr), half in the ≥200 Myr overflow bin.
+    expect(row.ageAreaHistogram).toHaveLength(SEAFLOOR_AGE_BIN_COUNT);
+    expect(row.ageAreaHistogram[0]!).toBeCloseTo(0.5, 6);
+    expect(row.ageAreaHistogram[SEAFLOOR_AGE_BIN_COUNT - 1]!).toBeCloseTo(0.5, 6);
+    const total = row.ageAreaHistogram.reduce((s, x) => s + x, 0);
+    expect(total).toBeCloseTo(1, 6);
+  });
+
+  it('excludes continental crust from the seafloor-age reduction', () => {
+    const kf = emptyKeyframe(0);
+    const count = cellCount(N);
+    for (let i = 0; i < count; i++) {
+      if (i % 2 === 0) {
+        kf.fields.crustType[i] = 1; // continental — must be ignored
+        kf.fields.crustAge[i] = 2e9; // the 2 Gyr continental seed
+      } else {
+        kf.fields.crustType[i] = 0;
+        kf.fields.crustAge[i] = 50e6;
+      }
+    }
+    const row = computePlateCensusRow(kf);
+    expect(row.seafloorAgeMeanYr).toBe(50e6);
+    expect(row.seafloorAgeMedianYr).toBe(50e6);
+    expect(row.seafloorAgeMaxYr).toBe(50e6);
+  });
+
+  it('reports zeros when there is no oceanic crust', () => {
+    const kf = emptyKeyframe(0);
+    kf.fields.crustType.fill(1);
+    const row = computePlateCensusRow(kf);
+    expect(row.seafloorAgeMeanYr).toBe(0);
+    expect(row.seafloorAgeMedianYr).toBe(0);
+    expect(row.seafloorAgeMaxYr).toBe(0);
+    expect(row.ageAreaHistogram.every((x) => x === 0)).toBe(true);
+  });
+});
+
+describe('computePlateCensusRow — plateness (top-decile boundary-stress share)', () => {
+  it('is the top-decile share of total boundary |stress|', () => {
+    const kf = emptyKeyframe(0);
+    // Ten boundary cells: one at 10, nine at 1 (|stress|). Interiors stay 0.
+    kf.fields.boundaryStress[0] = 10;
+    for (let i = 1; i < 10; i++) kf.fields.boundaryStress[i] = -1; // sign ignored (abs)
+    const row = computePlateCensusRow(kf);
+    // top decile of 10 cells = 1 cell (the 10); total = 19.
+    expect(Math.floor(10 * PLATENESS_TOP_DECILE)).toBe(1);
+    expect(row.plateness).toBeCloseTo(10 / 19, 6);
+  });
+
+  it('is the decile itself when all boundary stresses are equal', () => {
+    const kf = emptyKeyframe(0);
+    for (let i = 0; i < 10; i++) kf.fields.boundaryStress[i] = 2;
+    const row = computePlateCensusRow(kf);
+    expect(row.plateness).toBeCloseTo(0.1, 6); // 1 of 10 equal cells
+  });
+
+  it('is 0 with no boundary cells', () => {
+    const kf = emptyKeyframe(0);
+    expect(computePlateCensusRow(kf).plateness).toBe(0);
+  });
+});
+
+describe('computePlateCensusRow — passes kernel globals through', () => {
+  it('copies the six globals census scalars onto the row', () => {
+    const kf = emptyKeyframe(0);
+    Object.assign(kf.globals, {
+      plateSpeedMedianMPerYr: 0.04,
+      plateSpeedMinMPerYr: 0.01,
+      plateSpeedMaxMPerYr: 0.08,
+      oceanicContinentalSpeedRatio: 2.5,
+      speedContinentalityCorr: -0.7,
+      poleStability: 0.95,
+    });
+    const row = computePlateCensusRow(kf);
+    expect(row.speedMedianMPerYr).toBe(0.04);
+    expect(row.speedMinMPerYr).toBe(0.01);
+    expect(row.speedMaxMPerYr).toBe(0.08);
+    expect(row.oceanicContinentalSpeedRatio).toBe(2.5);
+    expect(row.speedContinentalityCorr).toBe(-0.7);
+    expect(row.poleStability).toBe(0.95);
+  });
+});
+
+describe('summarizePlateCensus', () => {
+  function row(timeYears: number, over: Partial<PlateCensusRow>): PlateCensusRow {
+    return {
+      timeYears,
+      speedMedianMPerYr: 0,
+      speedMinMPerYr: 0,
+      speedMaxMPerYr: 0,
+      oceanicContinentalSpeedRatio: 0,
+      speedContinentalityCorr: 0,
+      poleStability: 0,
+      marginConsolidationFlipsTotal: 0,
+      seafloorAgeMeanYr: 0,
+      seafloorAgeMedianYr: 0,
+      seafloorAgeMaxYr: 0,
+      plateness: 0,
+      ageAreaHistogram: new Array<number>(SEAFLOOR_AGE_BIN_COUNT).fill(0),
+      ...over,
+    };
+  }
+
+  it('excludes the census-absent t=0 keyframe from the means', () => {
+    // t=0 has all-zero census (pass not run at init). A single post-t=0
+    // keyframe with poleStability 1 must summarize to 1, not 0.5.
+    const rows = [row(0, {}), row(2e9, { poleStability: 1, speedMedianMPerYr: 0.05 })];
+    const s = summarizePlateCensus(rows);
+    expect(s).toContain('pole stability (mean cosine): 1.0000');
+    // 0.05 m/yr = 5 cm/yr on the speed line.
+    expect(s).toContain('speed cm/yr: min 0.00 median 5.00');
+  });
+
+  it('handles an empty series without throwing', () => {
+    expect(summarizePlateCensus([])).toContain('no keyframes');
+  });
+
+  it('differences the cumulative flip total into a per-100-Myr churn rate', () => {
+    // Cumulative flips 0 -> 30 -> 90 over t=1e9..3e9 (a 2 Gyr span past 1 Gyr):
+    // 90 flips / 2000 Myr * 100 = 4.5 per 100 Myr.
+    const rows = [
+      row(0, {}),
+      row(1e9, { marginConsolidationFlipsTotal: 0 }),
+      row(3e9, { marginConsolidationFlipsTotal: 90 }),
+    ];
+    expect(summarizePlateCensus(rows)).toContain('boundary churn (#67 pair-flips / 100 Myr): 4.50');
+  });
+
+  // Reference the width const so an accidental unit drift trips a test.
+  it('bins span 20 Myr', () => {
+    expect(SEAFLOOR_AGE_BIN_WIDTH_YR).toBe(20e6);
   });
 });

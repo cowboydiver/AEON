@@ -17,9 +17,13 @@ import {
 import {
   computeCrustStats,
   computeKeyframeMetrics,
+  computePlateCensusRow,
+  formatPlateCensusRow,
   summarizeMetrics,
   summarizePairedMetrics,
+  summarizePlateCensus,
   type KeyframeMetrics,
+  type PlateCensusRow,
 } from './metrics';
 import { fieldStats, renderFieldPng } from './render';
 
@@ -43,6 +47,16 @@ Options:
                               submerged share of continental crust, share of
                               ocean area on continental crust, shallow-ocean
                               share of the sphere, land share, min elevation
+  --plate-census              print the force-balance census per keyframe
+                              (Tectonics V2 stage 0, #110): per-plate speed
+                              distribution |ω|·R and oceanic/continental speed
+                              ratio + speed-continentality correlation (the
+                              Forsyth & Uyeda sign tests), Euler-pole stability
+                              (1.0 on the immutable-pole baseline), seafloor
+                              age mean/max + age-area histogram over oceanic
+                              crust, and plateness (top-decile boundary-stress
+                              share). Sets the kernel plateCensus diagnostic;
+                              measurement only, main goldens byte-identical
   --block-isostasy            enable the crustal-block isostasy prototype (#84):
                               per-component elevation ceilings that founder
                               small continental blocks (default off —
@@ -149,6 +163,7 @@ const { values } = parseArgs({
     report: { type: 'boolean', default: false },
     metrics: { type: 'boolean', default: false },
     'crust-stats': { type: 'boolean', default: false },
+    'plate-census': { type: 'boolean', default: false },
     'block-isostasy': { type: 'boolean', default: false },
     'crust-fates': { type: 'boolean', default: false },
     'compact-arcs': { type: 'boolean', default: false },
@@ -277,6 +292,9 @@ const params = createPlanetParams({
   ...(stepYears !== undefined ? { stepYears } : {}),
   ...(waterScale !== undefined ? { waterInventoryScale: waterScale } : {}),
   ...(initialLandFraction !== undefined ? { initialLandFraction } : {}),
+  // Stage-0 diagnostic (#110): turn on the kernel plate-census pass so each
+  // keyframe's globals carry the force-balance scalars. Off ⇒ byte-identical.
+  ...(values['plate-census'] ? { plateCensus: true } : {}),
   // Single-arm mechanism flags compose (e.g. --block-isostasy --crust-fates
   // measures the pair together); --no-* forms disable a default-on mechanism.
   // The paired --ab harness takes one at a time.
@@ -535,11 +553,18 @@ if (abMechanism !== undefined && abBranchYears !== undefined) {
 let keyframeIndex = 0;
 let finalEvents: SimEvent[] = [];
 const metricsSeries: KeyframeMetrics[] = [];
+const censusSeries: PlateCensusRow[] = [];
 run(params, untilYears, (keyframe) => {
   checkFinite(keyframe);
   if (values.report) report(keyframe);
   if (values['crust-stats']) reportCrustStats(keyframe);
   if (values.metrics) metricsSeries.push(computeKeyframeMetrics(keyframe, params.gridN));
+  if (values['plate-census']) {
+    const prevTotal = censusSeries.at(-1)?.marginConsolidationFlipsTotal;
+    const row = computePlateCensusRow(keyframe);
+    censusSeries.push(row);
+    console.log(formatPlateCensusRow(row, prevTotal));
+  }
   // Every keyframe passes the tripwire above; --dump-every only thins the
   // PNG series. The final keyframe is always dumped so flipbooks end at the
   // end state.
@@ -554,4 +579,7 @@ if (values.metrics) {
     (e) => e.kind === EVENT_KINDS.plateRift || e.kind === EVENT_KINDS.plateSuture,
   );
   console.log(summarizeMetrics(metricsSeries, reorgs.at(-1)?.timeYears));
+}
+if (values['plate-census']) {
+  console.log(summarizePlateCensus(censusSeries));
 }

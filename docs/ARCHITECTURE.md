@@ -860,10 +860,43 @@ PlanetParams = { seed, radiusMeters, gridN, stepYears, keyframeIntervalYears,
                  //   coastline: the sea quantile), waterInventoryScale (#105,
                  //   default 1.0 — dimensionless multiplier on the derived water
                  //   inventory). They compose as base(landFraction) × scale.
+                 // diagnostics: plateCensus (#110, default false — the Tectonics
+                 //   V2 stage-0 force-balance census; not a mechanism, no onset)
                }   // immutable per run
 Globals     = { landFraction, co2, meanTemperatureK, seaLevelM, waterInventoryM,
-                oxygen, oxygenReductant, abiogenesisYear }
+                oxygen, oxygenReductant, abiogenesisYear,
+                // Plate-census diagnostics (#110), written each step by
+                // plateCensusSystem ONLY when params.plateCensus (else 0):
+                //   plateSpeed{Median,Min,Max}MPerYr, oceanicContinentalSpeedRatio,
+                //   speedContinentalityCorr, poleStability. Diagnostic-only —
+                //   never read back, never cross the codec, NOT in the golden
+                //   field hashes, so toggling the census is byte-identical.
+                plateSpeedMedianMPerYr, plateSpeedMinMPerYr, plateSpeedMaxMPerYr,
+                oceanicContinentalSpeedRatio, speedContinentalityCorr,
+                poleStability,
+                // #67 boundary-churn proxy: cumulative margin-consolidation
+                // pair-flips, accumulated by the tectonics pass under
+                // params.plateCensus (0 otherwise):
+                marginConsolidationFlipsTotal }
 ```
+
+The **plate census** (Tectonics V2 stage 0, #110) is a pure, RNG-free
+`plateCensusSystem` that runs LAST in the pipeline and is exact identity unless
+`params.plateCensus` is set. When on it reads the current plate table +
+`plateId`/`crustType` and writes the six `Globals` scalars above (per-plate
+characteristic speed |ω|·R distribution, the Forsyth & Uyeda ocean/continent
+speed ratio and speed–continentality correlation, and Euler-pole stability — the
+count-mean cosine between a plate's current pole and the previous census step's,
+recorded on the diagnostic-only `PlateRecord.prevEulerPole`, exactly 1.0 on the
+immutable-pole baseline). The field-derivable half of the census (seafloor age
+over oceanic crust + age–area histogram, plateness = top-decile boundary-stress
+share) lives in sim-cli's `--plate-census` report. The one census scalar the
+kernel accumulates OUTSIDE `plateCensusSystem` is `marginConsolidationFlipsTotal`
+— the tectonics consolidation pass adds its per-step #67 pair-flip count (a
+boundary-churn proxy) to it, but only under `params.plateCensus`, so the default
+path is untouched; the report differences it into a flips-per-100-Myr churn rate.
+Diagnostics route through `globals` because keyframes carry
+`fields`/`globals`/`events` only — never plate records.
 
 `starLuminosity` (insolation) and `obliquityDeg` (annual-mean insolation
 profile) are activated by the #30 energy balance; `dayLengthHours` is activated
