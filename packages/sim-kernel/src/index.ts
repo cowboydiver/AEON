@@ -124,6 +124,7 @@ export {
   weatheringPpmPerYr,
   type CarbonSolution,
 } from './systems/carbon';
+export { plateCensusSystem, computePlateCensus, type PlateCensus } from './systems/plateCensus';
 export {
   biomeSystem,
   applyBiome,
