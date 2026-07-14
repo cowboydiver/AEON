@@ -14,11 +14,15 @@ the blocking oc/cont-ratio finding is grid-independent).
 The torque balance does what stage 1 set out to do: **plate speed is now derived
 state and lands squarely in the Earth range**, the speed envelope's two ends fall
 out of the constants, poles migrate, and deep-time land/tempo stay healthy — with
-**flag-off goldens byte-identical** (400/400 kernel tests, `golden.test.ts`
-unchanged). Two #111 sub-gates miss; one of them (the oceanic/continental speed
-ratio) is a **measurement-definition degeneracy that no kinematics change or drag
-retune can move**, and is posed to the owner as an acceptance-criteria question
-rather than tuned. No thermal runaway; flipbooks show coherent geology, not noise.
+**flag-off goldens byte-identical** (403/403 kernel tests, `golden.test.ts`
+unchanged). The originally-failing oceanic/continental speed-ratio gate was a
+**measurement-definition degeneracy that no kinematics change or drag retune can
+move**; the owner replaced it (decision on #111) with the physically-honest
+**speed–slab-attachment correlation** (Forsyth & Uyeda), which passes on all seeds
+(0.304–0.499 ≥ +0.3). The secondary dispersal single-bucket dip was adjudicated
+(owner: accept — a marginal N=64 excursion, clean at N=128, no supercontinent lock).
+**All stage-1 gates are now green.** No thermal runaway; flipbooks show coherent
+geology, not noise.
 
 ## Gate grid (N=64, means past 1 Gyr unless noted)
 
@@ -149,12 +153,21 @@ plate carries some continent and speeds converge (deep-time corr ≈ 0). Whether
 that washout is a realism defect or expected for a few-plate mixed world is itself
 part of the open decision.
 
-## Secondary miss: dispersal single-bucket dips
+## Secondary miss: dispersal single-bucket dips — ADJUDICATED (owner: accept)
 
-Dispersal dips to 0.55 in one Gyr bucket on 2 of 3 seeds (seed 42 bucket 5, seed 1
-bucket 4; seed 1337 passes all five). Overall dispersed fraction is 81–90% and the
-longest >85%-monopoly window is only 40–130 Myr, so this is a marginal single-bucket
-excursion, not a supercontinent lock. Recorded, not yet adjudicated.
+Dispersal dips to 0.55 in one Gyr bucket on 2 of 3 seeds (seed 42 bucket 5 — the
+half-Gyr *partial* window 4.0–4.5; seed 1 bucket 4 — a full-Gyr dip that then
+recovers to 1.00; seed 1337 passes all five). Overall dispersed fraction is 81–90%
+and the longest >85%-monopoly window is only 40–130 Myr, so this is a marginal
+single-bucket excursion, not a supercontinent lock. **It does NOT reproduce at
+N=128 seed 42** (all five buckets 0.74–0.98, monopoly window 0 Myr), so it reads as
+a coarse-grid / small-sample artifact rather than a physical pathology.
+
+**Owner disposition (recorded on #111): accepted as a marginal N=64 excursion.** The
+dispersal-per-bucket gate guards against the #59 supercontinent lock, and there is
+demonstrably no lock (no >85% window beyond 130 Myr, dispersed 81–90% throughout,
+clean at N=128). Stage 1 is not held on this dip; no retune was spent on a coarse-
+grid sampling artifact (the #66/#101 discipline).
 
 ## Flipbooks (inspected, not just numbered)
 
@@ -164,20 +177,33 @@ ocean basins, polar ice, and a structured seafloor-age field (young ridge bands 
 old interiors). Not static noise. The high seafloor mean age is visible as large
 old (cream) regions — consistent with the trench-rollback deferral.
 
-## Open decision (for the owner, posted on #111)
+## Resolved: the oc/cont ratio gate → speed–slab-attachment correlation
 
-The oc/cont ratio gate (1.5–4) is unreachable regardless of physics because its
-metric is degenerate under a dispersed few-plate geometry. Options:
+The oc/cont ratio gate (1.5–4) was measurement-degenerate under a dispersed
+few-plate geometry (the continent-dominated partition is empty in ~68% of keyframes;
+grid-monotone toward 0 — 0.38 at N=64, 0.02 at N=128). The **owner chose to replace
+it** (decision on #111) with the Forsyth & Uyeda variable the ratio was always a
+proxy for: **the correlation between plate speed and attached down-going slab**.
 
-1. **Redefine the ratio** — average only over keyframes where both partitions are
-   populated, and/or lower the continent-dominated threshold, and/or replace the
-   binary partition with a continuous continental-fraction-weighted speed slope.
-2. **Replace the ratio criterion with the speed–continentality correlation**, judged
-   on the engaged transient (where it is correctly, strongly negative), since that
-   is the robust few-plate instrument for the same physical claim.
-3. **Treat it as a genuine miss** and apply the stop-valve (a pre-registered fallback
-   for the ratio is not defined in #111; a well-characterized "here is what it costs"
-   is an acceptable terminal deliverable per the #109 authorization §5).
+Density is the physics: cold old oceanic lithosphere is negatively buoyant, and that
+negative buoyancy IS slab pull (encoded `∝√age`). `plateDynamics` sums the attached
+slab-pull force per plate (`PlateRecord.slabPullN`; slab suction on the overrider is
+excluded — it is not the plate's own attached trench); `plateCensus` normalizes it to
+an intensive driving stress `slabPullN/(cells·cellA)` and reports
+`speedSlabAttachmentCorr = pearson(speed, slabStress)`. Unlike continentality (a proxy
+that washes to 0 once every plate is a mixed ~26%-continental raft), this stays
+discriminating in the deep-time steady state.
 
-Reproduce the partition diagnostic:
-`pnpm -F sim-cli exec tsx spikes/plate-partition-census.ts --seed 42 --grid-n 64 --until 4.5e9`
+**New gate: `speedSlabAttachmentCorr ≥ +0.3`** on the census mean past 1 Gyr.
+
+| seed / grid | speed–slab-attach corr | oc/cont ratio (descriptive) | speed–cont corr (descriptive) |
+|---|---|---|---|
+| 42 / N=64 | **0.393 ✓** | 0.38 | +0.015 |
+| 1 / N=64 | **0.304 ✓** (thin) | 0.29 | −0.046 |
+| 1337 / N=64 | **0.477 ✓** | 0.21 | +0.001 |
+| 42 / N=128 | **0.499 ✓** | 0.02 | +0.192 |
+
+All seeds clear +0.3 (seed 1 marginally). Every other metric in this document is
+bit-identical to the pre-metric runs — `slabPullN` is a pure diagnostic read-out of a
+sum the balance already forms, so no force, field, codec, or golden changed. With the
+dispersal dip adjudicated (above), **all stage-1 gates are green.**
