@@ -351,6 +351,88 @@ export const PLATE_FILL_JITTER = 1.5;
 export const PLATE_OMEGA_MIN_RAD_PER_YR = 1.5e-9;
 export const PLATE_OMEGA_MAX_RAD_PER_YR = 8e-9;
 
+/*
+ * Force-balance kinematics (Tectonics V2 stage 1, #111, proposal §2.3). The
+ * torque-balance driving/closure constants that make each plate's ω⃗ derived
+ * state under `forceKinematics`. Each value carries the physical anchor from
+ * the proposal table; they are inert (never read) until the `plateDynamics`
+ * system lands in stage-1 chunk 2, and unused on the default (flag-off) path.
+ */
+
+/**
+ * Net transmitted slab pull per m of trench per √(age yr). 100 Myr crust ⇒
+ * 5×10¹² N/m — Schellart 2004's net slab pull (4–6×10¹², ~10% of total slab
+ * buoyancy). The ∝√age law is half-space cooling — the same law as the
+ * bathymetry subsidence curve.
+ */
+export const SLAB_PULL_COEF_N_PER_M_PER_SQRT_YR = 5e8;
+
+/**
+ * Lithosphere younger than ~25 Myr is not reliably negatively buoyant; slab
+ * pull ramps linearly 0→full over [1×, 2×] this age. Prevents a fresh
+ * ridge-flank self-subduction feedback.
+ */
+export const SLAB_PULL_MIN_AGE_YEARS = 2.5e7;
+
+/**
+ * Fraction of a cell's slab pull applied to the *overriding* plate,
+ * trench-ward (slab suction, Conrad & Lithgow-Bertelloni 2002). Makes a
+ * subduction margin organize both plates, not just the subducting one.
+ */
+export const SLAB_SUCTION_FACTOR = 0.4;
+
+/**
+ * Ridge (GPE) push per m of divergent boundary, applied to each flank away
+ * from the ridge (~½ the net slab pull; Forsyth & Uyeda 1975).
+ */
+export const RIDGE_PUSH_N_PER_M = 2.5e12;
+
+/**
+ * Continent–continent contact resistance per m of contact per (m/yr) of
+ * closing speed. At 5 cm/yr ⇒ 1×10¹³ N/m (Gurnis & Hall 2004
+ * subduction-initiation scale). Pure damping, capped — a collision can stall
+ * the closing speed but never reverse it.
+ */
+export const COLLISION_DAMP_N_YR_PER_M2 = 2e14;
+
+/**
+ * Linear basal traction coefficient c_d in −c_d·v, N·yr/m³. The model's
+ * effective "mantle viscosity" and the primary calibration lever for the
+ * overall speed level.
+ */
+export const BASAL_DRAG_N_YR_PER_M3 = 1.2e7;
+
+/**
+ * Per-cell basal-drag multiplier on continental cells (cratonic keels drag
+ * harder). Mixed plates interpolate naturally, so plate speed anticorrelates
+ * with continental fraction as a *consequence*, not a rule.
+ */
+export const CONTINENTAL_DRAG_MULTIPLIER = 4;
+
+/**
+ * e-folding time of ω⃗ relaxing toward the torque balance's terminal velocity
+ * ω⃗*, yr. Anchors: India lost ~⅔ of its speed in ~15 Myr at collision; stable
+ * poles hold 10–100 Myr. Also the low-pass time constant against
+ * advection-quantum torque noise (proposal §8 risk 1).
+ */
+export const OMEGA_RELAX_YEARS = 1e7;
+
+/**
+ * Hard cap on a plate's characteristic surface speed |ω⃗|·R, m/yr (India's
+ * ~18–20 cm/yr burst is the observed ceiling). Rescales ω⃗ when exceeded;
+ * protects the advection cadence and the boundary-rate clamps from a runaway
+ * calibration.
+ */
+export const PLATE_SPEED_CAP_M_PER_YR = 0.2;
+
+/**
+ * Fraction of tr(K)/3 added to the drag tensor K's diagonal before the 3×3
+ * solve. A near-point plate has a singular drag tensor along its radial axis
+ * (spin-in-place is dragless); this regularizer pins that null space
+ * deterministically.
+ */
+export const DRAG_TENSOR_REGULARIZATION = 1e-3;
+
 /**
  * Depth of brand-new oceanic crust at a spreading center, m below datum.
  * Mid-ocean ridge crests sit at ~2.5 km depth (half-space cooling t=0 term,

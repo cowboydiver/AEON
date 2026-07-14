@@ -18,6 +18,10 @@ function plate(over: Partial<PlateRecord> & { eulerPole: Vec3; angularVelRadPerY
     sutureLockUntilYears: 0,
     continentalFraction: 0,
     alive: true,
+    omegaVec: [0, 0, 0],
+    tensionN: 0,
+    stallSinceYears: 0,
+    blanketYears: 0,
     ...over,
   };
 }

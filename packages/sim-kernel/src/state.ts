@@ -192,6 +192,23 @@ export interface PlanetParams {
    *  Default 0. */
   bathymetryDatumOnsetYears: number;
   /**
+   * Enable force-balance plate kinematics (Tectonics V2 stage 1, #111,
+   * proposal §2). When on, the `plateDynamics` system makes each plate's
+   * angular velocity ω⃗ *derived state*: every step it relaxes toward the
+   * terminal velocity of a boundary-integrated rigid-plate torque balance
+   * (slab pull, slab suction, ridge push, collision damping, closed by basal
+   * drag with a continental-keel multiplier), replacing the immutable random
+   * Euler vector drawn once at creation. Zero new RNG draws. Default **OFF** —
+   * a default-off mechanism prototype in the standard onset pattern; the
+   * physics pass lands in stage-1 chunk 2 and the main goldens stay
+   * byte-identical while off.
+   */
+  forceKinematics: boolean;
+  /** Sim year before which forceKinematics is inert even when enabled — the
+   *  #111 branched-A/B onset, same contract as blockIsostasyOnsetYears.
+   *  Default 0. */
+  forceKinematicsOnsetYears: number;
+  /**
    * Enable the biosphere (#37, Phase 4): ocean life, oxygenation, and — from
    * #39 — land vegetation. The ablation switch, **default `true`** (the
    * biosphere is a shipped feature, not a prototype). When `false` the life
@@ -418,6 +435,8 @@ export function createPlanetParams(partial: Partial<PlanetParams> & { seed: numb
     freeboardOnsetYears: 0,
     bathymetryDatum: false,
     bathymetryDatumOnsetYears: 0,
+    forceKinematics: false,
+    forceKinematicsOnsetYears: 0,
     biosphereEnabled: true,
     abiogenesisRatePerYear: ABIOGENESIS_RATE_PER_YR,
     initialOxygenPAL: INITIAL_OXYGEN_PAL,

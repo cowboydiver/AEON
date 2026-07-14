@@ -22,6 +22,10 @@ export function makePlate(spec: TestPlateSpec): PlateRecord {
     sutureLockUntilYears: 0,
     continentalFraction: 0,
     alive: true,
+    omegaVec: [0, 0, 0],
+    tensionN: 0,
+    stallSinceYears: 0,
+    blanketYears: 0,
   };
 }
 

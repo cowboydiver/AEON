@@ -567,6 +567,13 @@ export function riftPlate(state: PlanetState, p: number, riftSeed: number): Plan
     sutureLockUntilYears: state.timeYears + RIFT_SUTURE_COOLDOWN_YEARS,
     continentalFraction: contB / cellsB,
     alive: true,
+    // Force-balance kinematics state (#111): the fragment inherits the
+    // parent's ω⃗ (a copy, not the shared reference; §2.4 — ridge push at the
+    // new divergent margin separates the halves next step). Zero flag-off.
+    omegaVec: [...state.plates[p]!.omegaVec],
+    tensionN: 0,
+    stallSinceYears: 0,
+    blanketYears: 0,
   });
 
   const event: SimEvent = {

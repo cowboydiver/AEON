@@ -29,6 +29,7 @@ const ALL_MECHANISMS_OFF = {
   seaLevelDatums: false,
   freeboard: false,
   bathymetryDatum: false,
+  forceKinematics: false,
 } as const;
 
 function fieldHashes(state: PlanetState): Record<string, string> {

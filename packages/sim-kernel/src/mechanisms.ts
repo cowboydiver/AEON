@@ -19,7 +19,8 @@ export type MechanismKey =
   | 'emergentArcTaper'
   | 'seaLevelDatums'
   | 'freeboard'
-  | 'bathymetryDatum';
+  | 'bathymetryDatum'
+  | 'forceKinematics';
 
 export interface MechanismInfo {
   key: MechanismKey;
@@ -86,6 +87,13 @@ export const MECHANISMS: readonly MechanismInfo[] = [
     issue: 102,
     summary:
       'The oceanic age-depth reference (ridge crest, trench pinning, gap fill, shelf room) keys off the dynamic sea level instead of the fixed 0 m datum, so mid-ocean ridge crests stay submerged instead of crossing the late-time oceans as emergent island chains. Designed to run on top of seaLevelDatums + freeboard.',
+  },
+  {
+    key: 'forceKinematics',
+    label: 'Force-balance kinematics',
+    issue: 111,
+    summary:
+      'A per-step rigid-plate torque balance (slab pull, ridge push, collision damping, closed by basal drag) makes each plate’s angular velocity derived state that responds to what the plate touches, instead of a fixed random draw made once at creation.',
   },
 ] satisfies readonly MechanismInfo[];
 
