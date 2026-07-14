@@ -421,3 +421,204 @@ export function summarizePairedMetrics(
   );
   return rows.join('\n');
 }
+
+/* ------------------------------------------------------------------------- *
+ * Plate census (Tectonics V2 stage 0, #110; proposal §3/§5).
+ *
+ * The force-balance scoreboard. The per-plate quantities that need the plate
+ * table (speed distribution, ocean/continental ratio, speed–continentality
+ * correlation, pole stability) are computed KERNEL-side by `plateCensusSystem`
+ * and ride each keyframe's `globals` (keyframes never carry plate records).
+ * The field-derivable half lives here: seafloor age over oceanic crust and the
+ * plateness (margin-organization) scalar. Enable with sim-cli `--plate-census`,
+ * which sets `params.plateCensus`; without it the globals scalars stay 0.
+ * ------------------------------------------------------------------------- */
+
+/** Seafloor-age histogram bin width (yr) and count: ten 20-Myr bins spanning
+ *  0–200 Myr plus a final ≥200 Myr overflow bin. The §3 target is a roughly
+ *  triangular age–area distribution with a ~180–200 Myr ceiling. */
+export const SEAFLOOR_AGE_BIN_WIDTH_YR = 20e6;
+export const SEAFLOOR_AGE_BIN_COUNT = 11;
+
+/** Fraction of boundary cells forming the "top decile" for the plateness scalar. */
+export const PLATENESS_TOP_DECILE = 0.1;
+
+/** Boundary cells carry |boundaryStress| above this (m/yr); interiors are
+ *  exactly 0, so any positive epsilon separates them (matches the kernel). */
+const BOUNDARY_STRESS_EPSILON = 1e-9;
+
+export interface PlateCensusRow {
+  timeYears: number;
+  /** Median plate characteristic speed |ω|·R, m/yr (globals; 0 if census off). */
+  speedMedianMPerYr: number;
+  speedMinMPerYr: number;
+  speedMaxMPerYr: number;
+  /** Ocean-dominated ÷ continent-dominated mean speed (globals). */
+  oceanicContinentalSpeedRatio: number;
+  /** Pearson speed-vs-continentality (globals). */
+  speedContinentalityCorr: number;
+  /** Count-mean cosine between consecutive Euler poles (globals; 1.0 baseline). */
+  poleStability: number;
+  /** Mean crustAge over oceanic (crustType 0) cells, yr. NOTE: the current
+   *  kernel seeds continental crust at CONTINENTAL_INITIAL_AGE_YEARS (2 Gyr)
+   *  and converts continent→ocean at some margins WITHOUT resetting age (only
+   *  the fresh-spreading path zeroes it), so a heavy ~2 Gyr tail of
+   *  former-continental "oceanic" crust drags the mean far above the genuine
+   *  young-seafloor age. The median below is the robust central tendency for
+   *  the §3 triangular-distribution target; the mean/max expose the tail. This
+   *  contamination is itself a stage-0 baseline finding. */
+  seafloorAgeMeanYr: number;
+  /** Median crustAge over oceanic cells, yr — robust to the old-continental
+   *  tail, the number to compare against the §3 target (mean 60–80 Myr). */
+  seafloorAgeMedianYr: number;
+  /** Max crustAge over oceanic cells, yr. */
+  seafloorAgeMaxYr: number;
+  /** Share of total boundary |stress| held by the top-decile stress cells —
+   *  the single "margins are organizing" scalar (litho graft). In [decile, 1];
+   *  higher = dissipation concentrated at few sharp margins. 0 with no
+   *  boundary. */
+  plateness: number;
+  /** Fractional oceanic AREA per age bin (length SEAFLOOR_AGE_BIN_COUNT; sums
+   *  to 1 when any oceanic cell exists, else all 0). */
+  ageAreaHistogram: number[];
+}
+
+/**
+ * Per-keyframe plate census. Pure over the keyframe: the speed/pole scalars are
+ * read straight off `globals` (they are 0 unless the run enabled the kernel
+ * census); seafloor age and plateness are reduced from `crustType`/`crustAge`/
+ * `boundaryStress`.
+ */
+export function computePlateCensusRow(keyframe: Keyframe): PlateCensusRow {
+  const { crustType, crustAge, boundaryStress } = keyframe.fields;
+  const count = crustType.length;
+  const g = keyframe.globals;
+
+  // Seafloor age + age–area histogram over oceanic crust.
+  const histogram = new Array<number>(SEAFLOOR_AGE_BIN_COUNT).fill(0);
+  const oceanAges: number[] = [];
+  let ageSum = 0;
+  let ageMax = 0;
+  for (let i = 0; i < count; i++) {
+    if (crustType[i] !== 0) continue;
+    const age = crustAge[i]!;
+    oceanAges.push(age);
+    ageSum += age;
+    if (age > ageMax) ageMax = age;
+    let bin = Math.floor(age / SEAFLOOR_AGE_BIN_WIDTH_YR);
+    if (bin < 0) bin = 0;
+    if (bin >= SEAFLOOR_AGE_BIN_COUNT) bin = SEAFLOOR_AGE_BIN_COUNT - 1;
+    histogram[bin]!++;
+  }
+  const oceanCells = oceanAges.length;
+  let ageMedian = 0;
+  if (oceanCells > 0) {
+    oceanAges.sort((a, b) => a - b);
+    const mid = oceanCells >> 1;
+    ageMedian = oceanCells % 2 === 1 ? oceanAges[mid]! : (oceanAges[mid - 1]! + oceanAges[mid]!) / 2;
+    for (let b = 0; b < SEAFLOOR_AGE_BIN_COUNT; b++) histogram[b]! /= oceanCells;
+  }
+
+  // Plateness: share of total boundary |stress| in the top-decile stress cells.
+  const stresses: number[] = [];
+  let totalStress = 0;
+  for (let i = 0; i < count; i++) {
+    const a = Math.abs(boundaryStress[i]!);
+    if (a > BOUNDARY_STRESS_EPSILON) {
+      stresses.push(a);
+      totalStress += a;
+    }
+  }
+  let plateness = 0;
+  if (stresses.length > 0 && totalStress > 0) {
+    stresses.sort((x, y) => y - x);
+    const topN = Math.max(1, Math.floor(stresses.length * PLATENESS_TOP_DECILE));
+    let topSum = 0;
+    for (let i = 0; i < topN; i++) topSum += stresses[i]!;
+    plateness = topSum / totalStress;
+  }
+
+  return {
+    timeYears: keyframe.timeYears,
+    speedMedianMPerYr: g.plateSpeedMedianMPerYr,
+    speedMinMPerYr: g.plateSpeedMinMPerYr,
+    speedMaxMPerYr: g.plateSpeedMaxMPerYr,
+    oceanicContinentalSpeedRatio: g.oceanicContinentalSpeedRatio,
+    speedContinentalityCorr: g.speedContinentalityCorr,
+    poleStability: g.poleStability,
+    seafloorAgeMeanYr: oceanCells > 0 ? ageSum / oceanCells : 0,
+    seafloorAgeMedianYr: ageMedian,
+    seafloorAgeMaxYr: ageMax,
+    plateness,
+    ageAreaHistogram: histogram,
+  };
+}
+
+/** m/yr → cm/yr for the human-facing table (plate speeds read naturally there). */
+const M_PER_YR_TO_CM_PER_YR = 100;
+
+/** One formatted census row (per keyframe). Speeds in cm/yr, ages in Myr. */
+export function formatPlateCensusRow(row: PlateCensusRow): string {
+  const myr = (row.timeYears / 1e6).toFixed(0).padStart(5);
+  const cm = (x: number): string => (x * M_PER_YR_TO_CM_PER_YR).toFixed(2).padStart(6);
+  const age = (x: number): string => (x / 1e6).toFixed(0).padStart(4);
+  return (
+    `t=${myr} Myr  ` +
+    `speed cm/yr [min ${cm(row.speedMinMPerYr)} med ${cm(row.speedMedianMPerYr)} max ${cm(row.speedMaxMPerYr)}]  ` +
+    `oc/cont ${row.oceanicContinentalSpeedRatio.toFixed(2).padStart(5)}  ` +
+    `corr ${row.speedContinentalityCorr.toFixed(2).padStart(5)}  ` +
+    `pole ${row.poleStability.toFixed(3)}  ` +
+    `sfage Myr [med ${age(row.seafloorAgeMedianYr)} mean ${age(row.seafloorAgeMeanYr)} max ${age(row.seafloorAgeMaxYr)}]  ` +
+    `plateness ${row.plateness.toFixed(3)}`
+  );
+}
+
+/**
+ * Aggregate census summary over the series, averaged past 1 Gyr (early
+ * keyframes still remember the initial partition, as in `summarizeMetrics`).
+ * Prints the mean of each scalar and the mean age–area histogram — the baseline
+ * table stage 1 A/Bs against. This is the durable Stage 0 findings block.
+ */
+export function summarizePlateCensus(rows: readonly PlateCensusRow[]): string {
+  // The census pass is not run at init (the pipeline starts at step 1), so the
+  // t=0 keyframe carries all-zero census scalars — exclude it always so it
+  // never drags the speed/pole means. Past 1 Gyr is the shape-metrics window
+  // (early keyframes still remember the initial partition); on a <1 Gyr run
+  // fall back to every post-t=0 keyframe.
+  const posted = rows.filter((r) => r.timeYears > 0);
+  const late = posted.filter((r) => r.timeYears >= SHAPE_METRICS_AFTER_YEARS);
+  const use = late.length > 0 ? late : posted;
+  if (use.length === 0) return 'census: no keyframes';
+  const mean = (f: (r: PlateCensusRow) => number): number =>
+    use.reduce((s, r) => s + f(r), 0) / use.length;
+
+  const hist = new Array<number>(SEAFLOOR_AGE_BIN_COUNT).fill(0);
+  for (const r of use) {
+    for (let b = 0; b < SEAFLOOR_AGE_BIN_COUNT; b++) hist[b]! += r.ageAreaHistogram[b]! / use.length;
+  }
+  const cm = (x: number): string => (x * M_PER_YR_TO_CM_PER_YR).toFixed(2);
+  const histLine = hist
+    .map((frac, b) => {
+      const lo = ((b * SEAFLOOR_AGE_BIN_WIDTH_YR) / 1e6).toFixed(0);
+      const label = b === SEAFLOOR_AGE_BIN_COUNT - 1 ? `${lo}+` : `${lo}-`;
+      return `${label}:${(frac * 100).toFixed(1)}%`;
+    })
+    .join(' ');
+
+  return [
+    `census summary (mean over ${use.length} keyframes past ${
+      late.length > 0 ? '1 Gyr' : 't=0 — <1 Gyr run'
+    }):`,
+    `  speed cm/yr: min ${cm(mean((r) => r.speedMinMPerYr))} median ${cm(
+      mean((r) => r.speedMedianMPerYr),
+    )} max ${cm(mean((r) => r.speedMaxMPerYr))}`,
+    `  oceanic/continental speed ratio: ${mean((r) => r.oceanicContinentalSpeedRatio).toFixed(2)}`,
+    `  speed–continentality correlation: ${mean((r) => r.speedContinentalityCorr).toFixed(3)}`,
+    `  pole stability (mean cosine): ${mean((r) => r.poleStability).toFixed(4)}`,
+    `  seafloor age Myr: median ${(mean((r) => r.seafloorAgeMedianYr) / 1e6).toFixed(0)} mean ${(
+      mean((r) => r.seafloorAgeMeanYr) / 1e6
+    ).toFixed(0)} max ${(mean((r) => r.seafloorAgeMaxYr) / 1e6).toFixed(0)}`,
+    `  plateness (top-decile stress share): ${mean((r) => r.plateness).toFixed(3)}`,
+    `  age–area histogram (Myr bins): ${histLine}`,
+  ].join('\n');
+}

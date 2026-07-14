@@ -33,7 +33,7 @@ function wholeSpherePlate(): PlanetState {
   return {
     timeYears: 2e9,
     params: createPlanetParams({ seed: 7, gridN: N, numPlates: 1 }),
-    globals: { landFraction: 0, co2: 280, meanTemperatureK: 0, seaLevelM: 0, waterInventoryM: 0, oxygen: 0, oxygenReductant: 0, abiogenesisYear: -1 },
+    globals: { landFraction: 0, co2: 280, meanTemperatureK: 0, seaLevelM: 0, waterInventoryM: 0, oxygen: 0, oxygenReductant: 0, abiogenesisYear: -1, plateSpeedMedianMPerYr: 0, plateSpeedMinMPerYr: 0, plateSpeedMaxMPerYr: 0, oceanicContinentalSpeedRatio: 0, speedContinentalityCorr: 0, poleStability: 0 },
     fields,
     plates: [makePlate({ pole: [1, 0, 0], omega: 4e-9 })],
     events: [],
