@@ -233,7 +233,9 @@ function apply(state: PlanetState, dtYears: number): PlanetState {
         // handled above), so slab pull only ever attaches to oceanic crust.
         !overrides(myType, crustAge[i]!, p, otherType, crustAge[other.cell]!, other.plate)
       ) {
-        const age = crustAge[i]!;
+        // crustAge is physically ≥ 0 everywhere; clamp defensively so a stray
+        // negative age can never turn √age into NaN and poison the pole.
+        const age = Math.max(0, crustAge[i]!);
         const pull =
           SLAB_PULL_COEF_N_PER_M_PER_SQRT_YR * Math.sqrt(age) * slabAgeRamp(age) * cellW;
         // Slab pull drags the subducting plate trench-ward (toward the other

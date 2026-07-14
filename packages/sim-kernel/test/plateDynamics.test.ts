@@ -282,34 +282,37 @@ function fieldHashes(state: PlanetState): Record<string, string> {
 }
 
 describe('flag-on golden + engaged spine (#102 pattern)', () => {
-  it('is deterministic and the balance provably acted (≥1 plate speed changed > 20%)', () => {
-    const params = createPlanetParams({ seed: 42, gridN: 32, forceKinematics: true });
-    const initial = createInitialState(params);
-    const speed0 = initial.plates.map((p) => p.angularVelRadPerYr);
+  const runFlagOn = (seed: number): PlanetState => {
+    const params = createPlanetParams({ seed, gridN: 32, forceKinematics: true });
+    const ctx = makeCtx(seed);
+    let s = createInitialState(params);
+    for (let i = 0; i < 100; i++) s = step(s, params.stepYears, ctx);
+    return s;
+  };
 
-    const run = (): PlanetState => {
-      const ctx = makeCtx(params.seed);
-      let s = createInitialState(params);
-      for (let i = 0; i < 100; i++) s = step(s, params.stepYears, ctx);
-      return s;
-    };
-    const a = run();
-    const b = run();
-    // Determinism: zero RNG in the gated system ⇒ two runs are byte-identical.
-    expect(fieldHashes(a)).toEqual(fieldHashes(b));
+  // Pin the flag-on field spine across the three golden seeds, and prove the
+  // balance provably acted on each (≥1 plate alive since t=0 changed speed
+  // > 20% from its initial draw — the #102 engaged-golden guard against
+  // silently pinning an inert path).
+  for (const seed of [1, 42, 1337] as const) {
+    it(`seed ${seed}: engaged (≥1 plate speed changed > 20%) and pinned`, () => {
+      const params = createPlanetParams({ seed, gridN: 32, forceKinematics: true });
+      const speed0 = createInitialState(params).plates.map((p) => p.angularVelRadPerYr);
+      const final = runFlagOn(seed);
+      let maxRel = 0;
+      for (let p = 0; p < final.plates.length; p++) {
+        const plate = final.plates[p]!;
+        if (!plate.alive || plate.createdAtYears !== 0) continue;
+        const s0 = speed0[p]!;
+        if (s0 > 0) maxRel = Math.max(maxRel, Math.abs(plate.angularVelRadPerYr - s0) / s0);
+      }
+      expect(maxRel).toBeGreaterThan(0.2);
+      expect({ after100: { timeYears: final.timeYears, ...fieldHashes(final) } }).toMatchSnapshot();
+    });
+  }
 
-    // Engagement: at least one plate alive since t=0 changed its speed > 20%.
-    let maxRel = 0;
-    for (let p = 0; p < a.plates.length; p++) {
-      const plate = a.plates[p]!;
-      if (!plate.alive || plate.createdAtYears !== 0) continue;
-      const s0 = speed0[p]!;
-      if (s0 > 0) maxRel = Math.max(maxRel, Math.abs(plate.angularVelRadPerYr - s0) / s0);
-    }
-    expect(maxRel).toBeGreaterThan(0.2);
-
-    // Pin the flag-on field spine.
-    expect({ after100: { timeYears: a.timeYears, ...fieldHashes(a) } }).toMatchSnapshot();
+  it('is deterministic: zero RNG in the gated system ⇒ two runs are byte-identical', () => {
+    expect(fieldHashes(runFlagOn(42))).toEqual(fieldHashes(runFlagOn(42)));
   });
 });
 
