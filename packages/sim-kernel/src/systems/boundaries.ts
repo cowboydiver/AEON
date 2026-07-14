@@ -28,9 +28,53 @@ import {
   TRENCH_EXTRA_DEPTH_M,
 } from '../constants';
 import { bathymetryDatumOffsetM, landDatumOffsetM, platformDatumOffsetM } from '../datums';
-import { cellCenterTable, neighborTable } from '../grid';
+import { cellCenterTable, neighborTable, type Vec3 } from '../grid';
 import { plateVelocityAt } from '../plates';
 import type { PlanetState } from '../state';
+
+/**
+ * The pair-consistent unit tangent at boundary cell `i` pointing toward the
+ * side owned by `otherPlate`: the mean direction to i's neighbors that belong
+ * to `otherPlate` ONLY, projected onto the tangent plane at i (radial
+ * component removed) and normalized. Returns `null` for the pure-shear cell
+ * where opposing differing neighbors cancel (zero-length tangent).
+ *
+ * Blending all differing neighbors here while projecting a single plate's
+ * relative velocity flips the convergent/divergent sign at triple junctions
+ * (review finding on #55): û and the relative velocity must describe the same
+ * plate pair. Factored out of `computeBoundaryStress` so `plateDynamics`
+ * (Tectonics V2 stage 1, #111) reuses the identical construction — it must
+ * stay byte-for-byte the same arithmetic.
+ */
+export function pairConsistentTangent(
+  centers: Float64Array,
+  nbTable: Int32Array,
+  plateId: Float32Array,
+  i: number,
+  otherPlate: number,
+): Vec3 | null {
+  const cx = centers[i * 3]!;
+  const cy = centers[i * 3 + 1]!;
+  const cz = centers[i * 3 + 2]!;
+  let ux = 0;
+  let uy = 0;
+  let uz = 0;
+  for (let k = 0; k < 4; k++) {
+    const nb = nbTable[i * 4 + k]!;
+    if (plateId[nb] === otherPlate) {
+      ux += centers[nb * 3]! - cx;
+      uy += centers[nb * 3 + 1]! - cy;
+      uz += centers[nb * 3 + 2]! - cz;
+    }
+  }
+  const radial = ux * cx + uy * cy + uz * cz;
+  ux -= radial * cx;
+  uy -= radial * cy;
+  uz -= radial * cz;
+  const len = Math.sqrt(ux * ux + uy * uy + uz * uz);
+  if (len === 0) return null; // opposing differing neighbors cancel: pure shear cell
+  return [ux / len, uy / len, uz / len];
+}
 
 /**
  * The dominant other plate at boundary cell i: the most frequent differing
@@ -91,32 +135,13 @@ export function computeBoundaryStress(state: PlanetState): Float32Array {
     const cy = centers[i * 3 + 1]!;
     const cz = centers[i * 3 + 2]!;
 
-    // Mean direction toward the DOMINANT plate's neighbors only, projected
-    // onto the tangent plane at i (subtract the radial component) and
-    // normalized. Blending all differing neighbors here while projecting a
-    // single plate's relative velocity below flips the convergent/divergent
-    // sign at triple junctions (review finding on #55): û and vOther must
-    // describe the same plate pair.
-    let ux = 0;
-    let uy = 0;
-    let uz = 0;
-    for (let k = 0; k < 4; k++) {
-      const nb = nbTable[i * 4 + k]!;
-      if (plateId[nb] === other.plate) {
-        ux += centers[nb * 3]! - cx;
-        uy += centers[nb * 3 + 1]! - cy;
-        uz += centers[nb * 3 + 2]! - cz;
-      }
-    }
-    const radial = ux * cx + uy * cy + uz * cz;
-    ux -= radial * cx;
-    uy -= radial * cy;
-    uz -= radial * cz;
-    const len = Math.sqrt(ux * ux + uy * uy + uz * uz);
-    if (len === 0) continue; // opposing differing neighbors cancel: pure shear cell
-    ux /= len;
-    uy /= len;
-    uz /= len;
+    // Pair-consistent unit tangent toward the dominant other plate (shared
+    // helper — û and the relative velocity below must describe the same pair).
+    const u = pairConsistentTangent(centers, nbTable, plateId, i, other.plate);
+    if (u === null) continue; // pure shear cell
+    const ux = u[0];
+    const uy = u[1];
+    const uz = u[2];
 
     const pos: [number, number, number] = [cx, cy, cz];
     const vOwn = plateVelocityAt(state.plates[plateId[i]!]!, pos, R);
