@@ -65,7 +65,7 @@ import {
   SLAB_PULL_MIN_AGE_YEARS,
   SLAB_SUCTION_FACTOR,
 } from '../constants';
-import { cellCenterTable, neighborTable, type Vec3 } from '../grid';
+import { cellAreaM2, cellCenterTable, neighborTable, type Vec3 } from '../grid';
 import type { PlanetState } from '../state';
 import type { System } from '../step';
 import { computeBoundaryStress, dominantOtherPlate, overrides, pairConsistentTangent } from './boundaries';
@@ -154,7 +154,7 @@ function apply(state: PlanetState, dtYears: number): PlanetState {
   // Boundary length per boundary cell (arc width of one cell on a cube face)
   // and equal-area cell area — the geometric weights for forces and drag.
   const cellW = (Math.PI / 2) * (R / N);
-  const cellA = (4 * Math.PI * R * R) / (6 * N * N);
+  const cellA = cellAreaM2(N, R);
 
   // Per-plate accumulators. Drag tensor K is symmetric (6 unique entries);
   // torque, net driving force (Vec3) and gross |force| are the tension inputs.

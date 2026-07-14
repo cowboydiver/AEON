@@ -42,7 +42,7 @@
  * iteration order; same seed + params ⇒ bit-identical census on every machine.
  */
 
-import { cellCount } from './../grid';
+import { cellAreaM2, cellCount } from './../grid';
 import type { PlanetState } from './../state';
 import type { System } from './../step';
 import { dot3 } from './../vec';
@@ -142,9 +142,9 @@ export function computePlateCensus(state: PlanetState): PlateCensus {
   }
 
   const R = state.params.radiusMeters;
-  // Equal-area cell area (same formula plateDynamics uses) — normalizes the
-  // per-plate attached slab force into an intensive driving stress.
-  const cellA = (4 * Math.PI * R * R) / (6 * state.params.gridN * state.params.gridN);
+  // Equal-area cell area — normalizes the per-plate attached slab force into
+  // an intensive driving stress (shared grid helper; the #4 "shared truth").
+  const cellA = cellAreaM2(state.params.gridN, R);
   const speeds: number[] = [];
   const contFracs: number[] = [];
   const slabStresses: number[] = [];

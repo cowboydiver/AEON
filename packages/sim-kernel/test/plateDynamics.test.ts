@@ -274,9 +274,10 @@ describe('slabPullN diagnostic (the census slab-attachment predictor, #111)', ()
     expect(afterOld.plates[0]!.slabPullN).toBeGreaterThan(0); // subducting side attached
     expect(afterOld.plates[1]!.slabPullN).toBe(0); // overrider: suction only, excluded
 
-    // Halve the subducting plate's age. Slab pull ∝ √age·ramp, so with both
-    // factors still saturated the attached force must strictly shrink — the
-    // density/age weighting the correlation depends on is live in slabPullN.
+    // Reduce the subducting plate's age (1.5e8 → 0.6e8, both still past the ramp
+    // saturation at 2·SLAB_PULL_MIN_AGE_YEARS=5e7). Slab pull ∝ √age·ramp with
+    // ramp pinned at 1, so the attached force must strictly shrink with age —
+    // the density/age weighting the correlation depends on is live in slabPullN.
     const youngerAge = new Float32Array(count);
     for (let i = 0; i < count; i++) youngerAge[i] = plateId[i] === 0 ? 0.6e8 : 1e7;
     let s2 = { ...state, fields: { ...state.fields, crustAge: youngerAge } };
