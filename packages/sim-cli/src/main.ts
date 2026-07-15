@@ -106,6 +106,13 @@ Options:
                               derived state instead of a fixed random draw
                               (default off — measure with --ab force-kinematics
                               and --plate-census)
+  --emergent-suture           suture on kinematic stall instead of the fixed
+                              contact countdown (Tectonics V2 stage 2, #112):
+                              a cont-cont pair merges when force-balance collision
+                              damping stalls its closing speed, with a loud
+                              sutureTimeout backstop (default off — needs
+                              --force-kinematics on; measure with
+                              --ab emergent-suture)
   --step-years <years>        simulation step size (default 1e6); use e.g.
                               0.5e6 for dt-halving checks of lagged datums
   --water-scale <factor>      dimensionless multiplier on the derived water
@@ -180,6 +187,7 @@ const { values } = parseArgs({
     freeboard: { type: 'boolean', default: false },
     'bathymetry-datum': { type: 'boolean', default: false },
     'force-kinematics': { type: 'boolean', default: false },
+    'emergent-suture': { type: 'boolean', default: false },
     'no-block-isostasy': { type: 'boolean', default: false },
     'no-crust-fates': { type: 'boolean', default: false },
     'no-compact-arcs': { type: 'boolean', default: false },
@@ -189,6 +197,7 @@ const { values } = parseArgs({
     'no-freeboard': { type: 'boolean', default: false },
     'no-bathymetry-datum': { type: 'boolean', default: false },
     'no-force-kinematics': { type: 'boolean', default: false },
+    'no-emergent-suture': { type: 'boolean', default: false },
     ab: { type: 'string' },
     'ab-branch': { type: 'string' },
     'ab-block-isostasy': { type: 'string' },
@@ -256,6 +265,7 @@ const MECHANISMS: Record<string, (on: boolean, onsetYears: number) => Partial<Pl
   freeboard: (on, onset) => ({ freeboard: on, freeboardOnsetYears: onset }),
   'bathymetry-datum': (on, onset) => ({ bathymetryDatum: on, bathymetryDatumOnsetYears: onset }),
   'force-kinematics': (on, onset) => ({ forceKinematics: on, forceKinematicsOnsetYears: onset }),
+  'emergent-suture': (on, onset) => ({ emergentSuture: on, emergentSutureOnsetYears: onset }),
 };
 const MECHANISM_FLAGS = Object.keys(MECHANISMS) as ReadonlyArray<
   | 'block-isostasy'
@@ -267,6 +277,7 @@ const MECHANISM_FLAGS = Object.keys(MECHANISMS) as ReadonlyArray<
   | 'freeboard'
   | 'bathymetry-datum'
   | 'force-kinematics'
+  | 'emergent-suture'
 >;
 
 // --ab-block-isostasy <years> predates --ab and is kept as its alias.
