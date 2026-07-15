@@ -469,8 +469,20 @@ export const RIFT_TENSION_MAX_FACTOR = 4;
  * the legacy scheme. Replaces `RIFT_PROBABILITY_PER_MYR` (0.0015) × size ramp.
  * Pre-registered Plan B if tension² proves as bimodal as the ramp it replaces:
  * a soft-yield shape ∝ max(0, T−T_ref)² (graft from the mantle-proxy design).
+ *
+ * Stage-3 rate retune (the one allowed #66/#101 companion retune, #113): the
+ * measured grid at 0.01/Myr dispersed uniformly (≥0.84 every Gyr bucket, no
+ * bimodal knee — the tension² shape is validated) but rifted ~4× the legacy
+ * rate (204/188/186 events over 4.5 Gyr vs 44/41/44), and because dead plate
+ * slots are never reclaimed the monotonic u8 plate-ID counter reached max ID
+ * 213 at seed 42 @ N=128 (83% of the 256 cap), breaching the <200 slot-budget
+ * gate. Cut 0.01 → 0.0075 (−25%) to restore u8 headroom while leaving the
+ * tension² shape and blanket dynamics — the mechanism's thesis — untouched.
+ * A −25% cut still leaves ~3× the legacy rift rate, so dispersal is expected
+ * to survive (measured, not assumed). The root cause (unreclaimed slots) is a
+ * stage-5 / dedicated-change concern, out of scope for a companion retune.
  */
-export const RIFT_HAZARD_AT_REF_PER_MYR = 0.01;
+export const RIFT_HAZARD_AT_REF_PER_MYR = 0.0075;
 
 /**
  * Continental fraction of the whole sphere at or above which a plate is a
