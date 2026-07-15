@@ -452,15 +452,29 @@ export interface PlanetState {
    *   flag-off (`emergentSuture` off) path a pair sutures once this has lasted
    *   `SUTURE_AFTER_YEARS`; under `emergentSuture` it drives the loud
    *   `SUTURE_TIMEOUT_YEARS` backstop instead.
-   * - `stallSince`: `emergentSuture` only — start of the current continuous
-   *   *stalled* period (mean closing speed below `SUTURE_STALL_SPEED_M_PER_YR`);
-   *   the pair sutures once this has lasted `SUTURE_STALL_AFTER_YEARS`. Reset to
-   *   the current time whenever the pair's mean closing speed rises back to/above
-   *   threshold. Always empty on the flag-off path.
+   * - `stallSince`: `emergentSuture` only — anchor time of the current tumbling
+   *   stall window. A pair sutures once a full `SUTURE_STALL_AFTER_YEARS` window
+   *   has elapsed whose *net* closing rate (below) stayed sub-threshold. Evaluated
+   *   only at window boundaries (not per step): once `now − stallSince` reaches
+   *   `SUTURE_STALL_AFTER_YEARS`, if the window's average |net closing rate| is at
+   *   or above `SUTURE_STALL_SPEED_M_PER_YR` the window failed and the anchor
+   *   re-arms to now (starting a fresh window); otherwise the pair is stalled and
+   *   the suture fires. Boundary-only evaluation is what makes the detector robust
+   *   to per-step advection jitter — a lone noisy step cannot veto a window,
+   *   because the net closing is summed across the whole window first. Always
+   *   empty on the flag-off path.
+   * - `shorteningIntegral`: `emergentSuture` only — net signed continent–continent
+   *   shortening (metres, + = convergent) accumulated since `stallSince[key]`.
+   *   Taking the *net signed* sum (not the per-cell magnitude) is what lets a
+   *   genuinely stopped collision read ≈0 even while per-cell speeds jitter with
+   *   large magnitude — the signs cancel over the contact. Divided by the elapsed
+   *   window it gives the average net closing rate the boundary test uses. Reset
+   *   to 0 with the anchor. Always empty on the flag-off path.
    */
   wilson: {
     readonly contactSince: Readonly<Record<string, number>>;
     readonly stallSince: Readonly<Record<string, number>>;
+    readonly shorteningIntegral: Readonly<Record<string, number>>;
   };
 }
 
@@ -543,7 +557,7 @@ export function createInitialState(params: PlanetParams): PlanetState {
     fields,
     plates: [],
     events: [],
-    wilson: { contactSince: {}, stallSince: {} },
+    wilson: { contactSince: {}, stallSince: {}, shorteningIntegral: {} },
   };
   // Terrain and plates first (they set the elevation/land mask the climate
   // block reads).
