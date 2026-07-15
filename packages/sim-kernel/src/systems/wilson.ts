@@ -71,6 +71,9 @@
  */
 
 import {
+  BLANKET_CONTINENT_FRACTION,
+  BLANKET_EFOLD_YEARS,
+  BLANKET_MAX_FACTOR,
   MAX_PLATES,
   MIN_PLATES,
   PLATE_FILL_JITTER,
@@ -78,6 +81,8 @@ import {
   PLATE_OMEGA_MIN_RAD_PER_YR,
   RIFT_AZIMUTH_CANDIDATES,
   RIFT_DRAW_QUANTUM_YEARS,
+  RIFT_HAZARD_AT_REF_PER_MYR,
+  RIFT_TENSION_REF_N,
   RIFT_FRAGMENT_MAX_FRACTION,
   RIFT_FRAGMENT_MIN_FRACTION,
   RIFT_OCEAN_SCAN_RAD,
@@ -199,6 +204,13 @@ function applyWilson(state: PlanetState, dtYears: number): PlanetState {
   let next: PlanetState = { ...state, wilson: { contactSince } };
   let reorganized = false;
 
+  // Tension-driven rift timing (Tectonics V2 stage 3, #113). Off (and before
+  // onset) the rift hazard and fragment kinematics are byte-identical to the
+  // legacy scheme; on, the hazard reads `tensionN`/`blanketYears` and the
+  // fragment inherits the parent's ω⃗.
+  const tensionRiftActive =
+    state.params.tensionRift && state.timeYears >= state.params.tensionRiftOnsetYears;
+
   // --- Suture: first pair (sorted key order) in contact long enough.
   if (liveCount > MIN_PLATES) {
     for (const key of sortedKeys) {
@@ -217,6 +229,28 @@ function applyWilson(state: PlanetState, dtYears: number): PlanetState {
     }
   }
 
+  // --- Thermal blanket bookkeeping (Tectonics V2 stage 3, #113): a plate that
+  // holds >= BLANKET_CONTINENT_FRACTION of the sphere as continent accumulates
+  // `blanketYears`; any other plate resets to 0. The one pseudo-mantle scalar —
+  // the quiet-interior slow fuse that raises a long-lived supercontinent's rift
+  // hazard. Only under the flag; `blanketYears` stays 0 on the flag-off path so
+  // the goldens (field hashes) and plate records are byte-identical. Uses the
+  // post-suture `stats` so a plate that just absorbed another is judged at its
+  // real size this step.
+  if (tensionRiftActive) {
+    next = {
+      ...next,
+      plates: next.plates.map((plate, p) => {
+        if (!plate.alive) return plate;
+        const s = stats[p];
+        const contFraction = s && s.cells > 0 ? s.continental / count : 0;
+        const blanketYears =
+          contFraction >= BLANKET_CONTINENT_FRACTION ? plate.blanketYears + dtYears : 0;
+        return blanketYears === plate.blanketYears ? plate : { ...plate, blanketYears };
+      }),
+    };
+  }
+
   // --- Rift: first eligible plate whose hash draw fires this step.
   const liveAfter = next.plates.filter((p) => p.alive).length;
   if (liveAfter < MAX_PLATES) {
@@ -229,21 +263,32 @@ function applyWilson(state: PlanetState, dtYears: number): PlanetState {
       const plate = next.plates[p]!;
       const s = stats[p];
       if (!plate.alive || !s || s.cells === 0) continue;
+      // Plate-slot budget safety gates — kept under both schemes (proposal §2.4).
       if (s.cells / count < RIFT_MIN_AREA_FRACTION) continue;
       if (s.continental / count < RIFT_MIN_CONTINENTAL_AREA_FRACTION) continue;
-      // Continuous size-dependent rift pressure (#61), replacing the #59
-      // discontinuous 0.55 brake and its MIN_PLATES coupling. One size ramp
-      // scales the decision: it relaxes the maturity gate (RIFT_MIN_AGE_YEARS /
-      // ramp — full below the knee, shrinking toward zero as a plate approaches
-      // whole-sphere, the old age-gate waiver made continuous) and boosts the
-      // draw probability (capped at REF_MULTIPLE, so nothing rifts faster than
-      // the reference oversize rate — the monopoly safety net whose absolute
-      // magnitude was re-measured in the #66 clock retune).
-      const ramp = riftSizeRamp(s.cells / count);
-      if (state.timeYears - plate.createdAtYears < RIFT_MIN_AGE_YEARS / ramp) continue;
-      const pDraw = pRift * Math.min(RIFT_SIZE_RATE_REF_MULTIPLE, ramp);
+      let pDraw: number;
+      if (tensionRiftActive) {
+        // Tension² + thermal-blanket hazard (#113, proposal §2.4). The age gate
+        // and size ramp are gone: a plate rifts because the opposed subducting
+        // perimeter is pulling it apart (`tensionN`), boosted by its blanket age
+        // — a continuous physical scalar, no knee. `tensionN` is 0 unless
+        // `forceKinematics` has written it, so this reads ~0 without the engine.
+        pDraw = riftTensionHazardProbability(plate.tensionN, plate.blanketYears, dtYears);
+      } else {
+        // Continuous size-dependent rift pressure (#61), replacing the #59
+        // discontinuous 0.55 brake and its MIN_PLATES coupling. One size ramp
+        // scales the decision: it relaxes the maturity gate (RIFT_MIN_AGE_YEARS /
+        // ramp — full below the knee, shrinking toward zero as a plate approaches
+        // whole-sphere, the old age-gate waiver made continuous) and boosts the
+        // draw probability (capped at REF_MULTIPLE, so nothing rifts faster than
+        // the reference oversize rate — the monopoly safety net whose absolute
+        // magnitude was re-measured in the #66 clock retune).
+        const ramp = riftSizeRamp(s.cells / count);
+        if (state.timeYears - plate.createdAtYears < RIFT_MIN_AGE_YEARS / ramp) continue;
+        pDraw = pRift * Math.min(RIFT_SIZE_RATE_REF_MULTIPLE, ramp);
+      }
       if (hash3(riftSeed, p, timeQuantum, 0) / 4294967296 >= pDraw) continue;
-      const rifted = riftPlate(next, p, riftSeed);
+      const rifted = riftPlate(next, p, riftSeed, tensionRiftActive);
       reorganized = reorganized || rifted !== next;
       next = rifted;
       break;
@@ -281,6 +326,43 @@ export function riftSizeRamp(areaFraction: number): number {
     (areaFraction - RIFT_SIZE_RATE_KNEE) / (RIFT_SIZE_RATE_REF_FRACTION - RIFT_SIZE_RATE_KNEE);
   if (t <= 0) return 1;
   return 1 + (RIFT_SIZE_RATE_REF_MULTIPLE - 1) * Math.pow(t, RIFT_SIZE_RATE_EXPONENT);
+}
+
+/**
+ * Supercontinent thermal-blanket hazard multiplier (Tectonics V2 stage 3,
+ * #113, proposal §2.4). Rises from 1 (a plate that has just crossed the
+ * `BLANKET_CONTINENT_FRACTION` threshold) toward `BLANKET_MAX_FACTOR` as the
+ * plate's `blanketYears` accumulate, with e-folding time `BLANKET_EFOLD_YEARS`.
+ * The one deliberately *pseudo-mantle* term: a slow fuse standing in for the
+ * sub-continental warming a real mantle layer would produce. Exported for the
+ * contract test.
+ */
+export function blanketFactor(blanketYears: number): number {
+  return 1 + (BLANKET_MAX_FACTOR - 1) * (1 - Math.exp(-blanketYears / BLANKET_EFOLD_YEARS));
+}
+
+/**
+ * Per-step tension-driven rift acceptance probability (Tectonics V2 stage 3,
+ * #113, proposal §2.4). Hazard λ = `RIFT_HAZARD_AT_REF_PER_MYR` ×
+ * min(4, (tensionN/`RIFT_TENSION_REF_N`)²) × blanketFactor(blanketYears), and
+ * the probability the step's Bernoulli draw must clear is 1 − exp(−λ·dtMyr).
+ * `tensionN` (gross − |net| boundary driving force, ≥ 0) is the physical scalar
+ * the old size ramp was faking: a supercontinent ringed by opposed subduction
+ * carries high gross / low net force and rifts *because it is being pulled
+ * apart*. The tension factor is quadratic (a plate at twice the reference
+ * tension rifts ~4× as readily), capped at 4× the reference rate so a
+ * runaway-tension plate cannot rift every step. Exported for the contract test.
+ */
+export function riftTensionHazardProbability(
+  tensionN: number,
+  blanketYears: number,
+  dtYears: number,
+): number {
+  const ratio = tensionN / RIFT_TENSION_REF_N;
+  const tensionFactor = Math.min(4, ratio * ratio);
+  const lambdaPerMyr = RIFT_HAZARD_AT_REF_PER_MYR * tensionFactor * blanketFactor(blanketYears);
+  const dtMyr = dtYears / 1e6;
+  return 1 - Math.exp(-lambdaPerMyr * dtMyr);
 }
 
 /** Merge the smaller of plates a, b into the larger; kill the loser's slot. */
@@ -398,7 +480,12 @@ function suture(
  * are antipodal, already maximally separated, and can only shear about a
  * shared pole and re-suture.
  */
-export function riftPlate(state: PlanetState, p: number, riftSeed: number): PlanetState {
+export function riftPlate(
+  state: PlanetState,
+  p: number,
+  riftSeed: number,
+  tensionRiftActive = false,
+): PlanetState {
   const N = state.params.gridN;
   const count = cellCount(N);
   const centers = cellCenterTable(N);
@@ -485,64 +572,83 @@ export function riftPlate(state: PlanetState, p: number, riftSeed: number): Plan
     }
   }
 
-  // Translating kinematics: an Euler pole perpendicular to the fragment's
-  // centroid puts the fragment on the equator of its own rotation, so it
-  // translates across the surface at ω·R instead of spinning in place.
-  // Guard: a pathologically balanced fragment can have a near-zero centroid
-  // sum; its seed cell's direction is always a valid stand-in.
-  const cMag = Math.sqrt(centroidB[0] ** 2 + centroidB[1] ** 2 + centroidB[2] ** 2);
-  const c: Vec3 =
-    cMag < 1e-9
-      ? [centers[seedA * 3]!, centers[seedA * 3 + 1]!, centers[seedA * 3 + 2]!]
-      : [centroidB[0] / cMag, centroidB[1] / cMag, centroidB[2] / cMag];
-  const u = perpendicular3(c);
-  const v = cross3(c, u);
+  // Fragment kinematics. Two schemes, chosen by `tensionRiftActive`:
+  let pole: Vec3;
+  let omegaRift: number;
+  if (tensionRiftActive) {
+    // Tectonics V2 stage 3 (#113, proposal §2.4): the fragment inherits the
+    // parent's kinematics. Under `forceKinematics` the parent's
+    // eulerPole/angularVelRadPerYr are the derived form of its ω⃗ (also copied
+    // into the fragment's `omegaVec` below), so the fragment rotates with the
+    // parent at creation and the halves separate next step because ridge push
+    // registers on their new divergent margin — forces separate them, not a
+    // prescribed translating pole. The perpendicular-pole construction and the
+    // ocean-seeking azimuth fan go dead, along with their salt-5 and salt-3
+    // position-hash draws; skipping stateless hashes perturbs no other stream,
+    // and flag-off they still evaluate, so the default path is byte-identical.
+    const parent = state.plates[p]!;
+    pole = [...parent.eulerPole];
+    omegaRift = parent.angularVelRadPerYr;
+  } else {
+    // Translating kinematics: an Euler pole perpendicular to the fragment's
+    // centroid puts the fragment on the equator of its own rotation, so it
+    // translates across the surface at ω·R instead of spinning in place.
+    // Guard: a pathologically balanced fragment can have a near-zero centroid
+    // sum; its seed cell's direction is always a valid stand-in.
+    const cMag = Math.sqrt(centroidB[0] ** 2 + centroidB[1] ** 2 + centroidB[2] ** 2);
+    const c: Vec3 =
+      cMag < 1e-9
+        ? [centers[seedA * 3]!, centers[seedA * 3 + 1]!, centers[seedA * 3 + 2]!]
+        : [centroidB[0] / cMag, centroidB[1] / cMag, centroidB[2] / cMag];
+    const u = perpendicular3(c);
+    const v = cross3(c, u);
 
-  // Direction of travel: continents rift toward the ocean. Score a fan of
-  // candidate azimuths (phase-shifted per rift so no global axis is
-  // favored) by the oceanic-crust count along the forward great circle
-  // between the fragment's edge and RIFT_OCEAN_SCAN_RAD beyond it, and sail
-  // the most oceanic heading. A fragment sent into open ocean subducts
-  // oceanic crust ahead of it; sent into the parent's continent it would
-  // grind continent-on-continent through the whole post-rift lock — the
-  // dominant continental-area bleed (#16/#58). Deterministic: pure function
-  // of the fields and the hash stream.
-  const phase = hash2(riftSeed, newId, 5) / 4294967296;
-  // Angular radius of a spherical cap covering the fragment's share of the
-  // sphere: cos θ = 1 − 2·fraction. Scanning starts at the cap edge.
-  const capCos = Math.max(-1, Math.min(1, 1 - (2 * cellsB) / count));
-  const edgeRad = Math.acos(capCos);
-  let bestScore = -1;
-  let pole: Vec3 = u;
-  for (let k = 0; k < RIFT_AZIMUTH_CANDIDATES; k++) {
-    const azimuth = ((phase + k / RIFT_AZIMUTH_CANDIDATES) % 1) * 2 * Math.PI;
-    const cand: Vec3 = [
-      Math.cos(azimuth) * u[0] + Math.sin(azimuth) * v[0],
-      Math.cos(azimuth) * u[1] + Math.sin(azimuth) * v[1],
-      Math.cos(azimuth) * u[2] + Math.sin(azimuth) * v[2],
-    ];
-    // Unit travel direction of the fragment centroid under +ω about cand.
-    const d = cross3(cand, c);
-    let score = 0;
-    for (let s = 1; s <= RIFT_OCEAN_SCAN_SAMPLES; s++) {
-      const delta = edgeRad + (s / RIFT_OCEAN_SCAN_SAMPLES) * RIFT_OCEAN_SCAN_RAD;
-      const cosD = Math.cos(delta);
-      const sinD = Math.sin(delta);
-      const cell = directionToIndex(
-        [cosD * c[0] + sinD * d[0], cosD * c[1] + sinD * d[1], cosD * c[2] + sinD * d[2]],
-        N,
-      );
-      if (label[cell] !== 1 && crustType[cell] === 0) score++;
+    // Direction of travel: continents rift toward the ocean. Score a fan of
+    // candidate azimuths (phase-shifted per rift so no global axis is
+    // favored) by the oceanic-crust count along the forward great circle
+    // between the fragment's edge and RIFT_OCEAN_SCAN_RAD beyond it, and sail
+    // the most oceanic heading. A fragment sent into open ocean subducts
+    // oceanic crust ahead of it; sent into the parent's continent it would
+    // grind continent-on-continent through the whole post-rift lock — the
+    // dominant continental-area bleed (#16/#58). Deterministic: pure function
+    // of the fields and the hash stream.
+    const phase = hash2(riftSeed, newId, 5) / 4294967296;
+    // Angular radius of a spherical cap covering the fragment's share of the
+    // sphere: cos θ = 1 − 2·fraction. Scanning starts at the cap edge.
+    const capCos = Math.max(-1, Math.min(1, 1 - (2 * cellsB) / count));
+    const edgeRad = Math.acos(capCos);
+    let bestScore = -1;
+    pole = u;
+    for (let k = 0; k < RIFT_AZIMUTH_CANDIDATES; k++) {
+      const azimuth = ((phase + k / RIFT_AZIMUTH_CANDIDATES) % 1) * 2 * Math.PI;
+      const cand: Vec3 = [
+        Math.cos(azimuth) * u[0] + Math.sin(azimuth) * v[0],
+        Math.cos(azimuth) * u[1] + Math.sin(azimuth) * v[1],
+        Math.cos(azimuth) * u[2] + Math.sin(azimuth) * v[2],
+      ];
+      // Unit travel direction of the fragment centroid under +ω about cand.
+      const d = cross3(cand, c);
+      let score = 0;
+      for (let s = 1; s <= RIFT_OCEAN_SCAN_SAMPLES; s++) {
+        const delta = edgeRad + (s / RIFT_OCEAN_SCAN_SAMPLES) * RIFT_OCEAN_SCAN_RAD;
+        const cosD = Math.cos(delta);
+        const sinD = Math.sin(delta);
+        const cell = directionToIndex(
+          [cosD * c[0] + sinD * d[0], cosD * c[1] + sinD * d[1], cosD * c[2] + sinD * d[2]],
+          N,
+        );
+        if (label[cell] !== 1 && crustType[cell] === 0) score++;
+      }
+      if (score > bestScore) {
+        bestScore = score;
+        pole = cand;
+      }
     }
-    if (score > bestScore) {
-      bestScore = score;
-      pole = cand;
-    }
+    omegaRift =
+      PLATE_OMEGA_MIN_RAD_PER_YR +
+      (hash2(riftSeed, newId, 3) / 4294967296) *
+        (PLATE_OMEGA_MAX_RAD_PER_YR - PLATE_OMEGA_MIN_RAD_PER_YR);
   }
-  const omegaRift =
-    PLATE_OMEGA_MIN_RAD_PER_YR +
-    (hash2(riftSeed, newId, 3) / 4294967296) *
-      (PLATE_OMEGA_MAX_RAD_PER_YR - PLATE_OMEGA_MIN_RAD_PER_YR);
 
   // Parent keeps pole/velocity (the fragment leaves; the remaining plate is
   // not recoiled), but its rift-age clock restarts and both sides get the
