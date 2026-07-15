@@ -225,7 +225,7 @@ function applyWilson(state: PlanetState, dtYears: number): PlanetState {
     // the scan rather than ever registering a (convergent) stall — the pre-#59
     // re-suture pathology cannot recur (proposal §7).
     const pairCells = new Map<string, number>();
-    const pairStressSum = new Map<string, number>();
+    const pairSpeedSum = new Map<string, number>();
     for (let i = 0; i < count; i++) {
       if (crustType[i] !== 1) continue;
       for (let k = 0; k < 4; k++) {
@@ -236,7 +236,13 @@ function applyWilson(state: PlanetState, dtYears: number): PlanetState {
         const b = Math.max(plateId[i]!, q);
         const key = `${a}-${b}`;
         pairCells.set(key, (pairCells.get(key) ?? 0) + 1);
-        pairStressSum.set(key, (pairStressSum.get(key) ?? 0) + boundaryStress[i]!);
+        // Accumulate the per-cell |closing speed| (spec: mean |closing speed|).
+        // Taking the magnitude PER CELL, not of the pair sum, so a rotational /
+        // transpressional boundary — convergent on one flank, divergent on the
+        // other — does not cancel to a false near-zero mean and merge while it
+        // is still active. A pair is stalled only when EVERY contact cell has
+        // gone quiet, which is what collision damping actually produces.
+        pairSpeedSum.set(key, (pairSpeedSum.get(key) ?? 0) + Math.abs(boundaryStress[i]!));
         break; // count each cell once
       }
     }
@@ -247,7 +253,7 @@ function applyWilson(state: PlanetState, dtYears: number): PlanetState {
       const [a, b] = key.split('-').map(Number) as [number, number];
       if (locked(a) || locked(b)) continue;
       contactSince[key] = state.wilson.contactSince[key] ?? state.timeYears;
-      if (Math.abs(pairStressSum.get(key)! / cells) < SUTURE_STALL_SPEED_M_PER_YR) {
+      if (pairSpeedSum.get(key)! / cells < SUTURE_STALL_SPEED_M_PER_YR) {
         // Continuous sub-threshold closing carries the stall clock forward; a
         // step at/above threshold omits the key, restarting it from now.
         stallSince[key] = state.wilson.stallSince[key] ?? state.timeYears;

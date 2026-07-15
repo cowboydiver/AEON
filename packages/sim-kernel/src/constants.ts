@@ -909,8 +909,10 @@ export const SUTURE_MIN_CONTACT_CELLS = 3;
  * speed toward zero in ~10–20 Myr; these constants let wilson *detect* that
  * death instead of scheduling it on the `SUTURE_AFTER_YEARS` countdown.
  *
- * A cont–cont contact whose mean |normal closing speed| (mean `boundaryStress`
- * over the pair's continental-adjacency cells, m/yr) sits below this threshold
+ * A cont–cont contact whose mean |normal closing speed| (the mean of the
+ * per-cell |`boundaryStress`| over the pair's continental-adjacency cells,
+ * m/yr — magnitude taken per cell so a rotational boundary with convergent and
+ * divergent flanks does not cancel to a false zero) sits below this threshold
  * is "stalled". 2 mm/yr is an order below plate speeds (cm/yr) and below the
  * 5 mm/yr `ACTIVE_MARGIN_STRESS_M_PER_YR` active-margin gate — a boundary this
  * slow is a dead collision, not a live one. Only used when `emergentSuture` is
