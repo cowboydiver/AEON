@@ -131,6 +131,98 @@ export function slabAgeRamp(ageYears: number): number {
   return t <= 0 ? 0 : t >= 1 ? 1 : t;
 }
 
+/** Six unique entries of a symmetric 3×3 tensor, row-major upper triangle:
+ *  [xx, xy, xz, yy, yz, zz]. */
+export type SymTensor3 = readonly [number, number, number, number, number, number];
+
+/**
+ * Plate p's basal-drag tensor K_p = Σ_{cells∈p} dragMult·cellA·(I − r̂r̂ᵀ) — the
+ * exact per-plate accumulation the force balance builds inline in `apply`'s
+ * pass 1 (continental cells drag CONTINENTAL_DRAG_MULTIPLIER× harder for their
+ * cratonic keels). Standalone here so `emergentSuture` (#112) can weight two
+ * merging plates' ω⃗ by the same drag geometry without touching the force
+ * balance's fixed summation order. The scalar c_d·R² that pass 2 multiplies
+ * onto K cancels in the merge blend (it multiplies both sides of the solve), so
+ * it is omitted here. O(cells), ascending index ⇒ deterministic.
+ */
+export function plateDragTensor(state: PlanetState, p: number): SymTensor3 {
+  const R = state.params.radiusMeters;
+  const cellA = cellAreaM2(state.params.gridN, R);
+  const centers = cellCenterTable(state.params.gridN);
+  const { plateId, crustType } = state.fields;
+  let kxx = 0;
+  let kxy = 0;
+  let kxz = 0;
+  let kyy = 0;
+  let kyz = 0;
+  let kzz = 0;
+  for (let i = 0; i < plateId.length; i++) {
+    if (plateId[i] !== p) continue;
+    const rx = centers[i * 3]!;
+    const ry = centers[i * 3 + 1]!;
+    const rz = centers[i * 3 + 2]!;
+    const w = (crustType[i] === 1 ? CONTINENTAL_DRAG_MULTIPLIER : 1) * cellA;
+    kxx += w * (1 - rx * rx);
+    kxy += w * (-rx * ry);
+    kxz += w * (-rx * rz);
+    kyy += w * (1 - ry * ry);
+    kyz += w * (-ry * rz);
+    kzz += w * (1 - rz * rz);
+  }
+  return [kxx, kxy, kxz, kyy, kyz, kzz];
+}
+
+/**
+ * Drag-tensor-weighted blend of two plates' angular-velocity vectors (#112,
+ * proposal §2.4): ω⃗ = (K_a+K_b)⁻¹(K_a·ω⃗_a + K_b·ω⃗_b). This is the exact fixed
+ * point the merged plate relaxes to when each input plate already sits at its
+ * own force-balance fixed point (ω⃗_p = (c_d R² K_p)⁻¹ τ_p): the summed torque
+ * is τ_a+τ_b = c_d R² (K_a ω⃗_a + K_b ω⃗_b), and the merged plate's fixed point
+ * is (c_d R² K_total)⁻¹(τ_a+τ_b) = this blend (the c_d R² cancels). Degrades to
+ * the drag-area-weighted mean when K_a ∝ K_b (co-located plates). Falls back to
+ * the trace-weighted mean if the summed tensor is singular (a degenerate
+ * near-point plate) so a merge can never emit NaN.
+ */
+export function kWeightedOmega(
+  ka: SymTensor3,
+  wa: Vec3,
+  kb: SymTensor3,
+  wb: Vec3,
+): Vec3 {
+  const s0 = ka[0] + kb[0];
+  const s1 = ka[1] + kb[1];
+  const s2 = ka[2] + kb[2];
+  const s3 = ka[3] + kb[3];
+  const s4 = ka[4] + kb[4];
+  const s5 = ka[5] + kb[5];
+  // rhs = K_a·ω⃗_a + K_b·ω⃗_b (each K applied as a symmetric matrix).
+  const rhs: Vec3 = [
+    ka[0] * wa[0] + ka[1] * wa[1] + ka[2] * wa[2] + kb[0] * wb[0] + kb[1] * wb[1] + kb[2] * wb[2],
+    ka[1] * wa[0] + ka[3] * wa[1] + ka[4] * wa[2] + kb[1] * wb[0] + kb[3] * wb[1] + kb[4] * wb[2],
+    ka[2] * wa[0] + ka[4] * wa[1] + ka[5] * wa[2] + kb[2] * wb[0] + kb[4] * wb[1] + kb[5] * wb[2],
+  ];
+  // det of the summed symmetric tensor [s0 s1 s2; s1 s3 s4; s2 s4 s5].
+  const c00 = s3 * s5 - s4 * s4;
+  const c01 = s4 * s2 - s1 * s5;
+  const c02 = s1 * s4 - s3 * s2;
+  const det = s0 * c00 + s1 * c01 + s2 * c02;
+  const trace = s0 + s3 + s5;
+  if (!Number.isFinite(det) || Math.abs(det) < 1e-6 * trace * trace * trace) {
+    // Singular / degenerate: trace-weighted mean of the two ω⃗ (K_p ≈ tr(K_p)/3·I
+    // for a near-isotropic plate), which is the co-located area-weighted mean.
+    const ta = ka[0] + ka[3] + ka[5];
+    const tb = kb[0] + kb[3] + kb[5];
+    const tt = ta + tb;
+    if (tt <= 0) return [0, 0, 0];
+    return [
+      (ta * wa[0] + tb * wb[0]) / tt,
+      (ta * wa[1] + tb * wb[1]) / tt,
+      (ta * wa[2] + tb * wb[2]) / tt,
+    ];
+  }
+  return solve3x3([s0, s1, s2, s1, s3, s4, s2, s4, s5], rhs);
+}
+
 /**
  * The per-step rigid-plate torque balance. Pure function of `state`; see the
  * module header. Returns the state unchanged when the flag is off / pre-onset.
