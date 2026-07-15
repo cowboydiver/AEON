@@ -557,8 +557,9 @@ function suture(
   if (opts.blend) {
     // emergentSuture (#112): drag-tensor-weighted blend ω⃗ =
     // (K_a+K_b)⁻¹(K_a·ω⃗_a + K_b·ω⃗_b) — the exact fixed point the combined plate
-    // relaxes to under the summed torques, degrading to the area-weighted mean
-    // for co-located plates. K tensors are read from the pre-merge partition.
+    // relaxes to under the summed torques, degrading to the drag-area-weighted
+    // mean for co-located plates (tr(K)-weighted, not the legacy flag-off
+    // cell-count mean). K tensors are read from the pre-merge partition.
     const kWin = plateDragTensor(state, winner);
     const kLose = plateDragTensor(state, loser);
     omega = kWeightedOmega(
