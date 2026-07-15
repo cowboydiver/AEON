@@ -209,7 +209,9 @@ export function kWeightedOmega(
   const trace = s0 + s3 + s5;
   if (!Number.isFinite(det) || Math.abs(det) < 1e-6 * trace * trace * trace) {
     // Singular / degenerate: trace-weighted mean of the two ω⃗ (K_p ≈ tr(K_p)/3·I
-    // for a near-isotropic plate), which is the co-located area-weighted mean.
+    // for a near-isotropic plate) — the drag-area-weighted mean (tr(K) ∝ Σ
+    // dragMult·cellA), NOT the legacy cell-count-weighted merge mean; the two
+    // coincide only when both plates are uniform single-crust.
     const ta = ka[0] + ka[3] + ka[5];
     const tb = kb[0] + kb[3] + kb[5];
     const tt = ta + tb;
