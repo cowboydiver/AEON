@@ -76,7 +76,7 @@ export function twoPlateState(
     fields,
     plates: [makePlate(plate0), makePlate(plate1)],
     events: [],
-    wilson: { contactSince: {}, stallSince: {} },
+    wilson: { contactSince: {}, stallSince: {}, shorteningIntegral: {} },
   };
 }
 

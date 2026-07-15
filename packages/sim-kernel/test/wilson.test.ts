@@ -37,7 +37,7 @@ function wholeSpherePlate(): PlanetState {
     fields,
     plates: [makePlate({ pole: [1, 0, 0], omega: 4e-9 })],
     events: [],
-    wilson: { contactSince: {}, stallSince: {} },
+    wilson: { contactSince: {}, stallSince: {}, shorteningIntegral: {} },
   };
 }
 
@@ -92,7 +92,7 @@ function primeForSuture(state: PlanetState, a: number, b: number): PlanetState {
     ...state,
     timeYears: PRIME_T0,
     plates: state.plates.map((p) => ({ ...p, createdAtYears: PRIME_T0 })),
-    wilson: { contactSince: { [`${a}-${b}`]: PRIME_T0 - SUTURE_AFTER_YEARS }, stallSince: {} },
+    wilson: { contactSince: { [`${a}-${b}`]: PRIME_T0 - SUTURE_AFTER_YEARS }, stallSince: {}, shorteningIntegral: {} },
   };
 }
 
@@ -438,7 +438,7 @@ describe('post-rift suture cooldown (#57 follow-up)', () => {
       ...rifted,
       timeYears: t,
       plates: rifted.plates.map((p) => ({ ...p, createdAtYears: t })),
-      wilson: { contactSince: { [pairKey]: t - SUTURE_AFTER_YEARS }, stallSince: {} },
+      wilson: { contactSince: { [pairKey]: t - SUTURE_AFTER_YEARS }, stallSince: {}, shorteningIntegral: {} },
     });
 
     // Deep inside the lock: no suture, live count unchanged, and the pair's

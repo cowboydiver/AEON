@@ -92,7 +92,7 @@ function ridgeWorld(gridN: number, windUms: number, ridgePeakM = 3500): PlanetSt
     fields,
     plates: [],
     events: [],
-    wilson: { contactSince: {}, stallSince: {} },
+    wilson: { contactSince: {}, stallSince: {}, shorteningIntegral: {} },
   };
 }
 
