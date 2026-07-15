@@ -904,6 +904,41 @@ export const SUTURE_AFTER_YEARS = 60e6;
 export const SUTURE_MIN_CONTACT_CELLS = 3;
 
 /**
+ * Tectonics V2 stage 2 (`emergentSuture`, #112, proposal §2.3/§2.4). Under
+ * `forceKinematics` a continent–continent collision damps its own closing
+ * speed toward zero in ~10–20 Myr; these constants let wilson *detect* that
+ * death instead of scheduling it on the `SUTURE_AFTER_YEARS` countdown.
+ *
+ * A cont–cont contact whose mean |normal closing speed| (mean `boundaryStress`
+ * over the pair's continental-adjacency cells, m/yr) sits below this threshold
+ * is "stalled". 2 mm/yr is an order below plate speeds (cm/yr) and below the
+ * 5 mm/yr `ACTIVE_MARGIN_STRESS_M_PER_YR` active-margin gate — a boundary this
+ * slow is a dead collision, not a live one. Only used when `emergentSuture` is
+ * on; the flag-off path keeps the `SUTURE_AFTER_YEARS` countdown byte-for-byte.
+ */
+export const SUTURE_STALL_SPEED_M_PER_YR = 0.002;
+
+/**
+ * `emergentSuture`: merge a cont–cont pair after this long of *continuous*
+ * sub-`SUTURE_STALL_SPEED_M_PER_YR` closing (#112, proposal §2.3). 20 Myr is
+ * bookkeeping on an already-dead boundary, not a countdown on a live one — the
+ * collision damping has already stopped the plates by the time this fires. A
+ * speed spike back above threshold resets the stall clock.
+ */
+export const SUTURE_STALL_AFTER_YEARS = 2e7;
+
+/**
+ * `emergentSuture` loud backstop (margin-ledger graft, #112, proposal §2.3):
+ * if a continental contact persists this long *without* ever stalling long
+ * enough, merge anyway and emit a distinct `sutureTimeout` event. This surfaces
+ * the stall-never-fires failure mode (a plate driven by a remote slab that
+ * keeps a collision closing indefinitely) in the event log instead of as a
+ * silent full-speed grind. Each `sutureTimeout` is a documented stall-criterion
+ * miss to investigate; the gate keeps them rare.
+ */
+export const SUTURE_TIMEOUT_YEARS = 1.5e8;
+
+/**
  * A plate must be at least this old since creation/last rift to rift, yr.
  * 150 -> 600 Myr in the #66 clock retune (4x, with the rest of the trigger
  * clock): this is the maturity floor for ORDINARY plates — the size ramp

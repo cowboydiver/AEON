@@ -30,6 +30,7 @@ const ALL_MECHANISMS_OFF = {
   freeboard: false,
   bathymetryDatum: false,
   forceKinematics: false,
+  emergentSuture: false,
 } as const;
 
 function fieldHashes(state: PlanetState): Record<string, string> {

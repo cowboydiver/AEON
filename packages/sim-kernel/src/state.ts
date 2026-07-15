@@ -209,6 +209,24 @@ export interface PlanetParams {
    *  Default 0. */
   forceKinematicsOnsetYears: number;
   /**
+   * Tectonics V2 stage 2 (#112, proposal §2.4): rewrite wilson's suture
+   * *trigger* so a continent–continent pair merges when its closing speed
+   * *stalls* (mean |normal speed| < `SUTURE_STALL_SPEED_M_PER_YR` for
+   * `SUTURE_STALL_AFTER_YEARS`), with a loud `SUTURE_TIMEOUT_YEARS` backstop —
+   * instead of the fixed `SUTURE_AFTER_YEARS` contact countdown. Detects the
+   * collision death `forceKinematics` produces rather than scheduling it. The
+   * merged plate's ω⃗ is the drag-tensor-weighted blend (the fixed point the
+   * combined plate relaxes to) and the winner's `accumulatedRadians` is
+   * preserved. Default **OFF**; the flag-off suture path stays byte-identical.
+   * Zero new RNG draws. Meaningful only with `forceKinematics` on (it supplies
+   * the closing-speed collapse the stall criterion reads).
+   */
+  emergentSuture: boolean;
+  /** Sim year before which emergentSuture is inert even when enabled — the
+   *  #112 branched-A/B onset, same contract as blockIsostasyOnsetYears.
+   *  Default 0. */
+  emergentSutureOnsetYears: number;
+  /**
    * Enable the biosphere (#37, Phase 4): ocean life, oxygenation, and — from
    * #39 — land vegetation. The ablation switch, **default `true`** (the
    * biosphere is a shipped feature, not a prototype). When `false` the life
@@ -407,12 +425,24 @@ export interface PlanetState {
    */
   events: readonly SimEvent[];
   /**
-   * Wilson-cycle bookkeeping (#18): when each continent-continent plate
-   * pair ("a-b" with a < b) entered sustained convergent contact. Rebuilt
-   * every step from the current contact scan (never iterated by key order);
-   * pairs suture once contact has lasted SUTURE_AFTER_YEARS.
+   * Wilson-cycle bookkeeping (#18, #112): when each continent-continent plate
+   * pair ("a-b" with a < b) entered sustained contact. Both maps are rebuilt
+   * every step from the current contact scan (never iterated by key order).
+   *
+   * - `contactSince`: start of the current continuous cont–cont contact. In the
+   *   flag-off (`emergentSuture` off) path a pair sutures once this has lasted
+   *   `SUTURE_AFTER_YEARS`; under `emergentSuture` it drives the loud
+   *   `SUTURE_TIMEOUT_YEARS` backstop instead.
+   * - `stallSince`: `emergentSuture` only — start of the current continuous
+   *   *stalled* period (mean closing speed below `SUTURE_STALL_SPEED_M_PER_YR`);
+   *   the pair sutures once this has lasted `SUTURE_STALL_AFTER_YEARS`. Reset to
+   *   the current time whenever the pair's mean closing speed rises back to/above
+   *   threshold. Always empty on the flag-off path.
    */
-  wilson: { readonly contactSince: Readonly<Record<string, number>> };
+  wilson: {
+    readonly contactSince: Readonly<Record<string, number>>;
+    readonly stallSince: Readonly<Record<string, number>>;
+  };
 }
 
 export function createPlanetParams(partial: Partial<PlanetParams> & { seed: number }): PlanetParams {
@@ -444,6 +474,8 @@ export function createPlanetParams(partial: Partial<PlanetParams> & { seed: numb
     bathymetryDatumOnsetYears: 0,
     forceKinematics: false,
     forceKinematicsOnsetYears: 0,
+    emergentSuture: false,
+    emergentSutureOnsetYears: 0,
     biosphereEnabled: true,
     abiogenesisRatePerYear: ABIOGENESIS_RATE_PER_YR,
     initialOxygenPAL: INITIAL_OXYGEN_PAL,
@@ -490,7 +522,7 @@ export function createInitialState(params: PlanetParams): PlanetState {
     fields,
     plates: [],
     events: [],
-    wilson: { contactSince: {} },
+    wilson: { contactSince: {}, stallSince: {} },
   };
   // Terrain and plates first (they set the elevation/land mask the climate
   // block reads).

@@ -37,6 +37,7 @@ const MECHANISMS: ReadonlyArray<Partial<PlanetParams>> = [
   { seaLevelDatums: true, seaLevelDatumsOnsetYears: 20e6 },
   { freeboard: true, freeboardOnsetYears: 20e6 },
   { bathymetryDatum: true, bathymetryDatumOnsetYears: 20e6 },
+  { emergentSuture: true, emergentSutureOnsetYears: 20e6 },
 ];
 
 describe('onset gating (#88/#89/#90/#91 branched A/B)', () => {

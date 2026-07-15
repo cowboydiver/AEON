@@ -93,6 +93,9 @@ import {
   RIFT_SUTURE_COOLDOWN_YEARS,
   SUTURE_AFTER_YEARS,
   SUTURE_MIN_CONTACT_CELLS,
+  SUTURE_STALL_AFTER_YEARS,
+  SUTURE_STALL_SPEED_M_PER_YR,
+  SUTURE_TIMEOUT_YEARS,
   ACTIVE_MARGIN_STRESS_M_PER_YR,
 } from '../constants';
 import { EVENT_KINDS, type SimEvent } from '../events';
@@ -104,6 +107,7 @@ import type { PlanetState } from '../state';
 import type { System } from '../step';
 import { cross3, normalize3, perpendicular3 } from '../vec';
 import { computeBoundaryStress } from './boundaries';
+import { kWeightedOmega, plateDragTensor } from './plateDynamics';
 
 export const wilsonSystem: System = {
   name: 'wilson',
@@ -161,51 +165,118 @@ function applyWilson(state: PlanetState, dtYears: number): PlanetState {
   }
   const liveCount = state.plates.filter((p) => p.alive).length;
 
-  // --- Contact scan: continent-continent convergent boundary cells per pair.
-  const pairContact = new Map<string, number>();
-  for (let i = 0; i < count; i++) {
-    if (boundaryStress[i]! <= ACTIVE_MARGIN_STRESS_M_PER_YR || crustType[i] !== 1) continue;
-    for (let k = 0; k < 4; k++) {
-      const nb = nbTable[i * 4 + k]!;
-      const q = plateId[nb]!;
-      if (q === plateId[i] || crustType[nb] !== 1) continue;
-      const a = Math.min(plateId[i]!, q);
-      const b = Math.max(plateId[i]!, q);
-      const key = `${a}-${b}`;
-      pairContact.set(key, (pairContact.get(key) ?? 0) + 1);
-      break; // count each cell once
-    }
-  }
+  // emergentSuture (#112): once forceKinematics is driving the plates, a
+  // cont–cont collision damps its own closing speed to zero in ~10–20 Myr, so
+  // wilson can *detect* that stall instead of scheduling the merge on the fixed
+  // SUTURE_AFTER_YEARS countdown. Gated behind the flag + its branched-A/B
+  // onset; when off, the scan and the trigger below are the pre-#112 kernel
+  // byte-for-byte (stallSince stays empty).
+  const emergentSuture =
+    state.params.emergentSuture && state.timeYears >= state.params.emergentSutureOnsetYears;
 
   // A plate whose post-rift suture lock is still in force can't accumulate
   // contact toward a suture. Dropping its pairs here (rather than only vetoing
   // the merge below) resets contactSince to now when the lock lifts, so the
-  // halves need a fresh SUTURE_AFTER_YEARS of contact afterward instead of
-  // suturing the instant the clock expires — a passive margin that has drifted
-  // apart by then simply never re-collides.
+  // halves need a fresh contact accumulation afterward instead of suturing the
+  // instant the clock expires — a passive margin that has drifted apart by then
+  // simply never re-collides.
   const locked = (id: number) => state.timeYears < state.plates[id]!.sutureLockUntilYears;
 
-  // Rebuild contactSince from live contacts only (insertion via sorted keys —
-  // the record is never iterated for physics, but keep it canonical anyway).
+  // contactSince: start of the current continuous cont–cont contact (the
+  // flag-off suture clock and the flag-on loud timeout backstop). stallSince:
+  // emergentSuture only — start of the current continuous stalled (sub-
+  // SUTURE_STALL_SPEED) closing period. Both rebuilt from live contacts only;
+  // insertion via sorted keys keeps the records canonical (never iterated for
+  // physics).
   const contactSince: Record<string, number> = {};
-  const sortedKeys = [...pairContact.keys()].sort();
-  for (const key of sortedKeys) {
-    if (pairContact.get(key)! < SUTURE_MIN_CONTACT_CELLS) continue;
-    const [a, b] = key.split('-').map(Number) as [number, number];
-    if (locked(a) || locked(b)) continue;
-    contactSince[key] = state.wilson.contactSince[key] ?? state.timeYears;
+  const stallSince: Record<string, number> = {};
+  let sortedKeys: string[];
+
+  if (!emergentSuture) {
+    // --- Contact scan: continent-continent CONVERGENT boundary cells per pair.
+    const pairContact = new Map<string, number>();
+    for (let i = 0; i < count; i++) {
+      if (boundaryStress[i]! <= ACTIVE_MARGIN_STRESS_M_PER_YR || crustType[i] !== 1) continue;
+      for (let k = 0; k < 4; k++) {
+        const nb = nbTable[i * 4 + k]!;
+        const q = plateId[nb]!;
+        if (q === plateId[i] || crustType[nb] !== 1) continue;
+        const a = Math.min(plateId[i]!, q);
+        const b = Math.max(plateId[i]!, q);
+        const key = `${a}-${b}`;
+        pairContact.set(key, (pairContact.get(key) ?? 0) + 1);
+        break; // count each cell once
+      }
+    }
+    sortedKeys = [...pairContact.keys()].sort();
+    for (const key of sortedKeys) {
+      if (pairContact.get(key)! < SUTURE_MIN_CONTACT_CELLS) continue;
+      const [a, b] = key.split('-').map(Number) as [number, number];
+      if (locked(a) || locked(b)) continue;
+      contactSince[key] = state.wilson.contactSince[key] ?? state.timeYears;
+    }
+  } else {
+    // --- emergentSuture scan: continent-continent ADJACENCY cells per pair,
+    // independent of stress magnitude (a stalled collision sits BELOW the
+    // active-margin gate yet must stay tracked), plus the summed normal stress
+    // whose per-cell mean is the pair's closing speed. |mean| < the stall
+    // threshold ⇒ the pair is stalling; a separating rift pair loses its
+    // cont–cont adjacency as ocean opens between the halves, so it drops out of
+    // the scan rather than ever registering a (convergent) stall — the pre-#59
+    // re-suture pathology cannot recur (proposal §7).
+    const pairCells = new Map<string, number>();
+    const pairStressSum = new Map<string, number>();
+    for (let i = 0; i < count; i++) {
+      if (crustType[i] !== 1) continue;
+      for (let k = 0; k < 4; k++) {
+        const nb = nbTable[i * 4 + k]!;
+        const q = plateId[nb]!;
+        if (q === plateId[i] || crustType[nb] !== 1) continue;
+        const a = Math.min(plateId[i]!, q);
+        const b = Math.max(plateId[i]!, q);
+        const key = `${a}-${b}`;
+        pairCells.set(key, (pairCells.get(key) ?? 0) + 1);
+        pairStressSum.set(key, (pairStressSum.get(key) ?? 0) + boundaryStress[i]!);
+        break; // count each cell once
+      }
+    }
+    sortedKeys = [...pairCells.keys()].sort();
+    for (const key of sortedKeys) {
+      const cells = pairCells.get(key)!;
+      if (cells < SUTURE_MIN_CONTACT_CELLS) continue;
+      const [a, b] = key.split('-').map(Number) as [number, number];
+      if (locked(a) || locked(b)) continue;
+      contactSince[key] = state.wilson.contactSince[key] ?? state.timeYears;
+      if (Math.abs(pairStressSum.get(key)! / cells) < SUTURE_STALL_SPEED_M_PER_YR) {
+        // Continuous sub-threshold closing carries the stall clock forward; a
+        // step at/above threshold omits the key, restarting it from now.
+        stallSince[key] = state.wilson.stallSince[key] ?? state.timeYears;
+      }
+    }
   }
 
-  let next: PlanetState = { ...state, wilson: { contactSince } };
+  let next: PlanetState = { ...state, wilson: { contactSince, stallSince } };
   let reorganized = false;
 
-  // --- Suture: first pair (sorted key order) in contact long enough.
+  // --- Suture: first pair (sorted key order) that meets the merge criterion.
   if (liveCount > MIN_PLATES) {
     for (const key of sortedKeys) {
       if (contactSince[key] === undefined) continue;
-      if (state.timeYears - contactSince[key] < SUTURE_AFTER_YEARS) continue;
       const [a, b] = key.split('-').map(Number) as [number, number];
-      const merged = suture(next, stats, a, b);
+      let timeout = false;
+      if (!emergentSuture) {
+        if (state.timeYears - contactSince[key]! < SUTURE_AFTER_YEARS) continue;
+      } else {
+        const stalled =
+          stallSince[key] !== undefined &&
+          state.timeYears - stallSince[key]! >= SUTURE_STALL_AFTER_YEARS;
+        // Loud backstop: a contact that never stalls long enough still merges
+        // after SUTURE_TIMEOUT_YEARS, tagged sutureTimeout so the miss is
+        // visible in the event log instead of a silent full-speed grind.
+        timeout = !stalled && state.timeYears - contactSince[key]! >= SUTURE_TIMEOUT_YEARS;
+        if (!stalled && !timeout) continue;
+      }
+      const merged = suture(next, stats, a, b, { blend: emergentSuture, timeout });
       next = merged.state;
       reorganized = true;
       // Keep stats consistent with the post-suture partition, so the rift
@@ -283,12 +354,22 @@ export function riftSizeRamp(areaFraction: number): number {
   return 1 + (RIFT_SIZE_RATE_REF_MULTIPLE - 1) * Math.pow(t, RIFT_SIZE_RATE_EXPONENT);
 }
 
-/** Merge the smaller of plates a, b into the larger; kill the loser's slot. */
+/**
+ * Merge the smaller of plates a, b into the larger; kill the loser's slot.
+ *
+ * `opts.blend` selects the merged kinematics: under `emergentSuture` (#112) the
+ * combined ω⃗ is the drag-tensor-weighted blend (the fixed point the merged
+ * plate relaxes to) and the winner's `accumulatedRadians` is preserved; off, it
+ * is the legacy cell-area-weighted mean with `accumulatedRadians` reset (the
+ * pre-#112 behavior, kept byte-identical). `opts.timeout` tags the event as the
+ * loud `sutureTimeout` backstop instead of a normal `plateSuture`.
+ */
 function suture(
   state: PlanetState,
   stats: PlateStats[],
   a: number,
   b: number,
+  opts: { blend: boolean; timeout: boolean },
 ): { state: PlanetState; winner: number; loser: number } {
   const [winner, loser] =
     stats[a]!.cells > stats[b]!.cells || (stats[a]!.cells === stats[b]!.cells && a < b)
@@ -325,26 +406,51 @@ function suture(
     if (plateId[i] === loser) plateId[i] = winner;
   }
 
-  // Area-weighted mean angular-velocity vector: the merged plate keeps the
-  // combined momentum-ish motion; relative velocity across the suture -> 0.
   const w = state.plates[winner]!;
   const l = state.plates[loser]!;
   const aw = stats[winner]!.cells;
   const al = stats[loser]!.cells;
-  const omega: Vec3 = [
-    (w.eulerPole[0] * w.angularVelRadPerYr * aw + l.eulerPole[0] * l.angularVelRadPerYr * al) / (aw + al),
-    (w.eulerPole[1] * w.angularVelRadPerYr * aw + l.eulerPole[1] * l.angularVelRadPerYr * al) / (aw + al),
-    (w.eulerPole[2] * w.angularVelRadPerYr * aw + l.eulerPole[2] * l.angularVelRadPerYr * al) / (aw + al),
-  ];
+  let omega: Vec3;
+  if (opts.blend) {
+    // emergentSuture (#112): drag-tensor-weighted blend ω⃗ =
+    // (K_a+K_b)⁻¹(K_a·ω⃗_a + K_b·ω⃗_b) — the exact fixed point the combined plate
+    // relaxes to under the summed torques, degrading to the area-weighted mean
+    // for co-located plates. K tensors are read from the pre-merge partition.
+    const kWin = plateDragTensor(state, winner);
+    const kLose = plateDragTensor(state, loser);
+    omega = kWeightedOmega(
+      kWin,
+      [w.eulerPole[0] * w.angularVelRadPerYr, w.eulerPole[1] * w.angularVelRadPerYr, w.eulerPole[2] * w.angularVelRadPerYr],
+      kLose,
+      [l.eulerPole[0] * l.angularVelRadPerYr, l.eulerPole[1] * l.angularVelRadPerYr, l.eulerPole[2] * l.angularVelRadPerYr],
+    );
+  } else {
+    // Area-weighted mean angular-velocity vector: the merged plate keeps the
+    // combined momentum-ish motion; relative velocity across the suture -> 0.
+    omega = [
+      (w.eulerPole[0] * w.angularVelRadPerYr * aw + l.eulerPole[0] * l.angularVelRadPerYr * al) / (aw + al),
+      (w.eulerPole[1] * w.angularVelRadPerYr * aw + l.eulerPole[1] * l.angularVelRadPerYr * al) / (aw + al),
+      (w.eulerPole[2] * w.angularVelRadPerYr * aw + l.eulerPole[2] * l.angularVelRadPerYr * al) / (aw + al),
+    ];
+  }
   const mag = Math.sqrt(omega[0] ** 2 + omega[1] ** 2 + omega[2] ** 2);
 
   const plates: PlateRecord[] = state.plates.map((p, idx) => {
     if (idx === winner) {
+      const eulerPole = mag > 1e-18 ? normalize3(omega) : p.eulerPole;
+      const angularVelRadPerYr = mag > 1e-18 ? mag : 0;
       return {
         ...p,
-        eulerPole: mag > 1e-18 ? normalize3(omega) : p.eulerPole,
-        angularVelRadPerYr: mag > 1e-18 ? mag : 0,
-        accumulatedRadians: 0,
+        eulerPole,
+        angularVelRadPerYr,
+        // emergentSuture keeps ω⃗ and the winner's pending sub-cell motion
+        // (up to ~2.5 cells) that the legacy merge silently dropped; off, both
+        // omegaVec (unread when forceKinematics is off) and accumulatedRadians
+        // reset exactly as before.
+        omegaVec: opts.blend
+          ? ([eulerPole[0] * angularVelRadPerYr, eulerPole[1] * angularVelRadPerYr, eulerPole[2] * angularVelRadPerYr] as Vec3)
+          : p.omegaVec,
+        accumulatedRadians: opts.blend ? p.accumulatedRadians : 0,
         continentalFraction:
           (stats[winner]!.continental + stats[loser]!.continental) / (aw + al),
       };
@@ -357,15 +463,21 @@ function suture(
 
   const event: SimEvent = {
     timeYears: state.timeYears,
-    kind: EVENT_KINDS.plateSuture,
+    kind: opts.timeout ? EVENT_KINDS.sutureTimeout : EVENT_KINDS.plateSuture,
     data: { absorbed: loser, into: winner, absorbedCells: al },
   };
 
-  // Contact bookkeeping involving the dead plate is stale; drop those keys.
+  // Contact bookkeeping involving the dead plate is stale; drop those keys from
+  // both maps (stallSince is empty on the flag-off path).
   const contactSince: Record<string, number> = {};
   for (const key of Object.keys(state.wilson.contactSince).sort()) {
     const [x, y] = key.split('-').map(Number);
     if (x !== loser && y !== loser) contactSince[key] = state.wilson.contactSince[key]!;
+  }
+  const stallSince: Record<string, number> = {};
+  for (const key of Object.keys(state.wilson.stallSince).sort()) {
+    const [x, y] = key.split('-').map(Number);
+    if (x !== loser && y !== loser) stallSince[key] = state.wilson.stallSince[key]!;
   }
 
   return {
@@ -374,7 +486,7 @@ function suture(
       fields: { ...state.fields, plateId, sutureYears },
       plates,
       events: [...state.events, event],
-      wilson: { contactSince },
+      wilson: { contactSince, stallSince },
     },
     winner,
     loser,
