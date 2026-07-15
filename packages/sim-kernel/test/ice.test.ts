@@ -56,7 +56,7 @@ function climateState(
     fields,
     plates: [],
     events: [],
-    wilson: { contactSince: {} },
+    wilson: { contactSince: {}, stallSince: {} },
   };
 }
 

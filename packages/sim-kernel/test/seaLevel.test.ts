@@ -58,7 +58,7 @@ function bathyState(
     fields,
     plates: [],
     events: [],
-    wilson: { contactSince: {} },
+    wilson: { contactSince: {}, stallSince: {} },
   };
 }
 

@@ -30,6 +30,7 @@ const ALL_MECHANISMS_OFF = {
   freeboard: false,
   bathymetryDatum: false,
   forceKinematics: false,
+  emergentSuture: false,
   tensionRift: false,
 } as const;
 

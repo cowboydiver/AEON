@@ -361,7 +361,26 @@ non-zero `tensionN`; zero new RNG.
 passive: a rift stamps both halves with `sutureLockUntilYears = now +
 RIFT_SUTURE_COOLDOWN_YEARS` (120 Myr) and a locked plate's contact is not
 recorded, so it can't re-suture until the lock lifts (then needs a fresh
-60 Myr). Both directions emit events (`plateSuture`/`plateRift`), and
+60 Myr). **Stall-triggered suture (`emergentSuture`, #112, Tectonics V2
+stage 2, default-off):** when the flag is on (after its branched-A/B
+`emergentSutureOnsetYears`), wilson replaces the fixed `SUTURE_AFTER_YEARS`
+countdown with *detection* of the collision death `forceKinematics` produces.
+The contact scan drops its stress gate and instead counts continent–continent
+*adjacency* cells per pair and their summed normal stress; a pair whose mean
+|closing speed| stays below `SUTURE_STALL_SPEED_M_PER_YR` (2 mm/yr) for
+`SUTURE_STALL_AFTER_YEARS` (20 Myr) merges (`plateSuture`). A loud backstop
+merges any contact that persists `SUTURE_TIMEOUT_YEARS` (150 Myr) without ever
+stalling and emits a distinct **`sutureTimeout`** event, so the stall-never-fires
+failure mode (a plate driven by a remote slab) is visible in the log rather than
+a silent grind. A separating rift pair loses its cont–cont adjacency as ocean
+opens between the halves, so it drops out of the scan rather than ever
+registering a convergent stall — the pre-#59 re-suture pathology cannot recur.
+Merged kinematics under the flag are the drag-tensor-weighted blend
+ω⃗ = (K_a+K_b)⁻¹(K_a·ω⃗_a + K_b·ω⃗_b) (the fixed point the combined plate relaxes
+to; `kWeightedOmega`/`plateDragTensor` in `plateDynamics.ts`), and the winner's
+`accumulatedRadians` is preserved; flag-off keeps the legacy area-weighted mean
+and the `accumulatedRadians` reset byte-for-byte. Both directions emit events
+(`plateSuture`/`plateRift`), and
 plates whose last cell is consumed by advection are retired each step with
 a `plateConsumed` event, so the live count the bounds gate on stays honest
 (zombie cell-less plates used to hold the suture floor "satisfied"
@@ -392,7 +411,11 @@ mechanisms and follow-up direction are in `PHASE_2_STAGE0_FINDINGS.md`
 ("#60"). Because nothing reads the field, every pre-existing field's bytes
 are bit-identical to the pre-#60 kernel in every run.
 Contact bookkeeping lives in `PlanetState.wilson.contactSince` (pair-keyed
-start times, rebuilt each step — never iterated by key order). The rift
+start times, rebuilt each step — never iterated by key order); alongside it
+`PlanetState.wilson.stallSince` (also pair-keyed, `emergentSuture` only, always
+empty on the flag-off path) records the start of each pair's current continuous
+stalled period and resets whenever the pair's mean closing speed rises back to
+threshold. The rift
 decision draw is `hash3(seed', plate, timeQuantum)` rather than the issue's
 `rng.fork('wilson')` sketch: a fork taken inside a pure system would restart
 its stream every step, so a position/time hash is the deterministic
@@ -874,15 +897,16 @@ deterministic by construction.
 ```
 PlanetState = { timeYears, params: PlanetParams, globals: Globals, fields,
                 plates: PlateRecord[], events: SimEvent[],
-                wilson: { contactSince } }
+                wilson: { contactSince, stallSince } }  // stallSince: #112, emergentSuture only
 PlanetParams = { seed, radiusMeters, gridN, stepYears, keyframeIntervalYears,
                  numPlates,
                  starLuminosity, dayLengthHours, obliquityDeg,
                  initialCo2Ppm,
-                 // mechanism toggles (#84/#88-#91 + datum re-keys + freeboard):
+                 // mechanism toggles (#84/#88-#91 + datum re-keys + freeboard +
+                 //   Tectonics V2 #111/#112):
                  //   blockIsostasy, crustFates, compactArcs, marinePlanation,
                  //   emergentArcTaper, seaLevelDatums, freeboard,
-                 //   bathymetryDatum + *OnsetYears
+                 //   bathymetryDatum, forceKinematics, emergentSuture + *OnsetYears
                  // biosphere (#37): biosphereEnabled (default true — the ablation
                  //   switch), abiogenesisRatePerYear, initialOxygenPAL
                  // planet knobs: initialLandFraction (#106, default 0.3 — t=0
