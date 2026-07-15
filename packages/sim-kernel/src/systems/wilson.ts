@@ -82,6 +82,7 @@ import {
   RIFT_AZIMUTH_CANDIDATES,
   RIFT_DRAW_QUANTUM_YEARS,
   RIFT_HAZARD_AT_REF_PER_MYR,
+  RIFT_TENSION_MAX_FACTOR,
   RIFT_TENSION_REF_N,
   RIFT_FRAGMENT_MAX_FRACTION,
   RIFT_FRAGMENT_MIN_FRACTION,
@@ -359,7 +360,7 @@ export function riftTensionHazardProbability(
   dtYears: number,
 ): number {
   const ratio = tensionN / RIFT_TENSION_REF_N;
-  const tensionFactor = Math.min(4, ratio * ratio);
+  const tensionFactor = Math.min(RIFT_TENSION_MAX_FACTOR, ratio * ratio);
   const lambdaPerMyr = RIFT_HAZARD_AT_REF_PER_MYR * tensionFactor * blanketFactor(blanketYears);
   const dtMyr = dtYears / 1e6;
   return 1 - Math.exp(-lambdaPerMyr * dtMyr);

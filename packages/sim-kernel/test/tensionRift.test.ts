@@ -3,6 +3,7 @@ import {
   BLANKET_EFOLD_YEARS,
   BLANKET_MAX_FACTOR,
   RIFT_HAZARD_AT_REF_PER_MYR,
+  RIFT_TENSION_MAX_FACTOR,
   RIFT_TENSION_REF_N,
 } from '../src/constants';
 import { EVENT_KINDS } from '../src/events';
@@ -71,11 +72,11 @@ describe('tensionRift hazard helper', () => {
     expect(p).toBeCloseTo(1 - Math.exp(-RIFT_HAZARD_AT_REF_PER_MYR * 2.25), 12);
   });
 
-  it('caps the tension factor at 4 (min(4, (T/T_ref)²))', () => {
-    // 2×ref → (2)²=4 (exactly at cap); 3×ref → 9 clamped to 4. Both equal.
+  it('caps the tension factor at RIFT_TENSION_MAX_FACTOR', () => {
+    // 2×ref → (2)²=4 (exactly at the cap); 3×ref → 9 clamped to 4. Both equal.
     const at2 = riftTensionHazardProbability(2 * RIFT_TENSION_REF_N, 0, dtYears);
     const at3 = riftTensionHazardProbability(3 * RIFT_TENSION_REF_N, 0, dtYears);
-    expect(at2).toBeCloseTo(1 - Math.exp(-RIFT_HAZARD_AT_REF_PER_MYR * 4), 12);
+    expect(at2).toBeCloseTo(1 - Math.exp(-RIFT_HAZARD_AT_REF_PER_MYR * RIFT_TENSION_MAX_FACTOR), 12);
     expect(at3).toBe(at2);
   });
 

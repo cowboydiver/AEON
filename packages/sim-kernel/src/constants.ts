@@ -454,6 +454,15 @@ export const DRAG_TENSOR_REGULARIZATION = 1e-3;
 export const RIFT_TENSION_REF_N = 3e19;
 
 /**
+ * Cap on the quadratic tension factor min(this, (tensionN/RIFT_TENSION_REF_N)²).
+ * A plate at twice the reference tension already rifts at 4× the reference rate;
+ * clamping there stops a runaway-tension plate from rifting every step (the
+ * hazard's own monopoly safety net, analogous to RIFT_SIZE_RATE_REF_MULTIPLE in
+ * the legacy scheme).
+ */
+export const RIFT_TENSION_MAX_FACTOR = 4;
+
+/**
  * Rift hazard at the reference tension, per Myr. Hazard λ = this ×
  * min(4, (tensionN/RIFT_TENSION_REF_N)²) × blanketFactor; the per-step
  * acceptance probability is 1 − exp(−λ·dtMyr), drawn at the same hash site as
