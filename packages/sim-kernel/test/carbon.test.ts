@@ -74,7 +74,7 @@ function carbonState(
     fields,
     plates: [],
     events: [],
-    wilson: { contactSince: {}, stallSince: {} },
+    wilson: { contactSince: {}, stallSince: {}, shorteningIntegral: {} },
   };
 }
 

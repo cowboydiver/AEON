@@ -161,60 +161,96 @@ function runUntilSuture(
   return null;
 }
 
-describe('emergentSuture trigger (#112)', () => {
-  it('sutures after SUTURE_STALL_AFTER_YEARS of sub-threshold closing, not before', () => {
-    // 1 mm/yr < 2 mm/yr stall threshold, held constant ⇒ stalled from t=0.
-    const res = runUntilSuture(3, () => 0.001, 100e6);
+/**
+ * Drive wilson step-by-step with a per-cell `boundaryStress` pattern (a function
+ * of cell index and time), advancing timeYears by 1 Myr, until the first suture
+ * event fires (or the cap). Lets a test build spatially non-uniform closing
+ * fields (e.g. ±jitter that nets to zero) that `runUntilSuture` cannot.
+ */
+function runUntilSutureField(
+  seed: number,
+  stressAt: (cellIndex: number, timeYears: number) => number,
+  capYears: number,
+): { timeYears: number; kind: string } | null {
+  const dt = 1e6;
+  const count = cellCount(16);
+  const ctx: SimContext = { rng: createRng(seed).fork('sim') };
+  let s = threePlateContactState(seed);
+  for (let t = 0; t <= capYears; t += dt) {
+    const boundaryStress = new Float32Array(count);
+    for (let i = 0; i < count; i++) boundaryStress[i] = stressAt(i, t);
+    s = { ...s, timeYears: t, fields: { ...s.fields, boundaryStress } };
+    const before = s.events.length;
+    s = wilsonSystem.apply(s, dt, ctx);
+    if (s.events.length > before) {
+      const ev = s.events[s.events.length - 1]!;
+      return { timeYears: ev.timeYears, kind: ev.kind };
+    }
+  }
+  return null;
+}
+
+describe('emergentSuture trigger — shortening-integral fallback (#112)', () => {
+  // The stall criterion is the NET signed shortening integral, not the mean of
+  // per-cell |closing speed|: the instantaneous per-cell-magnitude metric was
+  // measured DEAD on the acceptance grid (0 stall sutures; advection-quantum
+  // jitter kept the |speed| mean above 2 mm/yr forever). The integral takes the
+  // net signed sum, whose jitter cancels over the contact and over time, so a
+  // genuinely stopped collision is detected even when per-cell speeds are noisy.
+
+  it('stalls a net-zero contact whose per-cell speeds jitter ±5 mm/yr (the case the |speed|-mean metric missed)', () => {
+    // Every cell reads ±5 mm/yr (well above the 2 mm/yr threshold in magnitude),
+    // but they alternate by index so the NET closing is ≈0: the plates are not
+    // approaching. The old per-cell-|speed| mean read 5 mm/yr ≫ threshold and
+    // never stalled (this pattern used to merge only on the 150 Myr timeout).
+    // The net integral reads ≈0 ⇒ stalled ⇒ plateSuture at exactly 20 Myr.
+    const res = runUntilSutureField(3, (i) => (i % 2 === 0 ? 0.005 : -0.005), 200e6);
     expect(res).not.toBeNull();
     expect(res!.kind).toBe(EVENT_KINDS.plateSuture);
-    // Stall clock starts at t=0; merge the first step at/after 20 Myr.
     expect(res!.timeYears).toBe(SUTURE_STALL_AFTER_YEARS);
   });
 
-  it('resets the stall clock on a closing-speed spike above threshold', () => {
-    // Stalled except a single spike to 1 cm/yr at t=10 Myr, which clears the
-    // stall clock; it restarts at 11 Myr, so the merge slips to 31 Myr.
-    const res = runUntilSuture(3, (t) => (t === 10e6 ? 0.01 : 0.001), 100e6);
+  it('sutures after SUTURE_STALL_AFTER_YEARS of sub-threshold net closing, not before', () => {
+    // 1 mm/yr uniform net closing < 2 mm/yr stall speed ⇒ the average net rate
+    // since the anchor never reaches threshold, the anchor never resets, and the
+    // pair merges the first step at/after 20 Myr with a normal plateSuture.
+    const res = runUntilSuture(3, () => 0.001, 100e6);
     expect(res).not.toBeNull();
     expect(res!.kind).toBe(EVENT_KINDS.plateSuture);
-    expect(res!.timeYears).toBe(11e6 + SUTURE_STALL_AFTER_YEARS);
+    expect(res!.timeYears).toBe(SUTURE_STALL_AFTER_YEARS);
   });
 
-  it('does not stall on a mixed convergent/divergent boundary (mean |speed|, not |mean|)', () => {
-    // Alternating ±1 cm/yr by cell index: the signed mean is ~0 (an abs-of-mean
-    // metric would falsely read this active boundary as stalled and merge at
-    // 20 Myr), but every cell's |closing speed| is 1 cm/yr, so the mean of the
-    // magnitudes is 1 cm/yr ≫ the 2 mm/yr threshold ⇒ never stalls. The only
-    // merge is the loud 150 Myr timeout.
-    const dt = 1e6;
-    const count = cellCount(16);
-    const ctx: SimContext = { rng: createRng(3).fork('sim') };
-    let s = threePlateContactState(3);
-    let result: { timeYears: number; kind: string } | null = null;
-    for (let t = 0; t <= 200e6; t += dt) {
-      const boundaryStress = new Float32Array(count);
-      for (let i = 0; i < count; i++) boundaryStress[i] = i % 2 === 0 ? 0.01 : -0.01;
-      s = { ...s, timeYears: t, fields: { ...s.fields, boundaryStress } };
-      const before = s.events.length;
-      s = wilsonSystem.apply(s, dt, ctx);
-      if (s.events.length > before) {
-        const ev = s.events[s.events.length - 1]!;
-        result = { timeYears: ev.timeYears, kind: ev.kind };
-        break;
-      }
-    }
-    expect(result).not.toBeNull();
-    expect(result!.kind).toBe(EVENT_KINDS.sutureTimeout);
-    expect(result!.timeYears).toBe(SUTURE_TIMEOUT_YEARS);
-  });
-
-  it('fires the loud sutureTimeout backstop when the contact never stalls', () => {
-    // 1 cm/yr, always above threshold ⇒ never stalls; the contact merges on the
-    // SUTURE_TIMEOUT_YEARS backstop with the distinct sutureTimeout event.
-    const res = runUntilSuture(3, () => 0.01, 200e6);
+  it('never stalls an actively converging contact — merges only on the loud timeout', () => {
+    // 3 cm/yr uniform net convergence: the average net rate since the anchor is
+    // 3 cm/yr ≫ 2 mm/yr every step, so the anchor resets every step and the
+    // stall window never accumulates. The only merge is the 150 Myr timeout.
+    const res = runUntilSuture(3, () => 0.03, 200e6);
     expect(res).not.toBeNull();
     expect(res!.kind).toBe(EVENT_KINDS.sutureTimeout);
     expect(res!.timeYears).toBe(SUTURE_TIMEOUT_YEARS);
+  });
+
+  it('never stalls a separating (net-divergent) contact — proposal §7 re-suture guard', () => {
+    // −1 cm/yr uniform net divergence: |average net rate| is large, so the
+    // anchor resets every step and the pair never registers a (convergent)
+    // stall. Ridge-push-separated rift halves therefore cannot re-suture on the
+    // stall path; the only merge available is the loud timeout.
+    const res = runUntilSuture(3, () => -0.01, 200e6);
+    expect(res).not.toBeNull();
+    expect(res!.kind).toBe(EVENT_KINDS.sutureTimeout);
+    expect(res!.timeYears).toBe(SUTURE_TIMEOUT_YEARS);
+  });
+
+  it('a single one-step convergence spike does not reset a stall (integral robustness)', () => {
+    // A lone 1-Myr spike to 1 cm/yr adds only 10 km of shortening — far below the
+    // rate×window tolerance — so the trailing-window average net rate stays sub-
+    // threshold and the stall still fires at 20 Myr. This is the robustness the
+    // instantaneous metric lacked: one teleporting-boundary step cannot veto a
+    // 20 Myr stall determination.
+    const res = runUntilSuture(3, (t) => (t === 10e6 ? 0.01 : 0.001), 100e6);
+    expect(res).not.toBeNull();
+    expect(res!.kind).toBe(EVENT_KINDS.plateSuture);
+    expect(res!.timeYears).toBe(SUTURE_STALL_AFTER_YEARS);
   });
 });
 
