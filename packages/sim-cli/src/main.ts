@@ -106,6 +106,12 @@ Options:
                               derived state instead of a fixed random draw
                               (default off — measure with --ab force-kinematics
                               and --plate-census)
+  --tension-rift              enable tension-driven rift timing (Tectonics V2
+                              stage 3, #113): rift hazard ∝ (boundary tension)²
+                              × supercontinent thermal blanket, retiring the flat
+                              hazard × size ramp; fragment inherits parent ω⃗.
+                              Needs --force-kinematics for a non-zero tension
+                              (default off)
   --step-years <years>        simulation step size (default 1e6); use e.g.
                               0.5e6 for dt-halving checks of lagged datums
   --water-scale <factor>      dimensionless multiplier on the derived water
@@ -180,6 +186,7 @@ const { values } = parseArgs({
     freeboard: { type: 'boolean', default: false },
     'bathymetry-datum': { type: 'boolean', default: false },
     'force-kinematics': { type: 'boolean', default: false },
+    'tension-rift': { type: 'boolean', default: false },
     'no-block-isostasy': { type: 'boolean', default: false },
     'no-crust-fates': { type: 'boolean', default: false },
     'no-compact-arcs': { type: 'boolean', default: false },
@@ -189,6 +196,7 @@ const { values } = parseArgs({
     'no-freeboard': { type: 'boolean', default: false },
     'no-bathymetry-datum': { type: 'boolean', default: false },
     'no-force-kinematics': { type: 'boolean', default: false },
+    'no-tension-rift': { type: 'boolean', default: false },
     ab: { type: 'string' },
     'ab-branch': { type: 'string' },
     'ab-block-isostasy': { type: 'string' },
@@ -256,6 +264,7 @@ const MECHANISMS: Record<string, (on: boolean, onsetYears: number) => Partial<Pl
   freeboard: (on, onset) => ({ freeboard: on, freeboardOnsetYears: onset }),
   'bathymetry-datum': (on, onset) => ({ bathymetryDatum: on, bathymetryDatumOnsetYears: onset }),
   'force-kinematics': (on, onset) => ({ forceKinematics: on, forceKinematicsOnsetYears: onset }),
+  'tension-rift': (on, onset) => ({ tensionRift: on, tensionRiftOnsetYears: onset }),
 };
 const MECHANISM_FLAGS = Object.keys(MECHANISMS) as ReadonlyArray<
   | 'block-isostasy'
@@ -267,6 +276,7 @@ const MECHANISM_FLAGS = Object.keys(MECHANISMS) as ReadonlyArray<
   | 'freeboard'
   | 'bathymetry-datum'
   | 'force-kinematics'
+  | 'tension-rift'
 >;
 
 // --ab-block-isostasy <years> predates --ab and is kept as its alias.
