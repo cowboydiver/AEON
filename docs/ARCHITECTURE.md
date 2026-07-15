@@ -123,7 +123,12 @@ PlateRecord = { eulerPole (unit Vec3), angularVelRadPerYr,
                 advectionCount,            // events so far, drives quantum dither
                 createdAtYears,
                 sutureLockUntilYears,      // rift children can't suture before this (#57 follow-up)
-                continentalFraction, alive }
+                continentalFraction, alive,
+                // Tectonics V2 (default-off mechanisms; all 0 flag-off):
+                omegaVec,                  // ω⃗, derived kinematic state under forceKinematics (#111 stage 1)
+                tensionN, slabPullN,       // gross−|net| driving force / attached slab pull, N — diagnostics + tensionRift input
+                stallSinceYears,           // emergentSuture stall clock (#112 stage 2)
+                blanketYears }             // tensionRift supercontinent thermal-blanket age (#113 stage 3)
 ```
 
 Kinematics are assigned at creation from `rng.fork('plateKinematics')`:
@@ -328,6 +333,30 @@ three golden seeds with every Gyr bucket alive — the deep-time metric is
 chaotically sensitive to the oversize rate (between 12× and 16× it is bimodal:
 seed 42 collapses to ~49% at 12×), which is why the oversize safety net is the
 one knob the #66 clock scaling did not slow proportionally.
+**Tension-driven rift timing (`tensionRift`, Tectonics V2 stage 3, #113,
+default off):** under the flag the flat-hazard × bimodal-size-ramp scheme is
+replaced by a physical hazard drawn at the *same* hash site — only the
+acceptance threshold changes. λ = `RIFT_HAZARD_AT_REF_PER_MYR` (0.0075/Myr) ×
+min(4, (`tensionN`/`RIFT_TENSION_REF_N`)²) × a supercontinent thermal-blanket
+factor, and the per-step draw must clear 1 − exp(−λ·dtMyr) (`riftTensionHazardProbability`).
+`tensionN` (gross − |net| boundary driving force, written by `plateDynamics`
+under `forceKinematics`) is the physical scalar the size ramp was faking: a
+supercontinent ringed by opposed subduction carries high gross / low net force
+and rifts *because it is being pulled apart* — continuous, no knee. The blanket
+is the one deliberately *pseudo-mantle* term: `blanketYears` accrues while a
+plate holds ≥ `BLANKET_CONTINENT_FRACTION` (25%) of the sphere as continent and
+multiplies the hazard by 1 + (`BLANKET_MAX_FACTOR`−1)(1 − e^(−blanketYears/`BLANKET_EFOLD_YEARS`))
+(`blanketFactor`), a quiet-interior slow fuse superseded by `mantleAnchors` later.
+Under the flag the age gate and size ramp are deleted; the plate-slot safety
+gates (area ≥ 8%, continental ≥ 2% of the sphere, `MAX_PLATES`) stay. The
+**carve machinery is byte-identical** (fragment seed, jittered Dijkstra, size
+draw — proposal §7 says change *when*, never *where*); only the fragment
+*kinematics* change: it inherits the parent's ω⃗/pole and the halves separate
+because ridge push registers on the new divergent margin next step, retiring the
+perpendicular translating-pole construction and the ocean-seeking azimuth fan
+(their stateless position-hash draws go dead flag-on; flag-off they still
+evaluate, so goldens are byte-identical). Requires `forceKinematics` for a
+non-zero `tensionN`; zero new RNG.
 **Post-rift suture lock:** a fresh rift margin is
 passive: a rift stamps both halves with `sutureLockUntilYears = now +
 RIFT_SUTURE_COOLDOWN_YEARS` (120 Myr) and a locked plate's contact is not

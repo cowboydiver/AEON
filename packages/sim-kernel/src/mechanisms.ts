@@ -20,7 +20,8 @@ export type MechanismKey =
   | 'seaLevelDatums'
   | 'freeboard'
   | 'bathymetryDatum'
-  | 'forceKinematics';
+  | 'forceKinematics'
+  | 'tensionRift';
 
 export interface MechanismInfo {
   key: MechanismKey;
@@ -94,6 +95,13 @@ export const MECHANISMS: readonly MechanismInfo[] = [
     issue: 111,
     summary:
       'A per-step rigid-plate torque balance (slab pull, ridge push, collision damping, closed by basal drag) makes each plate’s angular velocity derived state that responds to what the plate touches, instead of a fixed random draw made once at creation.',
+  },
+  {
+    key: 'tensionRift',
+    label: 'Tension-driven rifting',
+    issue: 113,
+    summary:
+      'Rift timing follows a physical hazard ∝ (boundary tension)² × a supercontinent thermal-blanket factor: a plate rifts because its opposed subducting perimeter is pulling it apart, replacing the flat Bernoulli hazard × the hand-tuned size ramp. Requires force-balance kinematics for a non-zero tension.',
   },
 ] satisfies readonly MechanismInfo[];
 

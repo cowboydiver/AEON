@@ -209,6 +209,25 @@ export interface PlanetParams {
    *  Default 0. */
   forceKinematicsOnsetYears: number;
   /**
+   * Enable tension-driven rift timing (Tectonics V2 stage 3, #113, proposal
+   * §2.4). When on, the `wilson` rift hazard is λ = `RIFT_HAZARD_AT_REF_PER_MYR`
+   * × min(4, (tensionN/`RIFT_TENSION_REF_N`)²) × a supercontinent thermal-blanket
+   * factor, drawn at the same hash site as the legacy scheme — a plate rifts
+   * because its opposed subducting perimeter is pulling it apart, continuously
+   * and with no knee, replacing the flat Bernoulli hazard × the #66-bimodal size
+   * ramp. The age gate and size ramp are deleted under the flag; the plate-slot
+   * safety gates stay. The fragment inherits the parent's ω⃗ and separates
+   * because ridge push registers on the new divergent margin (the perpendicular
+   * pole + azimuth fan go dead flag-on). Requires `forceKinematics` for a
+   * non-zero `tensionN`; zero new RNG draws. Default **OFF** — a default-off
+   * mechanism prototype in the standard onset pattern; the main goldens stay
+   * byte-identical while off.
+   */
+  tensionRift: boolean;
+  /** Sim year before which tensionRift is inert even when enabled — the #113
+   *  branched-A/B onset, same contract as forceKinematicsOnsetYears. Default 0. */
+  tensionRiftOnsetYears: number;
+  /**
    * Enable the biosphere (#37, Phase 4): ocean life, oxygenation, and — from
    * #39 — land vegetation. The ablation switch, **default `true`** (the
    * biosphere is a shipped feature, not a prototype). When `false` the life
@@ -444,6 +463,8 @@ export function createPlanetParams(partial: Partial<PlanetParams> & { seed: numb
     bathymetryDatumOnsetYears: 0,
     forceKinematics: false,
     forceKinematicsOnsetYears: 0,
+    tensionRift: false,
+    tensionRiftOnsetYears: 0,
     biosphereEnabled: true,
     abiogenesisRatePerYear: ABIOGENESIS_RATE_PER_YR,
     initialOxygenPAL: INITIAL_OXYGEN_PAL,

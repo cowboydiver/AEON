@@ -434,6 +434,84 @@ export const PLATE_SPEED_CAP_M_PER_YR = 0.2;
 export const DRAG_TENSOR_REGULARIZATION = 1e-3;
 
 /**
+ * Tension-driven rift hazard (Tectonics V2 stage 3, #113, proposal §2.4).
+ * Under `tensionRift` the flat Bernoulli hazard × the #61 size ramp is
+ * replaced by a hazard proportional to (boundary tension)² × a supercontinent
+ * thermal-blanket factor: a plate rifts *because it is being pulled apart*
+ * (high gross / low net driving force), a continuous physical scalar with no
+ * knee — replacing the #66-measured-bimodal size ramp. Only the rift *timing*
+ * changes; the carve machinery is byte-identical (proposal §7).
+ */
+
+/**
+ * Tension scale, N. A supercontinent-scale plate ringed by ~10⁷ m of opposed
+ * subducting perimeter at ~3×10¹² N/m carries gross − |net| ≈ 3×10¹⁹ N, so at
+ * this reference tension the hazard equals `RIFT_HAZARD_AT_REF_PER_MYR`. The
+ * hazard's tension factor is min(4, (tensionN/this)²) — quadratic in the
+ * fraction of the driving force that does not cancel, capped at 4× the
+ * reference rate so a runaway-tension plate cannot rift every step.
+ */
+export const RIFT_TENSION_REF_N = 3e19;
+
+/**
+ * Cap on the quadratic tension factor min(this, (tensionN/RIFT_TENSION_REF_N)²).
+ * A plate at twice the reference tension already rifts at 4× the reference rate;
+ * clamping there stops a runaway-tension plate from rifting every step (the
+ * hazard's own monopoly safety net, analogous to RIFT_SIZE_RATE_REF_MULTIPLE in
+ * the legacy scheme).
+ */
+export const RIFT_TENSION_MAX_FACTOR = 4;
+
+/**
+ * Rift hazard at the reference tension, per Myr. Hazard λ = this ×
+ * min(4, (tensionN/RIFT_TENSION_REF_N)²) × blanketFactor; the per-step
+ * acceptance probability is 1 − exp(−λ·dtMyr), drawn at the same hash site as
+ * the legacy scheme. Replaces `RIFT_PROBABILITY_PER_MYR` (0.0015) × size ramp.
+ * Pre-registered Plan B if tension² proves as bimodal as the ramp it replaces:
+ * a soft-yield shape ∝ max(0, T−T_ref)² (graft from the mantle-proxy design).
+ *
+ * Stage-3 rate retune (the one allowed #66/#101 companion retune, #113): the
+ * measured grid at 0.01/Myr dispersed uniformly (≥0.84 every Gyr bucket, no
+ * bimodal knee — the tension² shape is validated) but rifted ~4× the legacy
+ * rate (204/188/186 events over 4.5 Gyr vs 44/41/44), and because dead plate
+ * slots are never reclaimed the monotonic u8 plate-ID counter reached max ID
+ * 213 at seed 42 @ N=128 (83% of the 256 cap), breaching the <200 slot-budget
+ * gate. Cut 0.01 → 0.0075 (−25%) to restore u8 headroom while leaving the
+ * tension² shape and blanket dynamics — the mechanism's thesis — untouched.
+ * A −25% cut still leaves ~3× the legacy rift rate, so dispersal is expected
+ * to survive (measured, not assumed). The root cause (unreclaimed slots) is a
+ * stage-5 / dedicated-change concern, out of scope for a companion retune.
+ */
+export const RIFT_HAZARD_AT_REF_PER_MYR = 0.0075;
+
+/**
+ * Continental fraction of the whole sphere at or above which a plate is a
+ * "supercontinent" and its thermal blanket accumulates. 25% of the sphere as
+ * continent on a single plate is a supercontinent-scale mass; below it the
+ * blanket resets. Fraction of total cells (continental cells / count), not of
+ * the plate's own area.
+ */
+export const BLANKET_CONTINENT_FRACTION = 0.25;
+
+/**
+ * Supercontinent thermal-blanket e-folding time, yr. `blanketYears` accrues
+ * while a plate stays above `BLANKET_CONTINENT_FRACTION`; the hazard multiplier
+ * is 1 + (BLANKET_MAX_FACTOR−1)(1 − e^(−blanketYears/this)) — a slow fuse that
+ * approaches its ceiling over several hundred Myr. This is the one deliberately
+ * *pseudo-mantle* term of the redesign, honestly labeled: it stands in for the
+ * sub-continental warming a real mantle layer would produce, and is superseded
+ * by `mantleAnchors` (§5 Stage 6).
+ */
+export const BLANKET_EFOLD_YEARS = 3e8;
+
+/**
+ * Ceiling of the supercontinent thermal-blanket hazard multiplier (see
+ * `BLANKET_EFOLD_YEARS`). A long-lived supercontinent's interior heats until
+ * its rift hazard is at most this many times the un-blanketed rate.
+ */
+export const BLANKET_MAX_FACTOR = 3;
+
+/**
  * Depth of brand-new oceanic crust at a spreading center, m below datum.
  * Mid-ocean ridge crests sit at ~2.5 km depth (half-space cooling t=0 term,
  * Parsons & Sclater 1977). Divergent gap cells are created at this depth.
