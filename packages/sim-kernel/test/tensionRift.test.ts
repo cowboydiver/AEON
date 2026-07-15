@@ -62,7 +62,7 @@ describe('tensionRift hazard helper', () => {
 
   it('at the reference tension and zero blanket, λ = RIFT_HAZARD_AT_REF_PER_MYR', () => {
     const p = riftTensionHazardProbability(RIFT_TENSION_REF_N, 0, dtYears);
-    // tension factor = min(4, 1²) = 1, blanket factor = 1 → λ = 0.01/Myr.
+    // tension factor = min(4, 1²) = 1, blanket factor = 1 → λ = RIFT_HAZARD_AT_REF_PER_MYR.
     expect(p).toBeCloseTo(1 - Math.exp(-RIFT_HAZARD_AT_REF_PER_MYR), 12);
   });
 

@@ -336,7 +336,7 @@ one knob the #66 clock scaling did not slow proportionally.
 **Tension-driven rift timing (`tensionRift`, Tectonics V2 stage 3, #113,
 default off):** under the flag the flat-hazard × bimodal-size-ramp scheme is
 replaced by a physical hazard drawn at the *same* hash site — only the
-acceptance threshold changes. λ = `RIFT_HAZARD_AT_REF_PER_MYR` (0.01/Myr) ×
+acceptance threshold changes. λ = `RIFT_HAZARD_AT_REF_PER_MYR` (0.0075/Myr) ×
 min(4, (`tensionN`/`RIFT_TENSION_REF_N`)²) × a supercontinent thermal-blanket
 factor, and the per-step draw must clear 1 − exp(−λ·dtMyr) (`riftTensionHazardProbability`).
 `tensionN` (gross − |net| boundary driving force, written by `plateDynamics`
