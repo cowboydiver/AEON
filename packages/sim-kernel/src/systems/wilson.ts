@@ -820,13 +820,20 @@ export function riftPlate(
   // Parent keeps pole/velocity (the fragment leaves; the remaining plate is
   // not recoiled), but its rift-age clock restarts and both sides get the
   // post-rift suture lock so the new passive margin can open before it may
-  // collide again.
+  // collide again. Stage 4 (#114, proposal §5) makes this lock measurable:
+  // under `tensionRift` it is `riftSutureCooldownYears` (swept 120→30→0),
+  // since ridge push at the fresh divergent margin now separates the halves;
+  // flag-off it stays the legacy 120 Myr constant so the `main` spine is
+  // byte-identical.
+  const cooldown = tensionRiftActive
+    ? state.params.riftSutureCooldownYears
+    : RIFT_SUTURE_COOLDOWN_YEARS;
   const plates: PlateRecord[] = state.plates.map((rec, idx) =>
     idx === p
       ? {
           ...rec,
           createdAtYears: state.timeYears, // rift-age cooldown restarts
-          sutureLockUntilYears: state.timeYears + RIFT_SUTURE_COOLDOWN_YEARS,
+          sutureLockUntilYears: state.timeYears + cooldown,
           continentalFraction: contA / cellsA,
         }
       : rec,
@@ -837,7 +844,7 @@ export function riftPlate(
     accumulatedRadians: 0,
     advectionCount: 0,
     createdAtYears: state.timeYears,
-    sutureLockUntilYears: state.timeYears + RIFT_SUTURE_COOLDOWN_YEARS,
+    sutureLockUntilYears: state.timeYears + cooldown,
     continentalFraction: contB / cellsB,
     alive: true,
     // Force-balance kinematics state (#111): the fragment inherits the

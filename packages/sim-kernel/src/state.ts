@@ -10,6 +10,7 @@ import {
   INITIAL_CO2_PPM,
   INITIAL_OXYGEN_PAL,
   REDUCTANT_BUFFER_PAL,
+  RIFT_SUTURE_COOLDOWN_YEARS,
   SOLAR_LUMINOSITY_W,
 } from './constants';
 import type { SimEvent } from './events';
@@ -245,6 +246,20 @@ export interface PlanetParams {
   /** Sim year before which tensionRift is inert even when enabled — the #113
    *  branched-A/B onset, same contract as forceKinematicsOnsetYears. Default 0. */
   tensionRiftOnsetYears: number;
+  /**
+   * Post-rift suture cooldown (years) stamped onto freshly rifted halves
+   * (their `sutureLockUntilYears`) **only when `tensionRift` is active**
+   * (Tectonics V2 stage 4, #114, proposal §5). When `tensionRift` is off the
+   * legacy constant `RIFT_SUTURE_COOLDOWN_YEARS` (120 Myr) is used unchanged,
+   * so the flag-off / `main` spine stays byte-identical regardless of this
+   * value. Default `RIFT_SUTURE_COOLDOWN_YEARS`: this parameterization is
+   * behavior-neutral. Stage 4 sweeps it 120→30→0 Myr against the historic
+   * cooldown-vs-land-min table and flips the default to 0 once the gates pass
+   * — under `forceKinematics`+`tensionRift`, ridge push at the fresh divergent
+   * margin separates the halves, so the timer's job (keeping rifted halves
+   * from re-welding) is done by physics rather than a schedule.
+   */
+  riftSutureCooldownYears: number;
   /**
    * Enable the biosphere (#37, Phase 4): ocean life, oxygenation, and — from
    * #39 — land vegetation. The ablation switch, **default `true`** (the
@@ -511,6 +526,7 @@ export function createPlanetParams(partial: Partial<PlanetParams> & { seed: numb
     emergentSutureOnsetYears: 0,
     tensionRift: false,
     tensionRiftOnsetYears: 0,
+    riftSutureCooldownYears: RIFT_SUTURE_COOLDOWN_YEARS,
     biosphereEnabled: true,
     abiogenesisRatePerYear: ABIOGENESIS_RATE_PER_YR,
     initialOxygenPAL: INITIAL_OXYGEN_PAL,

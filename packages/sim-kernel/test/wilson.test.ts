@@ -461,6 +461,56 @@ describe('post-rift suture cooldown (#57 follow-up)', () => {
   });
 });
 
+describe('stage 4 — measurable post-rift cooldown under tensionRift (#114)', () => {
+  const riftSeed = hash2(7, hashString('wilsonRift'), 0);
+  // A nonzero clock so `timeYears + cooldown` differs from a bare cooldown and
+  // the "no lock" case (cooldown 0 ⇒ lock == now) is unambiguous.
+  const T0 = 500e6;
+  const atTime = (s: PlanetState, params: Partial<PlanetState['params']>): PlanetState => ({
+    ...s,
+    timeYears: T0,
+    params: { ...s.params, ...params },
+  });
+
+  it('defaults riftSutureCooldownYears to the legacy 120 Myr constant', () => {
+    expect(createPlanetParams({ seed: 1 }).riftSutureCooldownYears).toBe(RIFT_SUTURE_COOLDOWN_YEARS);
+  });
+
+  it('with the default param, flag-on stamps the same 120 Myr lock as flag-off (byte-neutral)', () => {
+    // Default riftSutureCooldownYears == RIFT_SUTURE_COOLDOWN_YEARS, so turning
+    // tensionRift on without overriding the param changes nothing about the lock.
+    const state = atTime(collisionWorld(0), { tensionRift: true });
+    const rifted = riftPlate(state, 0, riftSeed, true);
+    const lockUntil = T0 + RIFT_SUTURE_COOLDOWN_YEARS;
+    expect(rifted.plates[0]!.sutureLockUntilYears).toBe(lockUntil);
+    expect(rifted.plates.at(-1)!.sutureLockUntilYears).toBe(lockUntil);
+  });
+
+  it('under tensionRift the cooldown is riftSutureCooldownYears, not the constant', () => {
+    // The retirement target: V2 = 0 ⇒ fresh halves carry no post-rift lock, so
+    // ridge push (not a timer) is what keeps them apart.
+    const zero = riftPlate(atTime(collisionWorld(0), { tensionRift: true, riftSutureCooldownYears: 0 }), 0, riftSeed, true);
+    expect(zero.plates[0]!.sutureLockUntilYears).toBe(T0);
+    expect(zero.plates.at(-1)!.sutureLockUntilYears).toBe(T0);
+
+    // An intermediate measurement step (30 Myr) lands where expected.
+    const mid = riftPlate(atTime(collisionWorld(0), { tensionRift: true, riftSutureCooldownYears: 30e6 }), 0, riftSeed, true);
+    expect(mid.plates[0]!.sutureLockUntilYears).toBe(T0 + 30e6);
+    expect(mid.plates.at(-1)!.sutureLockUntilYears).toBe(T0 + 30e6);
+  });
+
+  it('flag-off ignores riftSutureCooldownYears entirely (legacy spine preserved)', () => {
+    // Even with the param zeroed, the flag-off path (tensionRiftActive=false)
+    // stamps the legacy 120 Myr constant — the main/comparison baseline can
+    // never be perturbed by this knob.
+    const state = atTime(collisionWorld(0), { riftSutureCooldownYears: 0 });
+    const rifted = riftPlate(state, 0, riftSeed, false);
+    const lockUntil = T0 + RIFT_SUTURE_COOLDOWN_YEARS;
+    expect(rifted.plates[0]!.sutureLockUntilYears).toBe(lockUntil);
+    expect(rifted.plates.at(-1)!.sutureLockUntilYears).toBe(lockUntil);
+  });
+});
+
 function countCells(state: PlanetState, plate: number): number {
   let n = 0;
   for (const p of state.fields.plateId) if (p === plate) n++;
