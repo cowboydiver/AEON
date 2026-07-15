@@ -180,6 +180,34 @@ describe('emergentSuture trigger (#112)', () => {
     expect(res!.timeYears).toBe(11e6 + SUTURE_STALL_AFTER_YEARS);
   });
 
+  it('does not stall on a mixed convergent/divergent boundary (mean |speed|, not |mean|)', () => {
+    // Alternating ±1 cm/yr by cell index: the signed mean is ~0 (an abs-of-mean
+    // metric would falsely read this active boundary as stalled and merge at
+    // 20 Myr), but every cell's |closing speed| is 1 cm/yr, so the mean of the
+    // magnitudes is 1 cm/yr ≫ the 2 mm/yr threshold ⇒ never stalls. The only
+    // merge is the loud 150 Myr timeout.
+    const dt = 1e6;
+    const count = cellCount(16);
+    const ctx: SimContext = { rng: createRng(3).fork('sim') };
+    let s = threePlateContactState(3);
+    let result: { timeYears: number; kind: string } | null = null;
+    for (let t = 0; t <= 200e6; t += dt) {
+      const boundaryStress = new Float32Array(count);
+      for (let i = 0; i < count; i++) boundaryStress[i] = i % 2 === 0 ? 0.01 : -0.01;
+      s = { ...s, timeYears: t, fields: { ...s.fields, boundaryStress } };
+      const before = s.events.length;
+      s = wilsonSystem.apply(s, dt, ctx);
+      if (s.events.length > before) {
+        const ev = s.events[s.events.length - 1]!;
+        result = { timeYears: ev.timeYears, kind: ev.kind };
+        break;
+      }
+    }
+    expect(result).not.toBeNull();
+    expect(result!.kind).toBe(EVENT_KINDS.sutureTimeout);
+    expect(result!.timeYears).toBe(SUTURE_TIMEOUT_YEARS);
+  });
+
   it('fires the loud sutureTimeout backstop when the contact never stalls', () => {
     // 1 cm/yr, always above threshold ⇒ never stalls; the contact merges on the
     // SUTURE_TIMEOUT_YEARS backstop with the distinct sutureTimeout event.
