@@ -366,9 +366,19 @@ stage 2, default-off):** when the flag is on (after its branched-A/B
 `emergentSutureOnsetYears`), wilson replaces the fixed `SUTURE_AFTER_YEARS`
 countdown with *detection* of the collision death `forceKinematics` produces.
 The contact scan drops its stress gate and instead counts continent–continent
-*adjacency* cells per pair and their summed normal stress; a pair whose mean
-|closing speed| stays below `SUTURE_STALL_SPEED_M_PER_YR` (2 mm/yr) for
-`SUTURE_STALL_AFTER_YEARS` (20 Myr) merges (`plateSuture`). A loud backstop
+*adjacency* cells per pair and their summed *signed* normal stress (+ convergent);
+a pair merges (`plateSuture`) once a full `SUTURE_STALL_AFTER_YEARS` (20 Myr)
+tumbling window elapses whose average |net closing rate| stayed below
+`SUTURE_STALL_SPEED_M_PER_YR` (2 mm/yr). The criterion is a **net-signed
+shortening integral** (issue #112 pre-registered fallback, proposal §2.4), not the
+per-cell |closing speed| mean the first cut used: that magnitude mean has an
+advection-quantum noise floor that never falls below 2 mm/yr, so it measured dead
+(0 stalls across the acceptance grid, every suture via the timeout). Summing the
+*signed* net closing lets jitter cancel over the contact, and evaluating the rate
+only at the window boundary (net summed across the whole 20 Myr first) makes a
+lone jittering step unable to reset the clock; a window that reaches threshold
+re-arms the anchor. The derived reset tolerance is 2 mm/yr × 20 Myr (≈40 km net
+shortening/window) — no independent tuned constant. A loud backstop
 merges any contact that persists `SUTURE_TIMEOUT_YEARS` (150 Myr) without ever
 stalling and emits a distinct **`sutureTimeout`** event, so the stall-never-fires
 failure mode (a plate driven by a remote slab) is visible in the log rather than
@@ -411,11 +421,13 @@ mechanisms and follow-up direction are in `PHASE_2_STAGE0_FINDINGS.md`
 ("#60"). Because nothing reads the field, every pre-existing field's bytes
 are bit-identical to the pre-#60 kernel in every run.
 Contact bookkeeping lives in `PlanetState.wilson.contactSince` (pair-keyed
-start times, rebuilt each step — never iterated by key order); alongside it
-`PlanetState.wilson.stallSince` (also pair-keyed, `emergentSuture` only, always
-empty on the flag-off path) records the start of each pair's current continuous
-stalled period and resets whenever the pair's mean closing speed rises back to
-threshold. The rift
+start times, rebuilt each step — never iterated by key order); alongside it two
+`emergentSuture`-only maps (always empty on the flag-off path): `stallSince`,
+the anchor time of each pair's current tumbling stall window, and
+`shorteningIntegral`, the net signed shortening (m) accumulated since that
+anchor. Their quotient over the elapsed window is the average net closing rate
+the boundary test uses; the anchor re-arms (and the integral resets) when a
+completed window's rate reaches `SUTURE_STALL_SPEED_M_PER_YR`. The rift
 decision draw is `hash3(seed', plate, timeQuantum)` rather than the issue's
 `rng.fork('wilson')` sketch: a fork taken inside a pure system would restart
 its stream every step, so a position/time hash is the deterministic
@@ -897,7 +909,7 @@ deterministic by construction.
 ```
 PlanetState = { timeYears, params: PlanetParams, globals: Globals, fields,
                 plates: PlateRecord[], events: SimEvent[],
-                wilson: { contactSince, stallSince } }  // stallSince: #112, emergentSuture only
+                wilson: { contactSince, stallSince, shorteningIntegral } }  // stallSince/shorteningIntegral: #112, emergentSuture only
 PlanetParams = { seed, radiusMeters, gridN, stepYears, keyframeIntervalYears,
                  numPlates,
                  starLuminosity, dayLengthHours, obliquityDeg,
