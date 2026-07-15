@@ -987,23 +987,37 @@ export const SUTURE_MIN_CONTACT_CELLS = 3;
  * speed toward zero in ~10–20 Myr; these constants let wilson *detect* that
  * death instead of scheduling it on the `SUTURE_AFTER_YEARS` countdown.
  *
- * A cont–cont contact whose mean |normal closing speed| (the mean of the
- * per-cell |`boundaryStress`| over the pair's continental-adjacency cells,
- * m/yr — magnitude taken per cell so a rotational boundary with convergent and
- * divergent flanks does not cancel to a false zero) sits below this threshold
- * is "stalled". 2 mm/yr is an order below plate speeds (cm/yr) and below the
- * 5 mm/yr `ACTIVE_MARGIN_STRESS_M_PER_YR` active-margin gate — a boundary this
- * slow is a dead collision, not a live one. Only used when `emergentSuture` is
- * on; the flag-off path keeps the `SUTURE_AFTER_YEARS` countdown byte-for-byte.
+ * A cont–cont contact is "stalled" when its *net* closing rate — the mean over
+ * the pair's continental-adjacency cells of the SIGNED `boundaryStress` (m/yr,
+ * + convergent), accumulated into a shortening integral and divided by the
+ * elapsed window — stays below this threshold in magnitude. The net signed sum
+ * (shortening-integral fallback, #112, proposal §2.4) replaced a first cut that
+ * used the per-cell |speed| mean: under advection-quantum jitter that magnitude
+ * mean has a noise floor that never falls below 2 mm/yr, so it measured DEAD (0
+ * stalls across the acceptance grid, every suture via the 150 Myr timeout). The
+ * signed sum lets jitter cancel over the contact, so a genuinely stopped
+ * collision reads a net rate ≈0 even while per-cell speeds are noisy; a
+ * separating pair reads a large NEGATIVE net rate and never stalls. 2 mm/yr is
+ * an order below plate speeds (cm/yr) and below the 5 mm/yr
+ * `ACTIVE_MARGIN_STRESS_M_PER_YR` active-margin gate — a boundary whose net
+ * motion is this slow is a dead collision, not a live one. Only used when
+ * `emergentSuture` is on; the flag-off path keeps the `SUTURE_AFTER_YEARS`
+ * countdown byte-for-byte.
  */
 export const SUTURE_STALL_SPEED_M_PER_YR = 0.002;
 
 /**
- * `emergentSuture`: merge a cont–cont pair after this long of *continuous*
- * sub-`SUTURE_STALL_SPEED_M_PER_YR` closing (#112, proposal §2.3). 20 Myr is
- * bookkeeping on an already-dead boundary, not a countdown on a live one — the
- * collision damping has already stopped the plates by the time this fires. A
- * speed spike back above threshold resets the stall clock.
+ * `emergentSuture`: the tumbling stall-window width (#112, proposal §2.3/§2.4).
+ * A cont–cont pair sutures once a full window this long has elapsed whose
+ * average |net closing rate| stayed below `SUTURE_STALL_SPEED_M_PER_YR`. The
+ * window is evaluated only at its boundary — the net closing is summed across
+ * the whole 20 Myr before the rate test, so a lone jittering step cannot reset
+ * the clock (the robustness the instantaneous criterion lacked). A window whose
+ * average rate reaches threshold re-arms the anchor and starts a fresh window.
+ * 20 Myr is bookkeeping on an already-dead boundary, not a countdown on a live
+ * one — collision damping has stopped the plates well before this fires. The
+ * derived reset tolerance is `SUTURE_STALL_SPEED_M_PER_YR × SUTURE_STALL_AFTER_
+ * YEARS` (≈40 km of net shortening per window); no independent tuned constant.
  */
 export const SUTURE_STALL_AFTER_YEARS = 2e7;
 

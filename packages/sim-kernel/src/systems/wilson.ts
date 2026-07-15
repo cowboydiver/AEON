@@ -190,12 +190,15 @@ function applyWilson(state: PlanetState, dtYears: number): PlanetState {
 
   // contactSince: start of the current continuous cont–cont contact (the
   // flag-off suture clock and the flag-on loud timeout backstop). stallSince:
-  // emergentSuture only — start of the current continuous stalled (sub-
-  // SUTURE_STALL_SPEED) closing period. Both rebuilt from live contacts only;
-  // insertion via sorted keys keeps the records canonical (never iterated for
-  // physics).
+  // emergentSuture only — anchor of the current tumbling stall window.
+  // shorteningIntegral: emergentSuture only — net signed shortening (m)
+  // accumulated since that anchor; |integral| / window is the average net
+  // closing rate the boundary test compares against SUTURE_STALL_SPEED. All
+  // rebuilt from live contacts only; insertion via sorted keys keeps the records
+  // canonical (never iterated for physics).
   const contactSince: Record<string, number> = {};
   const stallSince: Record<string, number> = {};
+  const shorteningIntegral: Record<string, number> = {};
   let sortedKeys: string[];
 
   if (!emergentSuture) {
@@ -224,14 +227,20 @@ function applyWilson(state: PlanetState, dtYears: number): PlanetState {
   } else {
     // --- emergentSuture scan: continent-continent ADJACENCY cells per pair,
     // independent of stress magnitude (a stalled collision sits BELOW the
-    // active-margin gate yet must stay tracked), plus the summed normal stress
-    // whose per-cell mean is the pair's closing speed. |mean| < the stall
-    // threshold ⇒ the pair is stalling; a separating rift pair loses its
-    // cont–cont adjacency as ocean opens between the halves, so it drops out of
-    // the scan rather than ever registering a (convergent) stall — the pre-#59
+    // active-margin gate yet must stay tracked), plus the summed SIGNED normal
+    // stress whose per-cell mean is the pair's NET closing speed (+ convergent,
+    // − divergent). The net signed sum — not the per-cell magnitude the first
+    // #112 cut used — is the shortening-integral fallback (issue #112, proposal
+    // §2.4): under advection-quantum jitter the per-cell |speed| mean has a noise
+    // floor that never falls below the 2 mm/yr threshold, so the instantaneous
+    // criterion measured dead (0 stalls, all sutures via the 150 Myr timeout).
+    // The signed sum lets jitter cancel — a genuinely stopped collision reads a
+    // net rate ≈0 even while individual cells jitter with large magnitude. A
+    // separating rift pair has a large NEGATIVE net rate, so |net rate| stays
+    // above threshold and it never registers a (convergent) stall — the pre-#59
     // re-suture pathology cannot recur (proposal §7).
     const pairCells = new Map<string, number>();
-    const pairSpeedSum = new Map<string, number>();
+    const pairNetSum = new Map<string, number>();
     for (let i = 0; i < count; i++) {
       if (crustType[i] !== 1) continue;
       for (let k = 0; k < 4; k++) {
@@ -242,13 +251,7 @@ function applyWilson(state: PlanetState, dtYears: number): PlanetState {
         const b = Math.max(plateId[i]!, q);
         const key = `${a}-${b}`;
         pairCells.set(key, (pairCells.get(key) ?? 0) + 1);
-        // Accumulate the per-cell |closing speed| (spec: mean |closing speed|).
-        // Taking the magnitude PER CELL, not of the pair sum, so a rotational /
-        // transpressional boundary — convergent on one flank, divergent on the
-        // other — does not cancel to a false near-zero mean and merge while it
-        // is still active. A pair is stalled only when EVERY contact cell has
-        // gone quiet, which is what collision damping actually produces.
-        pairSpeedSum.set(key, (pairSpeedSum.get(key) ?? 0) + Math.abs(boundaryStress[i]!));
+        pairNetSum.set(key, (pairNetSum.get(key) ?? 0) + boundaryStress[i]!);
         break; // count each cell once
       }
     }
@@ -259,15 +262,40 @@ function applyWilson(state: PlanetState, dtYears: number): PlanetState {
       const [a, b] = key.split('-').map(Number) as [number, number];
       if (locked(a) || locked(b)) continue;
       contactSince[key] = state.wilson.contactSince[key] ?? state.timeYears;
-      if (pairSpeedSum.get(key)! / cells < SUTURE_STALL_SPEED_M_PER_YR) {
-        // Continuous sub-threshold closing carries the stall clock forward; a
-        // step at/above threshold omits the key, restarting it from now.
-        stallSince[key] = state.wilson.stallSince[key] ?? state.timeYears;
+
+      // Tumbling-window shortening integral. On the step that opens a window the
+      // pair's net closing is the window's left endpoint, not shortening *within*
+      // it, so the anchor step contributes 0 — keeping the integral spanning
+      // exactly [anchor, now] to match the elapsed denominator (integral/elapsed
+      // is then the true average net rate, no dt bias). A continuing pair adds
+      // this step's net closing (m/yr · yr = m).
+      const priorAnchor = state.wilson.stallSince[key];
+      let anchor = priorAnchor ?? state.timeYears;
+      let integral =
+        priorAnchor === undefined
+          ? 0
+          : (state.wilson.shorteningIntegral[key] ?? 0) + (pairNetSum.get(key)! / cells) * dtYears;
+      const elapsed = state.timeYears - anchor;
+      // Evaluate only at the window boundary: if a full SUTURE_STALL_AFTER_YEARS
+      // has elapsed and the window's average |net closing rate| reached the stall
+      // speed, the window failed — re-arm the anchor to now and start fresh. A
+      // sub-threshold completed window is left intact so the merge loop below
+      // reads elapsed ≥ window and sutures. Because the net closing is summed
+      // over the whole window before the test, a single jittering step cannot
+      // reset the clock (the failure mode of the instantaneous criterion).
+      if (
+        elapsed >= SUTURE_STALL_AFTER_YEARS &&
+        Math.abs(integral) / elapsed >= SUTURE_STALL_SPEED_M_PER_YR
+      ) {
+        anchor = state.timeYears;
+        integral = 0;
       }
+      stallSince[key] = anchor;
+      shorteningIntegral[key] = integral;
     }
   }
 
-  let next: PlanetState = { ...state, wilson: { contactSince, stallSince } };
+  let next: PlanetState = { ...state, wilson: { contactSince, stallSince, shorteningIntegral } };
   let reorganized = false;
 
   // Tension-driven rift timing (Tectonics V2 stage 3, #113). Off (and before
@@ -286,9 +314,17 @@ function applyWilson(state: PlanetState, dtYears: number): PlanetState {
       if (!emergentSuture) {
         if (state.timeYears - contactSince[key]! < SUTURE_AFTER_YEARS) continue;
       } else {
+        // Stalled: a full SUTURE_STALL_AFTER_YEARS window has elapsed since the
+        // anchor whose average |net closing rate| stayed sub-threshold. (The scan
+        // re-arms any window that fails the rate test, so an intact window this
+        // wide is by construction a low-net-closing one; the rate is re-checked
+        // here so the merge decision is self-contained.)
+        const anchor = stallSince[key];
+        const elapsed = anchor === undefined ? 0 : state.timeYears - anchor;
         const stalled =
-          stallSince[key] !== undefined &&
-          state.timeYears - stallSince[key]! >= SUTURE_STALL_AFTER_YEARS;
+          anchor !== undefined &&
+          elapsed >= SUTURE_STALL_AFTER_YEARS &&
+          Math.abs(shorteningIntegral[key]!) / elapsed < SUTURE_STALL_SPEED_M_PER_YR;
         // Loud backstop: a contact that never stalls long enough still merges
         // after SUTURE_TIMEOUT_YEARS, tagged sutureTimeout so the miss is
         // visible in the event log instead of a silent full-speed grind.
@@ -384,6 +420,24 @@ function applyWilson(state: PlanetState, dtYears: number): PlanetState {
   }
 
   return next;
+}
+
+/**
+ * Rebuild a pair-keyed (`"a-b"`, a < b) bookkeeping map dropping every entry that
+ * involves the just-merged `loser` plate — its keys are stale once the plate is
+ * gone. Iterating sorted keys keeps the result canonical (kernel determinism
+ * rule: never depend on Record insertion order).
+ */
+function dropPairsWith(
+  map: Readonly<Record<string, number>>,
+  loser: number,
+): Record<string, number> {
+  const out: Record<string, number> = {};
+  for (const key of Object.keys(map).sort()) {
+    const [x, y] = key.split('-').map(Number);
+    if (x !== loser && y !== loser) out[key] = map[key]!;
+  }
+  return out;
 }
 
 /**
@@ -557,17 +611,10 @@ function suture(
   };
 
   // Contact bookkeeping involving the dead plate is stale; drop those keys from
-  // both maps (stallSince is empty on the flag-off path).
-  const contactSince: Record<string, number> = {};
-  for (const key of Object.keys(state.wilson.contactSince).sort()) {
-    const [x, y] = key.split('-').map(Number);
-    if (x !== loser && y !== loser) contactSince[key] = state.wilson.contactSince[key]!;
-  }
-  const stallSince: Record<string, number> = {};
-  for (const key of Object.keys(state.wilson.stallSince).sort()) {
-    const [x, y] = key.split('-').map(Number);
-    if (x !== loser && y !== loser) stallSince[key] = state.wilson.stallSince[key]!;
-  }
+  // all three pair-keyed maps (stallSince/shorteningIntegral empty on flag-off).
+  const contactSince = dropPairsWith(state.wilson.contactSince, loser);
+  const stallSince = dropPairsWith(state.wilson.stallSince, loser);
+  const shorteningIntegral = dropPairsWith(state.wilson.shorteningIntegral, loser);
 
   return {
     state: {
@@ -575,7 +622,7 @@ function suture(
       fields: { ...state.fields, plateId, sutureYears },
       plates,
       events: [...state.events, event],
-      wilson: { contactSince, stallSince },
+      wilson: { contactSince, stallSince, shorteningIntegral },
     },
     winner,
     loser,
