@@ -22,7 +22,14 @@
  * every candidate).
  */
 
-import { cellCount, neighborTable, type Keyframe } from 'sim-kernel';
+import {
+  ACTIVE_MARGIN_STRESS_M_PER_YR,
+  cellCount,
+  EVENT_KINDS,
+  neighborTable,
+  type Keyframe,
+  type SimEvent,
+} from 'sim-kernel';
 
 export interface KeyframeMetrics {
   timeYears: number;
@@ -650,4 +657,220 @@ function churnRate(use: readonly PlateCensusRow[]): number {
   const spanMyr = (last.timeYears - first.timeYears) / 1e6;
   if (spanMyr <= 0) return 0;
   return ((last.marginConsolidationFlipsTotal - first.marginConsolidationFlipsTotal) / spanMyr) * 100;
+}
+
+/* ------------------------------------------------------------------------- *
+ * Stage-4 rift-lifecycle instrumentation (Tectonics V2, #114; proposal §5).
+ *
+ * The stage retires the 120 Myr post-rift suture cooldown under tensionRift,
+ * measured 120 → 30 → 0 Myr. Two of the stage-4 gates cannot be read off the
+ * shape/census tables and are measured here from the streamed keyframes + the
+ * cumulative event log (NO kernel change — flag-off/main goldens untouched):
+ *
+ *  - re-suture interval of rifted halves (below): the pre-#59 ~16 Myr
+ *    re-suture pathology is the tripwire — a cooldown of 0 is only acceptable
+ *    if halves that DO re-merge take > 100 Myr to, i.e. ridge push, not the
+ *    timer, kept them apart in the interim;
+ *  - fraction of a fresh rift seam still convergent 50 Myr later (the probe):
+ *    the direct measurement that ridge push separates the halves — a seam that
+ *    is still closing at +50 Myr means the mechanism failed and only the timer
+ *    was holding it open.
+ * ------------------------------------------------------------------------- */
+
+/** Re-suture floor: rifted halves that re-merge inside this window trip the
+ *  pre-#59 re-suture pathology tripwire (healthy is > 100 Myr, or no re-suture). */
+export const RE_SUTURE_FLOOR_YEARS = 100e6;
+
+export interface ReSutureIntervals {
+  /** One interval (Myr) per matched rift→re-suture of the same pair, in rift order. */
+  intervalsMyr: number[];
+  count: number;
+  /** Minimum interval (Myr); 0 when there were no re-sutures. */
+  minMyr: number;
+  /** Median interval (Myr); 0 when there were no re-sutures. */
+  medianMyr: number;
+  /** Number of intervals ≤ RE_SUTURE_FLOOR_YEARS (the pathology count). */
+  underFloorCount: number;
+}
+
+/** Unordered-pair key for two plate ids (order-independent, collision-free for
+ *  the u8/event-log id range). */
+function pairKey(a: number, b: number): string {
+  return a < b ? `${a},${b}` : `${b},${a}`;
+}
+
+/**
+ * Re-suture intervals from the event log: for each `plateRift {plate, newPlate}`
+ * at time tR, the FIRST later `plateSuture`/`sutureTimeout` whose
+ * `{absorbed, into}` is the same unordered pair, interval = tS − tR. Each suture
+ * is consumed by at most one rift (the earliest still-unmatched one), so two
+ * rifts of a pair need two re-sutures to both count. Pure over the event list.
+ *
+ * Caveat: matching keys only on the unordered id pair, so if an id is recycled
+ * after consumption a later unrelated `{a,b}` rift could match an `{a,b}` suture
+ * that is not literally its own halves re-welding. This is inherent to reading
+ * "the same pair re-merged" from the id log; it inflates the count conservatively
+ * (toward MORE apparent re-sutures), so a clean min-interval > 100 Myr is still a
+ * trustworthy pass — treat the raw count as an upper bound.
+ */
+export function computeReSutureIntervals(events: readonly SimEvent[]): ReSutureIntervals {
+  const rifts: Array<{ t: number; key: string }> = [];
+  const sutures: Array<{ t: number; key: string; used: boolean }> = [];
+  for (const e of events) {
+    if (e.kind === EVENT_KINDS.plateRift) {
+      rifts.push({ t: e.timeYears, key: pairKey(e.data!.plate!, e.data!.newPlate!) });
+    } else if (e.kind === EVENT_KINDS.plateSuture || e.kind === EVENT_KINDS.sutureTimeout) {
+      sutures.push({ t: e.timeYears, key: pairKey(e.data!.absorbed!, e.data!.into!), used: false });
+    }
+  }
+  const intervalsMyr: number[] = [];
+  let underFloorCount = 0;
+  for (const r of rifts) {
+    // Earliest unused suture of the same pair strictly after the rift. Sutures
+    // are appended in sim (time) order, so the first match in list order is the
+    // earliest in time.
+    const match = sutures.find((s) => !s.used && s.t > r.t && s.key === r.key);
+    if (!match) continue;
+    match.used = true;
+    const dtMyr = (match.t - r.t) / 1e6;
+    intervalsMyr.push(dtMyr);
+    if (match.t - r.t <= RE_SUTURE_FLOOR_YEARS) underFloorCount++;
+  }
+  const count = intervalsMyr.length;
+  if (count === 0) {
+    return { intervalsMyr, count: 0, minMyr: 0, medianMyr: 0, underFloorCount: 0 };
+  }
+  const sorted = [...intervalsMyr].sort((a, b) => a - b);
+  const mid = count >> 1;
+  const medianMyr = count % 2 === 1 ? sorted[mid]! : (sorted[mid - 1]! + sorted[mid]!) / 2;
+  return { intervalsMyr, count, minMyr: sorted[0]!, medianMyr, underFloorCount };
+}
+
+/** One-line re-suture summary; states the > 100 Myr floor and the pathology count. */
+export function summarizeReSutureIntervals(events: readonly SimEvent[]): string {
+  const r = computeReSutureIntervals(events);
+  if (r.count === 0) {
+    return (
+      `re-suture: 0 rifted pairs re-merged` +
+      ` (gate: healthy — no pair re-sutured; floor > ${RE_SUTURE_FLOOR_YEARS / 1e6} Myr)`
+    );
+  }
+  return (
+    `re-suture: ${r.count} rifted pairs re-merged; interval Myr [min ${r.minMyr.toFixed(0)}` +
+    ` median ${r.medianMyr.toFixed(0)}]; ${r.underFloorCount} ≤ ${RE_SUTURE_FLOOR_YEARS / 1e6} Myr` +
+    ` (gate: min > ${RE_SUTURE_FLOOR_YEARS / 1e6} Myr — the pre-#59 ~16 Myr re-suture is the tripwire)`
+  );
+}
+
+/** Look-ahead for the convergent-seam probe: measure the fresh rift seam this
+ *  long after it forms. Ridge push should have flipped it fully divergent. */
+export const CONVERGENCE_LOOKAHEAD_YEARS = 50e6;
+
+export interface RiftConvergenceSummary {
+  /** Probes that came due (run lasted ≥ 50 Myr past the rift) and were scored. */
+  resolved: number;
+  /** Probes still waiting at end of run (rift within 50 Myr of the finish). */
+  pendingAtEnd: number;
+  /** Rifts whose halves shared no boundary cell on the post-rift keyframe. */
+  skippedEmpty: number;
+  /** Mean over resolved probes of the seam's convergent-cell fraction; 0 when none. */
+  meanConvergentFrac: number;
+}
+
+interface PendingProbe {
+  dueTime: number;
+  seamCells: number[];
+}
+
+export interface RiftConvergenceProbe {
+  /** Feed one keyframe (in sim order): resolves any due probes, then opens
+   *  probes for rifts newly appearing in this keyframe's event list. */
+  observe(keyframe: Keyframe): void;
+  summary(): RiftConvergenceSummary;
+}
+
+/**
+ * Streaming probe for the "seam still convergent at +50 Myr" gate. Holds only
+ * small seam-cell index lists between keyframes — never a retained field array.
+ * On each keyframe it (a) scores every probe now due against THIS keyframe's
+ * `boundaryStress`, then (b) opens a probe for each new `plateRift`, building
+ * the seam from THIS keyframe's `plateId` (the first keyframe at/after the
+ * rift). A cell is "still convergent" when its stress exceeds the active-margin
+ * threshold (positive stress = closing).
+ */
+export function createRiftConvergenceProbe(gridN: number): RiftConvergenceProbe {
+  const count = cellCount(gridN);
+  const nb = neighborTable(gridN);
+  let pending: PendingProbe[] = [];
+  const fractions: number[] = [];
+  let skippedEmpty = 0;
+  let eventCursor = 0;
+
+  return {
+    observe(keyframe: Keyframe): void {
+      const t = keyframe.timeYears;
+      const stress = keyframe.fields.boundaryStress;
+      const plateId = keyframe.fields.plateId;
+
+      // (a) Resolve every probe now due against this keyframe's stress.
+      const stillPending: PendingProbe[] = [];
+      for (const p of pending) {
+        if (p.dueTime <= t) {
+          let convergent = 0;
+          for (const c of p.seamCells) {
+            if (stress[c]! > ACTIVE_MARGIN_STRESS_M_PER_YR) convergent++;
+          }
+          fractions.push(convergent / p.seamCells.length);
+        } else {
+          stillPending.push(p);
+        }
+      }
+      pending = stillPending;
+
+      // (b) Open a probe for each rift newly visible in the cumulative log.
+      for (; eventCursor < keyframe.events.length; eventCursor++) {
+        const e = keyframe.events[eventCursor]!;
+        if (e.kind !== EVENT_KINDS.plateRift) continue;
+        const a = e.data!.plate!;
+        const b = e.data!.newPlate!;
+        // Seam = cells of A adjacent to B, unioned with cells of B adjacent to
+        // A. One ascending sweep keeps the list deterministic and in index
+        // order (a cell belongs to at most one of A/B, so no dedup needed).
+        const seamCells: number[] = [];
+        for (let i = 0; i < count; i++) {
+          const pid = plateId[i]!;
+          if (pid !== a && pid !== b) continue;
+          const other = pid === a ? b : a;
+          for (let k = 0; k < 4; k++) {
+            if (plateId[nb[i * 4 + k]!]! === other) {
+              seamCells.push(i);
+              break;
+            }
+          }
+        }
+        if (seamCells.length === 0) {
+          skippedEmpty++;
+          continue;
+        }
+        pending.push({ dueTime: e.timeYears + CONVERGENCE_LOOKAHEAD_YEARS, seamCells });
+      }
+    },
+
+    summary(): RiftConvergenceSummary {
+      const resolved = fractions.length;
+      const meanConvergentFrac =
+        resolved > 0 ? fractions.reduce((s, x) => s + x, 0) / resolved : 0;
+      return { resolved, pendingAtEnd: pending.length, skippedEmpty, meanConvergentFrac };
+    },
+  };
+}
+
+/** One-line convergent-seam summary; states the ≈0 gate framing. */
+export function summarizeRiftConvergence(s: RiftConvergenceSummary): string {
+  return (
+    `rift-convergence: ${s.resolved} seams scored at +${CONVERGENCE_LOOKAHEAD_YEARS / 1e6} Myr` +
+    ` (${s.pendingAtEnd} pending at end, ${s.skippedEmpty} skipped no-seam);` +
+    ` mean still-convergent fraction ${s.meanConvergentFrac.toFixed(3)}` +
+    ` (gate: ≈ 0 — ridge push, not the timer, separates the halves)`
+  );
 }
