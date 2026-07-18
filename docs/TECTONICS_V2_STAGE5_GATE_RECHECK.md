@@ -179,3 +179,72 @@ pass" I sketched when first recommending B — pooling and every seed-robust win
 fail. B remains the right disposition (the isolation framing is the honest one, and
 pooling/mitigation cannot recover a churn-driven decoupling), but the owner should
 promote with eyes open that the redesign's headline physical signal is isolation-only._
+
+---
+
+## Promotion execution — WIP state (owner said "ship it" 2026-07-18)
+
+### Prerequisites — both settled ✓
+- **B gate (solo-`forceKinematics` slab-corr re-verify):** 0.393 / 0.304 / 0.477 (N=64
+  s42/s1/s1337) and **0.499** (N=128 s42), speed median 4.5–4.9 — exact stage-1
+  match (byte-identical code path), all ≥ +0.3. Green.
+- **Slot-headroom (owner condition 3):** direct `plates.length` measurement at the
+  promotion config over 4.5 Gyr — **158 / 169 / 172** (N=64) and **176** (N=128 s42),
+  all well under the 200-slot budget and the 256 u8 ceiling (**≥31% headroom**).
+  Resolution: **u8 is adequate for the shipped grids; dead-slot reclamation deferred**
+  as a future change (unneeded). The codec `plateId < 256` assertion is the loud
+  guardrail. (Note: healthier than stage-3's earlier 205/256 estimate — the branch's
+  history evolved with the stage-2/4 merges.)
+
+### Promotion mechanics applied (committed, goldens NOT yet regenerated)
+- `KERNEL_BEHAVIOR_VERSION` 16 → **17** with a full rationale entry (constants.ts).
+- `createPlanetParams` defaults flipped: `forceKinematics` / `emergentSuture` /
+  `tensionRift` → **true** (onsets 0, cooldown 120 Myr).
+- New **pre-V2-promotion default golden spine** added to `golden.test.ts` and
+  auto-populated — verified **byte-identical** to the current main goldens for all
+  three seeds (pins that the promotion changed only the three V2 defaults).
+
+### ⚠️ Two blockers surfaced by the flip — MUST resolve BEFORE regenerating goldens
+The default flip fails **26 tests across 9 files** (expected scope of a promotion).
+Most are mechanical, but two are real and could alter the shipped bytes, so goldens
+are deliberately **left un-regenerated** until these are resolved:
+
+1. **Kernel suite blows the < 30 s budget** (CLAUDE.md hard rule + #115 gate). Full
+   suite now ~**54 s** (vitest Duration); the single 4.5 Gyr phase-1 invariant test
+   alone is **20.4 s** (its own soft guard is 20 s). Cause: V2's per-step torque
+   balance + rifting/suturing makes every simulated step costlier. Fix options:
+   optimize the `plateDynamics` hot path, and/or trim the expensive 4.5 Gyr invariant
+   tests (coarser grid / fewer steps / shorter span), and/or raise the documented
+   perf guards. This is a promotion gate — must land under 30 s.
+2. **Hypsometry bimodality** fails at seed 42, t=450 Myr (`invariants/phase1.test.ts`;
+   150 & 300 Myr pass). `isBimodal` wants an abyssal peak and a platform peak split
+   by a trough (−3000..−1500 m); the more-active V2 world likely fills that trough
+   with young rifted/thinned-margin crust, blurring the split. Investigate: is this a
+   real (mild, acceptable) property of the V2 world → update the test's V2 baseline /
+   relax the trough ratio with rationale; or a coarse-grid (N=32) transient; or a
+   genuine degradation. Do NOT regenerate to silence it (CLAUDE.md).
+
+### 26-test reconciliation map (for the next chunk)
+- **A. Default-tracking goldens → regenerate** (after blockers resolved): `golden.test.ts`
+  main ×3 + #105 water arm + #106 land arm; `codec.test.ts` encoded-keyframe byte
+  goldens ×3 (layout unchanged — only the encoded field values differ; no
+  HISTORY_FORMAT_VERSION bump).
+- **B. Legacy-path tests → pin explicit V2-off flags** (their setup assumed default-off):
+  `forceKinematicsScaffold.test.ts` ×2 (now assert default-**on**); `plateDynamics.test.ts`
+  flag-off identity + the 3 engaged flag-on spines (set `emergentSuture:false,
+  tensionRift:false` so the isolated forceKinematics spine stays forceKinematics-only);
+  `tensionRift.test.ts` ×2 (flag-off baseline); `wilson.test.ts` ×4 (legacy size-ramp /
+  fixed-countdown suture / #57 cooldown / #18 suturing — set the V2 flags off to test
+  the legacy wilson path they target).
+- **C. Investigate** (the two blockers above): `carbon.test.ts` ×3 and `oxygen.test.ts` ×1
+  also fail — the V2 tectonic history shifts outgassing/climate; confirm whether the
+  snowball/thermostat/O₂-monotonicity scenarios need explicit-flag pinning or a
+  V2-aware threshold, or reveal a real coupling change.
+
+### Next-firing plan
+Resolve blocker 1 (perf < 30 s) and blocker 2 (hypsometry) FIRST — they may change
+the shipped bytes. THEN category-B test edits, THEN regenerate the category-A goldens
+once, verify the snapshot diff touches only expected spines, run lint + typecheck +
+kernel suite < 30 s, `/code-review`. Only after that: ARCHITECTURE.md rewrite, dead-
+constant retirement, the §3 Earth scoreboard, the N=128 flipbook review, then PR into
+`tectonics-v2` and merge.

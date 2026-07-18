@@ -508,6 +508,120 @@ exports[`golden field hashes: legacy all-mechanisms-off > seed 1337: initial sta
 }
 `;
 
+exports[`golden field hashes: pre-V2-promotion default (forceKinematics/emergentSuture/tensionRift off) > seed 1: initial state and after 10 steps 1`] = `
+{
+  "after10Steps": {
+    "biome": "c6838ca5",
+    "boundaryStress": "e2743b1c",
+    "crustAge": "cc1b6cde",
+    "crustType": "69b4a9d5",
+    "elevation": "58e1aec3",
+    "iceFraction": "908a3632",
+    "marineLife": "b0549dc5",
+    "plateId": "9f788842",
+    "precipitation": "fc2344bd",
+    "sedimentM": "54cb13a2",
+    "sutureYears": "20a2447a",
+    "temperature": "1799ca45",
+    "timeYears": 10000000,
+    "windU": "4b9fbd35",
+    "windV": "d6885645",
+  },
+  "initial": {
+    "biome": "a7666ca5",
+    "boundaryStress": "b0549dc5",
+    "crustAge": "012fbce4",
+    "crustType": "10946445",
+    "elevation": "e44964c0",
+    "iceFraction": "b0549dc5",
+    "marineLife": "b0549dc5",
+    "plateId": "15a8f862",
+    "precipitation": "be711940",
+    "sedimentM": "b0549dc5",
+    "sutureYears": "b0549dc5",
+    "temperature": "edda30dc",
+    "windU": "32f28705",
+    "windV": "2b109c45",
+  },
+}
+`;
+
+exports[`golden field hashes: pre-V2-promotion default (forceKinematics/emergentSuture/tensionRift off) > seed 42: initial state and after 10 steps 1`] = `
+{
+  "after10Steps": {
+    "biome": "b129b048",
+    "boundaryStress": "e5a1b483",
+    "crustAge": "1b6fdaec",
+    "crustType": "47774d85",
+    "elevation": "cd0c06d7",
+    "iceFraction": "49cd0138",
+    "marineLife": "4a16c16c",
+    "plateId": "b7762ad5",
+    "precipitation": "452c6668",
+    "sedimentM": "cf263260",
+    "sutureYears": "61f1d94b",
+    "temperature": "b22708ca",
+    "timeYears": 10000000,
+    "windU": "eef1a265",
+    "windV": "c8c4f845",
+  },
+  "initial": {
+    "biome": "0dfa5ef5",
+    "boundaryStress": "b0549dc5",
+    "crustAge": "69172c16",
+    "crustType": "041eea65",
+    "elevation": "4cefbe1d",
+    "iceFraction": "b0549dc5",
+    "marineLife": "b0549dc5",
+    "plateId": "93938d05",
+    "precipitation": "5970823a",
+    "sedimentM": "b0549dc5",
+    "sutureYears": "b0549dc5",
+    "temperature": "05e4bd0a",
+    "windU": "9e350335",
+    "windV": "18f86d55",
+  },
+}
+`;
+
+exports[`golden field hashes: pre-V2-promotion default (forceKinematics/emergentSuture/tensionRift off) > seed 1337: initial state and after 10 steps 1`] = `
+{
+  "after10Steps": {
+    "biome": "c9a14048",
+    "boundaryStress": "921c344a",
+    "crustAge": "2e6f66df",
+    "crustType": "80f02b15",
+    "elevation": "0b5a420a",
+    "iceFraction": "77c87c19",
+    "marineLife": "b0549dc5",
+    "plateId": "5baf8b98",
+    "precipitation": "dd94c13d",
+    "sedimentM": "f15cd104",
+    "sutureYears": "36684dec",
+    "temperature": "3a335966",
+    "timeYears": 10000000,
+    "windU": "4bc2d7a5",
+    "windV": "4f7cbd45",
+  },
+  "initial": {
+    "biome": "02ded838",
+    "boundaryStress": "b0549dc5",
+    "crustAge": "d7f5b05d",
+    "crustType": "da81d005",
+    "elevation": "e624cd09",
+    "iceFraction": "b0549dc5",
+    "marineLife": "b0549dc5",
+    "plateId": "44207345",
+    "precipitation": "4a9e3318",
+    "sedimentM": "b0549dc5",
+    "sutureYears": "b0549dc5",
+    "temperature": "943c80bd",
+    "windU": "4d1f44f5",
+    "windV": "c917cae5",
+  },
+}
+`;
+
 exports[`golden field hashes: waterInventoryScale 2.0 (#105) > seed 42: after 10 steps, with the sea flooded above the 0 m datum 1`] = `
 {
   "after10Steps": {

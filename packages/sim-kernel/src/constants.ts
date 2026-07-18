@@ -245,8 +245,37 @@
  *     legacy all-mechanisms-off goldens (same hashes the old main goldens
  *     carried). `blockIsostasy` (#84) stays default-off, superseded by
  *     crustFates.
+ * 17 — Tectonics V2 promotion (#115, stage 5 of #109): `forceKinematics` (#111),
+ *     `emergentSuture` (#112) and `tensionRift` (#113) promoted to default-on
+ *     (onsets stay 0 — active from formation), with `riftSutureCooldownYears`
+ *     kept at 120 Myr (the #114 measurement retained the cooldown as a
+ *     mechanistically-understood hysteresis term). Plate angular velocity is now
+ *     derived state from a per-step rigid-plate torque balance instead of a fixed
+ *     random Euler draw; continent–continent pairs suture when force-balance
+ *     collision damping stalls their closing speed (loud sutureTimeout backstop)
+ *     instead of on a fixed contact countdown; and rift timing follows a physical
+ *     hazard ∝ (boundary tension)² × supercontinent thermal blanket instead of the
+ *     flat Bernoulli × hand-tuned size ramp. The default planet's history changes
+ *     wholesale: plates speed up and slow against what they touch (census median
+ *     ~6 cm/yr, poles migrate), the ocean floor stays young (median ≤56 Myr), and
+ *     supercontinents assemble and disperse without the frozen-pole lock. The
+ *     stack measured HEALTHIER than baseline over full 4.5 Gyr histories on seeds
+ *     {1,42,1337} (N=64 + N=128 seed-42): land min ≥22.3%, dispersal ≥0.7 every
+ *     Gyr bucket, monopoly 0, re-suture interval ≥140 Myr. Two honest misses are
+ *     recorded in docs/TECTONICS_V2_STAGE5_GATE_RECHECK.md: the census speed
+ *     median runs marginally hot (6.0–6.3 vs the 2–6 band) and the Forsyth & Uyeda
+ *     speed–slab correlation is an ISOLATION-only property of `forceKinematics`
+ *     (solo 0.30–0.50) that the full stack's boundary churn washes out in deep
+ *     time — the gate is re-verified under solo `forceKinematics` per the owner's
+ *     option-B decision on #115. Main goldens regenerated deliberately for the new
+ *     defaults; the pre-promotion kernel path is pinned unchanged by BOTH the
+ *     legacy all-mechanisms-off goldens and a new pre-V2-promotion default spine
+ *     (the three V2 flags explicitly off, others at their defaults). The u8
+ *     plateId width (256) is adequate under the V2 rift regime — measured worst
+ *     case 176/256 slots at N=128 seed 42 over 4.5 Gyr (31% headroom); dead-slot
+ *     reclamation is deferred as a future change, unneeded for the shipped grids.
  */
-export const KERNEL_BEHAVIOR_VERSION = 16;
+export const KERNEL_BEHAVIOR_VERSION = 17;
 
 /** IUGG mean Earth radius, m. */
 export const EARTH_RADIUS_M = 6.371e6;
