@@ -31,7 +31,17 @@ function singlePlate(overrides: Partial<PlanetState['plates'][number]> = {}): Pl
   fields.elevation.fill(300);
   return {
     timeYears: 2e9,
-    params: createPlanetParams({ seed: 7, gridN: N, numPlates: 1 }),
+    // The #115 promotion flipped the three V2 flags default-ON; this helper
+    // builds the flag-OFF wilson baseline these tests assert against (the
+    // on-path tests set tensionRift:true explicitly on top).
+    params: createPlanetParams({
+      seed: 7,
+      gridN: N,
+      numPlates: 1,
+      forceKinematics: false,
+      emergentSuture: false,
+      tensionRift: false,
+    }),
     globals: {
       landFraction: 0,
       co2: 280,

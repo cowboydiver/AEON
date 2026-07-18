@@ -32,7 +32,18 @@ function wholeSpherePlate(): PlanetState {
   fields.elevation.fill(300);
   return {
     timeYears: 2e9,
-    params: createPlanetParams({ seed: 7, gridN: N, numPlates: 1 }),
+    // This file tests the LEGACY wilson pass (fixed-countdown suture #18, size-
+    // ramp rift #61, #57 cooldown, #60 suture memory) that the Tectonics V2
+    // mechanisms replace when on. The #115 promotion flipped those three flags
+    // default-ON, so the legacy world is pinned explicitly off here.
+    params: createPlanetParams({
+      seed: 7,
+      gridN: N,
+      numPlates: 1,
+      forceKinematics: false,
+      emergentSuture: false,
+      tensionRift: false,
+    }),
     globals: { landFraction: 0, co2: 280, meanTemperatureK: 0, seaLevelM: 0, waterInventoryM: 0, oxygen: 0, oxygenReductant: 0, abiogenesisYear: -1, plateSpeedMedianMPerYr: 0, plateSpeedMinMPerYr: 0, plateSpeedMaxMPerYr: 0, oceanicContinentalSpeedRatio: 0, speedContinentalityCorr: 0, speedSlabAttachmentCorr: 0, poleStability: 0, marginConsolidationFlipsTotal: 0 },
     fields,
     plates: [makePlate({ pole: [1, 0, 0], omega: 4e-9 })],
@@ -55,7 +66,10 @@ function collisionWorld(fillerPlates: number): PlanetState {
   for (let k = 0; k < fillerPlates; k++) {
     plates.push(makePlate({ pole: [0, 1, 0], omega: 0 }));
   }
-  return { ...s, plates, fields: { ...s.fields, elevation } };
+  // Legacy wilson-pass world: pin the three V2 flags off (they default-ON since
+  // the #115 promotion; this file tests the pre-V2 suture/rift/cooldown path).
+  const params = { ...s.params, forceKinematics: false, emergentSuture: false, tensionRift: false };
+  return { ...s, params, plates, fields: { ...s.fields, elevation } };
 }
 
 /** collisionWorld plus a small static south-polar cap owned by plate 2, so

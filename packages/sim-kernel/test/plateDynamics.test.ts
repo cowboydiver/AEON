@@ -319,7 +319,7 @@ function fieldHashes(state: PlanetState): Record<string, string> {
 
 describe('flag-on golden + engaged spine (#102 pattern)', () => {
   const runFlagOn = (seed: number): PlanetState => {
-    const params = createPlanetParams({ seed, gridN: 32, forceKinematics: true });
+    const params = createPlanetParams({ seed, gridN: 32, forceKinematics: true, emergentSuture: false, tensionRift: false });
     const ctx = makeCtx(seed);
     let s = createInitialState(params);
     for (let i = 0; i < 100; i++) s = step(s, params.stepYears, ctx);
@@ -332,7 +332,7 @@ describe('flag-on golden + engaged spine (#102 pattern)', () => {
   // silently pinning an inert path).
   for (const seed of [1, 42, 1337] as const) {
     it(`seed ${seed}: engaged (≥1 plate speed changed > 20%) and pinned`, () => {
-      const params = createPlanetParams({ seed, gridN: 32, forceKinematics: true });
+      const params = createPlanetParams({ seed, gridN: 32, forceKinematics: true, emergentSuture: false, tensionRift: false });
       const speed0 = createInitialState(params).plates.map((p) => p.angularVelRadPerYr);
       const final = runFlagOn(seed);
       let maxRel = 0;
@@ -356,8 +356,17 @@ describe('flag-off byte-identity', () => {
   it('the default (flag-off) path leaves plateDynamics an exact identity', () => {
     // With forceKinematics off, the default SYSTEMS pipeline (which now
     // includes plateDynamics) must produce the same fields as a pipeline with
-    // plateDynamics explicitly removed — the guarantee the main goldens rest on.
-    const params = createPlanetParams({ seed: 1, gridN: 16 });
+    // plateDynamics explicitly removed — the guarantee the pre-V2-promotion
+    // (flag-off) golden spine rests on. Since the #115 promotion flipped the
+    // three V2 flags default-ON, this test pins them explicitly OFF to exercise
+    // the flag-off identity path.
+    const params = createPlanetParams({
+      seed: 1,
+      gridN: 16,
+      forceKinematics: false,
+      emergentSuture: false,
+      tensionRift: false,
+    });
     expect(params.forceKinematics).toBe(false);
     const withoutDynamics = SYSTEMS.filter((s) => s.name !== 'plateDynamics');
     const ctx1 = makeCtx(params.seed);

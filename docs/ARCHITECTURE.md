@@ -131,10 +131,18 @@ PlateRecord = { eulerPole (unit Vec3), angularVelRadPerYr,
                 blanketYears }             // tensionRift supercontinent thermal-blanket age (#113 stage 3)
 ```
 
-Kinematics are assigned at creation from `rng.fork('plateKinematics')`:
+Initial kinematics are seeded at creation from `rng.fork('plateKinematics')`:
 uniform pole on the sphere, speed uniform in 1.5–8 × 10⁻⁹ rad/yr
-(≈ 1–5 cm/yr on an Earth-radius sphere). Dead plates (sutured away, #18)
-keep their slot so `plateId` values stay stable forever.
+(≈ 1–5 cm/yr on an Earth-radius sphere). **Under the promoted default
+(`forceKinematics`, Tectonics V2 stage 1, #111, default-on since
+`KERNEL_BEHAVIOR_VERSION` 17) this seed is only the t=0 state: from the first
+step each live plate's ω⃗ (`omegaVec`) is re-derived every step by a rigid-plate
+torque balance (`plateDynamics.ts`) — ridge push, slab pull and basal drag —
+so speeds and poles are dynamic state, not frozen constants** (see the Wilson
+section and #111 for the balance). Flag-off (the legacy spine, still exercised
+by the pinned `--no-force-kinematics` tests) the assigned pole/speed persist
+unchanged. Dead plates (sutured away, #18) keep their slot so `plateId` values
+stay stable forever.
 
 `crustType` is initialized as the top `CONTINENTAL_CRUST_FRACTION` (40%,
 Earth's ~41% incl. shelves) of initial elevation — the threshold sits below
@@ -269,12 +277,31 @@ Oceanic cells on active convergent margins (stress > 0.005 m/yr) are exempt
 from subsidence relaxation; when a margin deactivates they rejoin it and
 decay to the age-depth curve over a few Myr (#59 arc memory — a half-built
 arc survives the margin flickering off it, which is what keeps arc creation
-effective at fine grids). Plate speeds do not slow in collisions in Phase 1
-(documented simplification); the 9 km cap plus #19's erosion bound the
-consequences. Old mountain belts advect with their plates and persist until
-erosion (#19) ages them.
+effective at fine grids). Under the promoted default (`forceKinematics`,
+#111) plate speeds **do** slow in collisions: the torque balance loses the
+colliding plate's driving force to basal drag, so a stalling contact
+decelerates — the very signal the stall-detected suture (`emergentSuture`,
+below) keys on. (On the legacy flag-off spine, speeds were fixed and did not
+slow — a documented Phase 1 simplification; the 9 km cap plus #19's erosion
+bounded the consequences.) Old mountain belts advect with their plates and
+persist until erosion (#19) ages them.
 
 ### Wilson cycles (#18)
+
+> **Tectonics V2 promotion (stage 5, #115, `KERNEL_BEHAVIOR_VERSION` 17).**
+> As of the stage-5 promotion the three V2 mechanisms are **default-on**:
+> `forceKinematics` (torque-balance ω⃗, #111), `emergentSuture` (stall-detected
+> merge, #112), and `tensionRift` (tension²-hazard rift timing, #113), with the
+> post-rift cooldown kept at 120 Myr (`riftSutureCooldownYears`; stage 4 #114
+> measured its retirement and declined it — see `TECTONICS_V2_STAGE4_FINDINGS.md`).
+> The prose below describes both paths; where it names a "legacy"/"flag-off"
+> scheme (the fixed 60 Myr suture countdown, the `riftSizeRamp`/`RIFT_MIN_AGE`
+> size-ramp rift trigger, the perpendicular translating-pole + ocean-seeking
+> azimuth fan) that is now the **`--no-*` flag-off spine**, exercised only by
+> the pinned legacy tests; the promoted default runs the V2 mechanisms. The
+> promoted world's measured Earth-scoreboard (with its honest misses — the
+> deep-time speed–slab-attachment correlation washes out in the busier stack;
+> census speed runs ~6 cm/yr) is in `TECTONICS_V2_STAGE5_SCOREBOARD.md`.
 
 The `wilson` system (after tectonics in the pipeline) reorganizes plates so
 deep time tells a story. The whole trigger clock was retuned 4× slower in

@@ -148,6 +148,39 @@ describe('golden field hashes: legacy all-mechanisms-off', () => {
 });
 
 /**
+ * Pre-V2-promotion default spine: the shipped DEFAULT world with only the three
+ * Tectonics V2 mechanisms (#111/#112/#113) explicitly off, everything else at
+ * its default (crustFates + marinePlanation on). These are the exact hashes the
+ * MAIN goldens above carried BEFORE the KERNEL_BEHAVIOR_VERSION 17 promotion
+ * (auto-populated verbatim, not regenerated), so they pin that the promotion
+ * changed only the three V2 defaults — the V2 flag-off code path stayed
+ * byte-identical on the real default world, not merely on the all-off world the
+ * legacy spine covers.
+ */
+describe('golden field hashes: pre-V2-promotion default (forceKinematics/emergentSuture/tensionRift off)', () => {
+  for (const seed of GOLDEN_SEEDS) {
+    it(`seed ${seed}: initial state and after 10 steps`, () => {
+      const params = createPlanetParams({
+        seed,
+        forceKinematics: false,
+        emergentSuture: false,
+        tensionRift: false,
+      });
+      const initial = createInitialState(params);
+      const ctx: SimContext = { rng: createRng(params.seed).fork('sim') };
+      let stepped = initial;
+      for (let i = 0; i < 10; i++) {
+        stepped = step(stepped, params.stepYears, ctx);
+      }
+      expect({
+        initial: fieldHashes(initial),
+        after10Steps: { timeYears: stepped.timeYears, ...fieldHashes(stepped) },
+      }).toMatchSnapshot();
+    });
+  }
+});
+
+/**
  * Isolated spine for the #84 prototype (still default-off, superseded by
  * crustFates): pinned with the other mechanisms explicitly off, so these are
  * the same hashes the block carried before the promotion. Initial state is

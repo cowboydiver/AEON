@@ -245,8 +245,37 @@
  *     legacy all-mechanisms-off goldens (same hashes the old main goldens
  *     carried). `blockIsostasy` (#84) stays default-off, superseded by
  *     crustFates.
+ * 17 — Tectonics V2 promotion (#115, stage 5 of #109): `forceKinematics` (#111),
+ *     `emergentSuture` (#112) and `tensionRift` (#113) promoted to default-on
+ *     (onsets stay 0 — active from formation), with `riftSutureCooldownYears`
+ *     kept at 120 Myr (the #114 measurement retained the cooldown as a
+ *     mechanistically-understood hysteresis term). Plate angular velocity is now
+ *     derived state from a per-step rigid-plate torque balance instead of a fixed
+ *     random Euler draw; continent–continent pairs suture when force-balance
+ *     collision damping stalls their closing speed (loud sutureTimeout backstop)
+ *     instead of on a fixed contact countdown; and rift timing follows a physical
+ *     hazard ∝ (boundary tension)² × supercontinent thermal blanket instead of the
+ *     flat Bernoulli × hand-tuned size ramp. The default planet's history changes
+ *     wholesale: plates speed up and slow against what they touch (census median
+ *     ~6 cm/yr, poles migrate), the ocean floor stays young (median ≤56 Myr), and
+ *     supercontinents assemble and disperse without the frozen-pole lock. The
+ *     stack measured HEALTHIER than baseline over full 4.5 Gyr histories on seeds
+ *     {1,42,1337} (N=64 + N=128 seed-42): land min ≥22.3%, dispersal ≥0.7 every
+ *     Gyr bucket, monopoly 0, re-suture interval ≥140 Myr. Two honest misses are
+ *     recorded in docs/TECTONICS_V2_STAGE5_GATE_RECHECK.md: the census speed
+ *     median runs marginally hot (6.0–6.3 vs the 2–6 band) and the Forsyth & Uyeda
+ *     speed–slab correlation is an ISOLATION-only property of `forceKinematics`
+ *     (solo 0.30–0.50) that the full stack's boundary churn washes out in deep
+ *     time — the gate is re-verified under solo `forceKinematics` per the owner's
+ *     option-B decision on #115. Main goldens regenerated deliberately for the new
+ *     defaults; the pre-promotion kernel path is pinned unchanged by BOTH the
+ *     legacy all-mechanisms-off goldens and a new pre-V2-promotion default spine
+ *     (the three V2 flags explicitly off, others at their defaults). The u8
+ *     plateId width (256) is adequate under the V2 rift regime — measured worst
+ *     case 176/256 slots at N=128 seed 42 over 4.5 Gyr (31% headroom); dead-slot
+ *     reclamation is deferred as a future change, unneeded for the shipped grids.
  */
-export const KERNEL_BEHAVIOR_VERSION = 16;
+export const KERNEL_BEHAVIOR_VERSION = 17;
 
 /** IUGG mean Earth radius, m. */
 export const EARTH_RADIUS_M = 6.371e6;
@@ -976,6 +1005,13 @@ export const MAX_PLATES = 16;
  * continent-continent grind before each merge stays above the #20 10%
  * floor).
  */
+// LEGACY (flag-off `--no-emergent-suture` spine only since
+// KERNEL_BEHAVIOR_VERSION 17 / stage-5 promotion): the promoted default runs
+// `emergentSuture`, which *detects* the kinematic stall (net-signed shortening
+// integral) instead of scheduling the merge on this fixed countdown. Still read
+// on the flag-off path (and as the scaling anchor for the derived stall/timeout
+// windows), so kept. The post-rift RIFT_SUTURE_COOLDOWN_YEARS lock is unchanged
+// and remains active on the promoted default.
 export const SUTURE_AFTER_YEARS = 60e6;
 
 /** Minimum simultaneous cont-cont convergent boundary cells to count as contact. */
@@ -1042,6 +1078,10 @@ export const SUTURE_TIMEOUT_YEARS = 1.5e8;
  * ordering stable (hemisphere-scale rift gate vs suture clock), which the
  * wilson test windows are derived from.
  */
+// LEGACY (flag-off `--no-tension-rift` spine only since KERNEL_BEHAVIOR_VERSION
+// 17 / stage-5 promotion): the promoted default runs `tensionRift`, which
+// deletes the maturity age gate. Kept because the pinned legacy tests still
+// exercise the size-ramp trigger path.
 export const RIFT_MIN_AGE_YEARS = 600e6;
 
 /** A plate must own at least this fraction of the sphere to rift. */
@@ -1082,6 +1122,10 @@ export const RIFT_DRAW_QUANTUM_YEARS = 1e4;
  * issue targets, vs ~45 Myr before. The old 0.006 was tuned to pass the
  * #57/#59 dispersal metrics, not to match a believable tempo.
  */
+// LEGACY (flag-off `--no-tension-rift` spine only since KERNEL_BEHAVIOR_VERSION
+// 17 / stage-5 promotion): `tensionRift` replaces this flat base rate × size
+// ramp with a physical λ = RIFT_HAZARD_AT_REF_PER_MYR × tension² × blanket. Kept
+// for the pinned legacy tests.
 export const RIFT_PROBABILITY_PER_MYR = 0.0015;
 
 /**
@@ -1143,6 +1187,10 @@ export const RIFT_FRAGMENT_MAX_FRACTION = 0.4;
  * all but vanish). Ordinary sub-knee plates still feel the full 4x
  * slowdown; the ramp just reaches the (halved) reference sooner.
  */
+// LEGACY (flag-off `--no-tension-rift` spine only since KERNEL_BEHAVIOR_VERSION
+// 17 / stage-5 promotion): the whole size-ramp trigger is superseded by the
+// tension²+blanket hazard on the promoted default path. The carve machinery it
+// fed is unchanged; only the *trigger* moved. Kept for the pinned legacy tests.
 export const RIFT_SIZE_RATE_KNEE = 0.3;
 export const RIFT_SIZE_RATE_REF_FRACTION = 0.55;
 export const RIFT_SIZE_RATE_REF_MULTIPLE = 16;
@@ -1159,6 +1207,12 @@ export const RIFT_SIZE_RATE_EXPONENT = 2;
  * subducting oceanic crust — continent-on-continent grinding during the
  * post-rift lock was the dominant continental-area bleed (#16, #58).
  */
+// LEGACY (flag-off `--no-tension-rift` spine only since KERNEL_BEHAVIOR_VERSION
+// 17 / stage-5 promotion): under `tensionRift` a fragment inherits the parent's
+// ω⃗/pole and the halves separate on ridge push, so the perpendicular
+// translating-pole construction and this ocean-seeking azimuth fan
+// (RIFT_AZIMUTH_CANDIDATES / RIFT_OCEAN_SCAN_RAD / RIFT_OCEAN_SCAN_SAMPLES) go
+// dead on the default path. Kept for the pinned legacy tests.
 export const RIFT_AZIMUTH_CANDIDATES = 8;
 
 /**
