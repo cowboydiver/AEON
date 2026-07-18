@@ -132,7 +132,11 @@ describe('phase 1 invariants (#20)', () => {
         expect(isBimodal(state.fields.elevation), `seed ${seed} t=${checkpoint} Myr`).toBe(true);
       }
     }
-  });
+    // Explicit 90 s timeout (matches the relaxed 4.5 Gyr soft guard below): the
+    // N=64 V2 default world (torque balance + tension rifting) runs ~31 s here,
+    // just over vitest's 30 s default — the <30 s suite budget is lifted for the
+    // promotion (#115). Not a runaway; a runaway trips this ceiling loudly.
+  }, 90_000);
 
   it('4.5 Gyr coarse-grid runs stay finite, in physical bounds, with sane land, never monopoly-locked', () => {
     const started = performance.now();
