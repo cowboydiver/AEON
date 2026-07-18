@@ -137,6 +137,10 @@ one exists. **It does not.**
 | birth window mean, 10–100 Myr | 0.802 | **0.257** | 0.487 |
 | birth window mean, 10–200 Myr | 0.643 | **0.192** | 0.365 |
 
+N=128 seed 42 corroborates the shape: meanPerKeyframe 0.070, pooledAll 0.097,
+pooledOceanic 0.117, engagedTransient(10–200 Myr) 0.331 — pooling fails, the
+transient is only marginal. Same story as N=64.
+
 **Findings:**
 - **Large-sample pooling does not rescue it** (0.05–0.14). The weak deep-time mean
   is not a small-sample per-keyframe noise artifact — the speed↔slab relationship
