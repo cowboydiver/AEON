@@ -111,3 +111,67 @@ stage-5 branch carries only this measurement doc.
 Executor recommendation: **A or B.** The misses are real and must be reported
 honestly, but they reflect a more active, more Earth-like tectonic engine rather
 than a defect, and they do not touch the shipped world's habitability shape.
+
+---
+
+## Owner decision: **B** (2026-07-18, #115 — "Go ahead with option B")
+
+Re-scope the slab-attachment-correlation gate to a **solo-`forceKinematics`
+re-verification** (where it passes 0.30–0.50), read it as "the mechanism works in
+isolation," document the full-stack behaviour honestly, then promote.
+
+### Window study — does the signal survive the full stack in *any* principled window?
+
+Before adopting the isolation framing, I measured candidate full-stack gate
+definitions (throwaway spikes `packages/sim-cli/src/spikes/stage5_slabcorr.ts`,
+`stage5_birthwin.ts`; Pearson is scale-invariant so R and cell-area drop out).
+Goal: NOT to cherry-pick a passing window, but to find out whether a defensible
+one exists. **It does not.**
+
+| definition (full stack, ≥ +0.3 wanted) | s42 N=64 | s1 N=64 | s1337 N=64 |
+|---|---|---|---|
+| mean of per-keyframe pearson, past 1 Gyr | 0.086 | 0.042 | 0.019 |
+| **pooled** pearson over all plate-pairs, past 1 Gyr (n≈5300) | 0.118 | 0.083 | 0.053 |
+| **pooled, oceanic-only** (contFrac < 0.5, n≈3900) | 0.138 | 0.081 | 0.052 |
+| birth window mean, 10–50 Myr | 0.860 | **0.053** | 0.558 |
+| birth window mean, 10–100 Myr | 0.802 | **0.257** | 0.487 |
+| birth window mean, 10–200 Myr | 0.643 | **0.192** | 0.365 |
+
+**Findings:**
+- **Large-sample pooling does not rescue it** (0.05–0.14). The weak deep-time mean
+  is not a small-sample per-keyframe noise artifact — the speed↔slab relationship
+  is genuinely weak in the shipped deep-time world, even among oceanic plates.
+- **No seed-robust window passes.** Seed 42 and 1337 pass the birth window, but
+  **seed 1 never reaches +0.3 at any width** (peak 0.257 at 10–100 Myr). The strong
+  0.79–0.92 numbers seen earlier were seed-42's first ~70 Myr only — the
+  initial-condition engagement transient as the random ω⃗ draws first pick up slab
+  pull, not a steady-state property, and not reproducible across seeds.
+
+### Physical interpretation (a real property, not a bug)
+`forceKinematics` in isolation produces the Forsyth & Uyeda correlation because
+plates are long-lived: oceanic plates accumulate attached slab and accelerate
+together, cratons stay slow — a stable speed↔slab coupling (solo census
+0.30–0.50). Adding `tensionRift` + `emergentSuture` reorganizes boundaries faster
+than the τ≈10 Myr velocity relaxation can re-equilibrate: rift fragments **inherit**
+the parent's fast ω⃗ but carry **no** fresh slab (high speed, low slab), and sutures
+merge slab-laden plates into slow composites. Instantaneous speed is therefore a
+mix of inherited momentum and current forcing, decoupled from instantaneous slab
+attachment. The signal is legible only when plates sit still long enough to
+equilibrate — which the active shipped world rarely allows.
+
+### Consequence for stage 5 (honest statement of what B ships)
+**The shipped tectonics-v2 world does not exhibit the Forsyth & Uyeda slab-speed
+correlation as a measurable steady-state signal.** The torque balance (#109's stated
+goal) is in place and working; the F&U correlation — the *validation metric* the
+owner installed for stage 1 — is an **isolation-only** property of `forceKinematics`,
+washed out by the churn of the full mechanism stack. Option B ships this with the
+washout documented as a known, mechanistically-understood property, and re-verifies
+the gate under solo `forceKinematics` (unchanged code path, stage-1 numbers
+0.30–0.50 hold). The census `speedSlabAttachmentCorr` readout stays as an honest
+diagnostic; the §3 Earth scoreboard will record the full-stack washout as a miss.
+
+_Executor note: this is a materially more sobering finding than the "clean windowed
+pass" I sketched when first recommending B — pooling and every seed-robust window
+fail. B remains the right disposition (the isolation framing is the honest one, and
+pooling/mitigation cannot recover a churn-driven decoupling), but the owner should
+promote with eyes open that the redesign's headline physical signal is isolation-only._
