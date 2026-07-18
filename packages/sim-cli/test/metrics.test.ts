@@ -1,17 +1,32 @@
 import { describe, expect, it } from 'vitest';
-import { cellCount, faceRCToIndex, FIELD_NAMES, type Fields, type Keyframe } from 'sim-kernel';
+import {
+  ACTIVE_MARGIN_STRESS_M_PER_YR,
+  cellCount,
+  EVENT_KINDS,
+  faceRCToIndex,
+  FIELD_NAMES,
+  type Fields,
+  type Keyframe,
+  type SimEvent,
+} from 'sim-kernel';
 import {
   computeCrustStats,
   computeKeyframeMetrics,
   computePlateCensusRow,
+  computeReSutureIntervals,
+  createRiftConvergenceProbe,
+  CONVERGENCE_LOOKAHEAD_YEARS,
   DISPERSED_MAX_PLATE_FRAC,
   PLATENESS_TOP_DECILE,
+  RE_SUTURE_FLOOR_YEARS,
   SEAFLOOR_AGE_BIN_COUNT,
   SEAFLOOR_AGE_BIN_WIDTH_YR,
   SHALLOW_OCEAN_DEPTH_M,
   summarizeMetrics,
   summarizePairedMetrics,
   summarizePlateCensus,
+  summarizeReSutureIntervals,
+  summarizeRiftConvergence,
   type KeyframeMetrics,
   type PlateCensusRow,
 } from '../src/metrics';
@@ -412,5 +427,178 @@ describe('summarizePlateCensus', () => {
   // Reference the width const so an accidental unit drift trips a test.
   it('bins span 20 Myr', () => {
     expect(SEAFLOOR_AGE_BIN_WIDTH_YR).toBe(20e6);
+  });
+});
+
+/* ------------------------------------------------------------------------- *
+ * Stage-4 rift-lifecycle instrumentation (#114, proposal §5). Two gates the
+ * cooldown-retirement measurement is written against: the re-suture interval
+ * of rifted halves (the pre-#59 ~16 Myr re-suture pathology tripwire) and the
+ * fraction of a fresh rift seam still convergent 50 Myr later (the direct
+ * proof ridge push, not the timer, separates the halves).
+ * ------------------------------------------------------------------------- */
+
+/** Build a plateRift event (data {plate, newPlate, newPlateCells}). */
+function rift(timeYears: number, plate: number, newPlate: number): SimEvent {
+  return { timeYears, kind: EVENT_KINDS.plateRift, data: { plate, newPlate, newPlateCells: 1 } };
+}
+/** Build a plateSuture (or sutureTimeout) event (data {absorbed, into, absorbedCells}). */
+function suture(timeYears: number, absorbed: number, into: number, timeout = false): SimEvent {
+  return {
+    timeYears,
+    kind: timeout ? EVENT_KINDS.sutureTimeout : EVENT_KINDS.plateSuture,
+    data: { absorbed, into, absorbedCells: 1 },
+  };
+}
+
+describe('computeReSutureIntervals (#114 re-suture gate)', () => {
+  it('matches each rift to the first later suture of the same unordered pair', () => {
+    const events: SimEvent[] = [
+      rift(100e6, 0, 5),
+      suture(250e6, 5, 0), // pair {0,5} re-merges 150 Myr later (healthy)
+      rift(300e6, 1, 6),
+      suture(310e6, 1, 6, true), // pair {1,6} re-merges 10 Myr later (pathology)
+      suture(400e6, 2, 3), // matches no rift pair
+    ];
+    const r = computeReSutureIntervals(events);
+    expect(r.count).toBe(2);
+    // Intervals stored in rift order: 150 Myr then 10 Myr.
+    expect(r.intervalsMyr).toEqual([150, 10]);
+    expect(r.minMyr).toBe(10);
+    expect(r.medianMyr).toBe(80); // mean of the two middle values
+    expect(r.underFloorCount).toBe(1); // only the 10 Myr one is <= 100 Myr
+  });
+
+  it('ignores a suture that precedes the rift (only forward matches count)', () => {
+    const events: SimEvent[] = [suture(50e6, 0, 5), rift(100e6, 0, 5)];
+    expect(computeReSutureIntervals(events).count).toBe(0);
+  });
+
+  it('consumes each suture at most once, so two rifts of a pair need two sutures', () => {
+    const events: SimEvent[] = [
+      rift(100e6, 0, 5),
+      rift(120e6, 0, 5), // same pair rifts again before any re-merge
+      suture(200e6, 0, 5), // only one re-suture available
+    ];
+    const r = computeReSutureIntervals(events);
+    // The earliest rift claims the suture (100 Myr interval); the second finds none.
+    expect(r.count).toBe(1);
+    expect(r.intervalsMyr).toEqual([100]);
+  });
+
+  it('reports zero re-sutures cleanly (the healthy deep-time case)', () => {
+    const r = computeReSutureIntervals([rift(100e6, 0, 5)]);
+    expect(r.count).toBe(0);
+    expect(r.minMyr).toBe(0);
+    expect(r.medianMyr).toBe(0);
+    expect(r.underFloorCount).toBe(0);
+  });
+
+  it('summary states the >100 Myr floor and the pathology tripwire', () => {
+    const s = summarizeReSutureIntervals([rift(100e6, 0, 5), suture(310e6, 5, 0)]);
+    expect(s).toContain('re-suture');
+    expect(s).toContain(`${RE_SUTURE_FLOOR_YEARS / 1e6}`); // the 100 Myr floor
+  });
+});
+
+const CN = 8; // grid N for the convergence-probe tests
+
+/** A zeroed keyframe with all fields present, at time t. */
+function probeKeyframe(timeYears: number, events: SimEvent[] = []): Keyframe {
+  const count = cellCount(CN);
+  const fields = Object.fromEntries(
+    FIELD_NAMES.map((name) => [name, new Float32Array(count)]),
+  ) as Fields;
+  const globals = {
+    landFraction: 0, co2: 0, meanTemperatureK: 0, seaLevelM: 0, waterInventoryM: 0,
+    oxygen: 0, oxygenReductant: 0, abiogenesisYear: -1, plateSpeedMedianMPerYr: 0,
+    plateSpeedMinMPerYr: 0, plateSpeedMaxMPerYr: 0, oceanicContinentalSpeedRatio: 0,
+    speedContinentalityCorr: 0, speedSlabAttachmentCorr: 0, poleStability: 0,
+    marginConsolidationFlipsTotal: 0,
+  };
+  return { timeYears, fields, globals, events };
+}
+
+describe('createRiftConvergenceProbe (#114 ridge-push separation gate)', () => {
+  it('records a fully-divergent seam as 0 convergent at +50 Myr', () => {
+    // Rift at t=0 splits a 2x2 patch on face 0 (plate A=1) from its neighbor
+    // column (plate B=2). Seam = A cells 4-adjacent to a B cell.
+    const probe = createRiftConvergenceProbe(CN);
+    const kf0 = probeKeyframe(0, [rift(0, 1, 2)]);
+    // Paint plate A on face-0 col MID, plate B on col MID+1 (adjacent).
+    for (let r = 0; r < CN; r++) {
+      kf0.fields.plateId[faceRCToIndex(0, r, 4, CN)] = 1;
+      kf0.fields.plateId[faceRCToIndex(0, r, 5, CN)] = 2;
+    }
+    probe.observe(kf0);
+    // 50 Myr later: seam boundaryStress all negative (divergent) => 0 convergent.
+    const kf1 = probeKeyframe(CONVERGENCE_LOOKAHEAD_YEARS);
+    kf1.fields.plateId.set(kf0.fields.plateId);
+    kf1.fields.boundaryStress.fill(-1); // everything opening
+    probe.observe(kf1);
+    const s = probe.summary();
+    expect(s.resolved).toBe(1);
+    expect(s.skippedEmpty).toBe(0);
+    expect(s.pendingAtEnd).toBe(0);
+    expect(s.meanConvergentFrac).toBe(0);
+  });
+
+  it('counts seam cells above the active-margin stress as convergent', () => {
+    const probe = createRiftConvergenceProbe(CN);
+    const kf0 = probeKeyframe(0, [rift(0, 1, 2)]);
+    // A single A cell adjacent to a single B cell => a 2-cell seam (the A cell
+    // adjacent to B, unioned with the B cell adjacent to A).
+    kf0.fields.plateId[faceRCToIndex(0, 4, 4, CN)] = 1;
+    kf0.fields.plateId[faceRCToIndex(0, 4, 5, CN)] = 2;
+    probe.observe(kf0);
+    const kf1 = probeKeyframe(CONVERGENCE_LOOKAHEAD_YEARS);
+    kf1.fields.plateId.set(kf0.fields.plateId);
+    // Both seam cells convergent above the threshold => fraction 1.
+    kf1.fields.boundaryStress[faceRCToIndex(0, 4, 4, CN)] = ACTIVE_MARGIN_STRESS_M_PER_YR + 0.01;
+    kf1.fields.boundaryStress[faceRCToIndex(0, 4, 5, CN)] = ACTIVE_MARGIN_STRESS_M_PER_YR + 0.01;
+    probe.observe(kf1);
+    expect(probe.summary().meanConvergentFrac).toBe(1);
+  });
+
+  it('treats exactly-threshold stress as NOT convergent (strict >)', () => {
+    const probe = createRiftConvergenceProbe(CN);
+    const kf0 = probeKeyframe(0, [rift(0, 1, 2)]);
+    kf0.fields.plateId[faceRCToIndex(0, 4, 4, CN)] = 1;
+    kf0.fields.plateId[faceRCToIndex(0, 4, 5, CN)] = 2;
+    probe.observe(kf0);
+    const kf1 = probeKeyframe(CONVERGENCE_LOOKAHEAD_YEARS);
+    kf1.fields.plateId.set(kf0.fields.plateId);
+    kf1.fields.boundaryStress[faceRCToIndex(0, 4, 4, CN)] = ACTIVE_MARGIN_STRESS_M_PER_YR;
+    probe.observe(kf1);
+    expect(probe.summary().meanConvergentFrac).toBe(0);
+  });
+
+  it('skips a rift whose halves share no boundary (empty seam)', () => {
+    const probe = createRiftConvergenceProbe(CN);
+    const kf0 = probeKeyframe(0, [rift(0, 1, 2)]);
+    // Plate A present, plate B absent => no A cell is adjacent to a B cell.
+    kf0.fields.plateId[faceRCToIndex(0, 4, 4, CN)] = 1;
+    probe.observe(kf0);
+    const s = probe.summary();
+    expect(s.skippedEmpty).toBe(1);
+    expect(s.resolved).toBe(0);
+  });
+
+  it('leaves a probe pending when the run ends < 50 Myr after the rift', () => {
+    const probe = createRiftConvergenceProbe(CN);
+    const kf0 = probeKeyframe(0, [rift(0, 1, 2)]);
+    kf0.fields.plateId[faceRCToIndex(0, 4, 4, CN)] = 1;
+    kf0.fields.plateId[faceRCToIndex(0, 4, 5, CN)] = 2;
+    probe.observe(kf0);
+    // Only 10 Myr elapses — the probe never comes due.
+    probe.observe(probeKeyframe(10e6));
+    const s = probe.summary();
+    expect(s.resolved).toBe(0);
+    expect(s.pendingAtEnd).toBe(1);
+  });
+
+  it('summary reports the mean and the ≈0 gate framing', () => {
+    const probe = createRiftConvergenceProbe(CN);
+    expect(summarizeRiftConvergence(probe.summary())).toContain('convergent');
   });
 });

@@ -18,10 +18,13 @@ import {
   computeCrustStats,
   computeKeyframeMetrics,
   computePlateCensusRow,
+  createRiftConvergenceProbe,
   formatPlateCensusRow,
   summarizeMetrics,
   summarizePairedMetrics,
   summarizePlateCensus,
+  summarizeReSutureIntervals,
+  summarizeRiftConvergence,
   type KeyframeMetrics,
   type PlateCensusRow,
 } from './metrics';
@@ -119,6 +122,19 @@ Options:
                               hazard × size ramp; fragment inherits parent ω⃗.
                               Needs --force-kinematics for a non-zero tension
                               (default off)
+  --rift-suture-cooldown <yr> post-rift suture cooldown under --tension-rift
+                              (Tectonics V2 stage 4, #114); default 120e6, swept
+                              120e6→30e6→0 for the cooldown-retirement measurement.
+                              No effect without --tension-rift (flag-off always
+                              uses the legacy 120 Myr constant)
+  --suture-analysis           print the stage-4 rift-lifecycle harness (#114):
+                              re-suture interval of rifted halves from the event
+                              log (the pre-#59 ~16 Myr re-suture pathology is the
+                              tripwire; healthy > 100 Myr or no re-suture), and
+                              the mean fraction of a fresh rift seam still
+                              convergent 50 Myr later (≈ 0 proves ridge push, not
+                              the timer, separates the halves). Composable with
+                              --report/--metrics; measurement only
   --step-years <years>        simulation step size (default 1e6); use e.g.
                               0.5e6 for dt-halving checks of lagged datums
   --water-scale <factor>      dimensionless multiplier on the derived water
@@ -206,6 +222,8 @@ const { values } = parseArgs({
     'no-force-kinematics': { type: 'boolean', default: false },
     'no-emergent-suture': { type: 'boolean', default: false },
     'no-tension-rift': { type: 'boolean', default: false },
+    'rift-suture-cooldown': { type: 'string' },
+    'suture-analysis': { type: 'boolean', default: false },
     ab: { type: 'string' },
     'ab-branch': { type: 'string' },
     'ab-block-isostasy': { type: 'string' },
@@ -236,6 +254,14 @@ const untilYears = numArg(values.until, 'until')!;
 const keyframeIntervalYears = numArg(values['keyframe-interval'], 'keyframe-interval');
 const gridN = numArg(values['grid-n'], 'grid-n');
 const stepYears = numArg(values['step-years'], 'step-years');
+// Stage 4 (#114): sweep the tensionRift-only post-rift suture cooldown. Only
+// meaningful with --tension-rift; ignored otherwise (the flag-off path always
+// uses the legacy 120 Myr constant). Used for the 120→30→0 Myr measured steps.
+const riftSutureCooldownYears = numArg(values['rift-suture-cooldown'], 'rift-suture-cooldown');
+if (riftSutureCooldownYears !== undefined && riftSutureCooldownYears < 0) {
+  console.error(`sim-cli: --rift-suture-cooldown must be ≥ 0: ${riftSutureCooldownYears}`);
+  process.exit(2);
+}
 const waterScale = numArg(values['water-scale'], 'water-scale');
 if (waterScale !== undefined && waterScale <= 0) {
   console.error(`sim-cli: --water-scale must be > 0: ${waterScale}`);
@@ -327,6 +353,10 @@ const params = createPlanetParams({
   // Stage-0 diagnostic (#110): turn on the kernel plate-census pass so each
   // keyframe's globals carry the force-balance scalars. Off ⇒ byte-identical.
   ...(values['plate-census'] ? { plateCensus: true } : {}),
+  // Stage-4 measurement (#114): override the tensionRift-only post-rift suture
+  // cooldown. No effect unless --tension-rift is also set. Byte-identical when
+  // omitted (kernel default = RIFT_SUTURE_COOLDOWN_YEARS).
+  ...(riftSutureCooldownYears !== undefined ? { riftSutureCooldownYears } : {}),
   // Single-arm mechanism flags compose (e.g. --block-isostasy --crust-fates
   // measures the pair together); --no-* forms disable a default-on mechanism.
   // The paired --ab harness takes one at a time.
@@ -586,10 +616,17 @@ let keyframeIndex = 0;
 let finalEvents: SimEvent[] = [];
 const metricsSeries: KeyframeMetrics[] = [];
 const censusSeries: PlateCensusRow[] = [];
+// Stage-4 rift-lifecycle harness (#114): the convergent-seam probe is
+// streaming (it reads each keyframe's boundaryStress/plateId as they arrive),
+// so it must live outside the callback and be fed per keyframe.
+const riftConvergenceProbe = values['suture-analysis']
+  ? createRiftConvergenceProbe(params.gridN)
+  : undefined;
 run(params, untilYears, (keyframe) => {
   checkFinite(keyframe);
   if (values.report) report(keyframe);
   if (values['crust-stats']) reportCrustStats(keyframe);
+  if (riftConvergenceProbe) riftConvergenceProbe.observe(keyframe);
   if (values.metrics) metricsSeries.push(computeKeyframeMetrics(keyframe, params.gridN));
   if (values['plate-census']) {
     const prevTotal = censusSeries.at(-1)?.marginConsolidationFlipsTotal;
@@ -614,4 +651,8 @@ if (values.metrics) {
 }
 if (values['plate-census']) {
   console.log(summarizePlateCensus(censusSeries));
+}
+if (values['suture-analysis'] && riftConvergenceProbe) {
+  console.log(summarizeReSutureIntervals(finalEvents));
+  console.log(summarizeRiftConvergence(riftConvergenceProbe.summary()));
 }
