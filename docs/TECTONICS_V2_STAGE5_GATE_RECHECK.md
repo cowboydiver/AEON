@@ -248,3 +248,45 @@ once, verify the snapshot diff touches only expected spines, run lint + typechec
 kernel suite < 30 s, `/code-review`. Only after that: ARCHITECTURE.md rewrite, dead-
 constant retirement, the §3 Earth scoreboard, the N=128 flipbook review, then PR into
 `tectonics-v2` and merge.
+
+---
+
+## Promotion + suite reconciliation — DONE (28081da; suite 434/434 green)
+
+Both blockers were resolved and the whole kernel suite reconciled to V2 default-on.
+
+- **Blocker 1 (perf):** the owner lifted the < 30 s budget "for now" (do not optimize
+  prematurely). The phase-1 soft perf guard is relaxed 20 s → 90 s (runaway tripwire
+  only). Suite now ~63 s wall.
+- **Blocker 2 (hypsometry):** resolved as a coarse-grid small-sample artifact, NOT a
+  degradation. The phase-1 `isBimodal` check moved N=32 → N=64, where both previously-
+  failing seeds are comfortably bimodal at every checkpoint (platform/trough 2.1–7.0;
+  abyssal always 10–27×). Evidence: at N=32 the near-sea-level platform mode is only
+  44–80 of 6144 cells under V2's more-active early dispersal; at N=64 it is 229–666.
+- **Category A (goldens regenerated):** golden main ×3 + #105 + #106; codec byte-goldens
+  ×3 (layout unchanged, no HISTORY_FORMAT_VERSION bump). Verified the snapshot diff
+  touches EXACTLY those blocks — every explicit-flag spine (legacy-off, the new pre-V2
+  default, blockIsostasy, #88–91, bathymetry, plateDynamics engaged) is byte-identical.
+- **Category B/C (legacy-path + system-property tests):** pinned to the explicit
+  flag-off world — forceKinematicsScaffold (now asserts default-on), plateDynamics
+  (engaged spines pin forceKinematics-in-isolation; flag-off identity explicit),
+  wilson ×4, tensionRift ×2, carbon ×3, oxygen ×1. The carbon/oxygen pinning also
+  **confirms the #111-flagged outgassing risk is real** (V2 reads hotter: hothouse
+  CO₂ ~2010 vs legacy ~1150) — documented, not hidden; the V2 world's own climate
+  health is covered by phase-1 (CO₂ regulated, sane land, 4.5 Gyr).
+- **Verification:** `pnpm -F sim-kernel test` 434/434; `pnpm typecheck` clean; `pnpm
+  lint` clean.
+
+### Remaining stage-5 work (next chunk[s])
+1. `docs/ARCHITECTURE.md` — rewrite the plate-kinematics / Wilson sections: delete the
+   "plate speeds do not slow in collisions" note, the size-ramp/cooldown docs, and the
+   "no force feedback" caveats; document the torque balance, the stall suture, and the
+   tension hazard as the shipped model.
+2. Dead constants — `RIFT_MIN_AGE_YEARS`, `RIFT_SIZE_RATE_*`, `RIFT_PROBABILITY_PER_MYR`,
+   azimuth-fan constants: **mark legacy-spine-only** (they are still exercised by the
+   pinned flag-off spines, so they cannot be deleted — the legacy path stays live).
+3. §3 Earth scoreboard findings doc — final census vs the proposal §3 Earth targets,
+   including the honest misses (speed median hot; F&U correlation isolation-only).
+4. N=128 flipbook review of the promoted default world (dump launched) — actually
+   inspect the PNGs (the "numbers pass but continents look like static" gate).
+5. `/code-review` pass, then PR into `tectonics-v2` and merge (auth §1 gate).
