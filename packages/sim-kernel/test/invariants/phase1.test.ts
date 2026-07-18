@@ -110,12 +110,18 @@ describe('phase 1 invariants (#20)', () => {
   it('hypsometry stays bimodal at fixed checkpoints for all golden seeds', () => {
     for (const seed of SEEDS) {
       // Bimodality is a structural (abyssal + platform) property robust to step
-      // size, so this coarse-steps at 3 Myr — the full Phase 3 climate stack
-      // (energy balance, winds, moisture, ice, sea level, #30–#33) now runs
-      // every step, and 1 Myr steps to 450 Myr × 3 seeds at N=32 blew the kernel
-      // suite's <30 s budget. Same time span and checkpoints, a third of the
-      // steps; the deep-time 4.5 Gyr invariant below likewise runs at 2 Myr.
-      const params = createPlanetParams({ seed, gridN: 32, stepYears: 3e6 });
+      // size, so this coarse-steps at 3 Myr. Grid bumped N=32 → N=64 for the
+      // Tectonics V2 promotion (#115): under the more-active V2 default world
+      // (torque balance + tension rifting) the near-sea-level PLATFORM mode is a
+      // small absolute cell count at N=32 (44–80 of 6144 cells) and dips near the
+      // trough at early checkpoints, tripping the platform>1.5×trough test — a
+      // coarse-grid small-sample artifact, NOT a loss of bimodality: at N=64 both
+      // failing seeds are comfortably bimodal at every checkpoint (platform/trough
+      // 2.1–7.0; measured in docs/TECTONICS_V2_STAGE5_GATE_RECHECK.md). The abyssal
+      // mode was always strongly bimodal (10–27×). N=64 resolves the platform mode
+      // where the property is genuinely diagnosable. (The perf cost is fine — the
+      // <30 s suite budget is lifted for the promotion, #115.)
+      const params = createPlanetParams({ seed, gridN: 64, stepYears: 3e6 });
       const ctx: SimContext = { rng: createRng(params.seed).fork('sim') };
       let state = createInitialState(params);
       expect(isBimodal(state.fields.elevation), `seed ${seed} t=0`).toBe(true);
@@ -229,9 +235,13 @@ describe('phase 1 invariants (#20)', () => {
       expect(live).toBeGreaterThanOrEqual(MIN_PLATES);
       expect(live).toBeLessThanOrEqual(MAX_PLATES);
     }
-    // Soft budget guard: this is the suite's most expensive test; if it
-    // alone crosses ~20 s the <30 s whole-suite budget is gone.
-    expect(performance.now() - started).toBeLessThan(20_000);
+    // Soft budget guard, RELAXED for the Tectonics V2 promotion (#115): the
+    // per-step rigid-plate torque balance makes every simulated step costlier,
+    // so this test (and the suite) now run above the historical <30 s budget.
+    // The owner lifted that budget "for now" (#115, 2026-07-18) — do not
+    // optimize prematurely. This guard stays only as a runaway tripwire, not a
+    // <30 s enforcer; tighten it again when the hot path is optimized.
+    expect(performance.now() - started).toBeLessThan(90_000);
   });
 });
 

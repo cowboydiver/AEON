@@ -29,6 +29,15 @@ function withLum(s: PlanetState, lumFrac: number): PlanetState {
   return { ...s, params: { ...s.params, starLuminosity: SOLAR_LUMINOSITY_W * lumFrac } };
 }
 
+// These are CARBON-thermostat property tests (#34) that use the tectonic sim
+// only as a climate substrate. They are pinned to the legacy (V2-off) world:
+// the Tectonics V2 promotion (#115) shifts outgassing (the #111-flagged known
+// risk — the outgassing proxy reads hotter as boundary-stress magnitudes shift;
+// confirmed here, e.g. hothouse CO₂ ~2010 vs the legacy ~1150), moving these
+// narrowly-tuned snowball/feedback scenarios out of their windows. The V2
+// world's own climate health (CO₂ regulated < 10000 ppm, no runaway, sane land
+// over 4.5 Gyr) is covered by invariants/phase1.test.ts and the stage-5 gate
+// re-check (docs/TECTONICS_V2_STAGE5_GATE_RECHECK.md).
 describe('carbon: the thermostat regulates climate (#34)', () => {
   /** Peak-to-peak of a series. */
   const amp = (a: number[]): number => Math.max(...a) - Math.min(...a);
@@ -49,7 +58,7 @@ describe('carbon: the thermostat regulates climate (#34)', () => {
     const dt = 5e6;
     for (const seed of SEEDS) {
       const trace = (initialCo2Ppm: number): { co2: number[]; temp: number[] } => {
-        const params = createPlanetParams({ seed, gridN: 16, stepYears: dt, initialCo2Ppm });
+        const params = createPlanetParams({ forceKinematics: false, emergentSuture: false, tensionRift: false, seed, gridN: 16, stepYears: dt, initialCo2Ppm });
         const ctx: SimContext = { rng: createRng(seed).fork('sim') };
         let s = createInitialState(params);
         const co2: number[] = [];
@@ -103,7 +112,7 @@ describe('carbon: the thermostat regulates climate (#34)', () => {
     };
     const broken = [...SYSTEMS.filter((s) => s.name !== 'carbon'), outgasOnly];
     const dt = 5e6;
-    const params = createPlanetParams({ seed: 42, gridN: 16, stepYears: dt });
+    const params = createPlanetParams({ forceKinematics: false, emergentSuture: false, tensionRift: false, seed: 42, gridN: 16, stepYears: dt });
     const ctx: SimContext = { rng: createRng(42).fork('sim') };
     let s = createInitialState(params);
     for (let i = 0; i < 400; i++) s = step(s, dt, ctx, broken);
@@ -121,7 +130,7 @@ describe('carbon: a snowball is reachable and recovers (#34)', () => {
   // down — the classic carbonate–silicate recovery.
   it('faint star tips into a snowball, then it recovers as CO₂ accumulates', () => {
     const dt = 3e6;
-    const params = createPlanetParams({ seed: 42, gridN: 16, stepYears: dt });
+    const params = createPlanetParams({ forceKinematics: false, emergentSuture: false, tensionRift: false, seed: 42, gridN: 16, stepYears: dt });
     const ctx: SimContext = { rng: createRng(42).fork('sim') };
     let s = createInitialState(params);
 
@@ -156,7 +165,7 @@ describe('carbon: a snowball is reachable and recovers (#34)', () => {
     // over the same span — so the recovery genuinely rides the CO₂ build-up, not
     // the luminosity change alone.
     const dt = 3e6;
-    const params = createPlanetParams({ seed: 42, gridN: 16, stepYears: dt });
+    const params = createPlanetParams({ forceKinematics: false, emergentSuture: false, tensionRift: false, seed: 42, gridN: 16, stepYears: dt });
     const mkSnowball = (): PlanetState => {
       const ctx: SimContext = { rng: createRng(42).fork('sim') };
       let s = createInitialState(params);
@@ -187,7 +196,7 @@ describe('carbon: long-run stability, no divergence (#34)', () => {
   // integrated invariant (`phase1.test.ts`), which already runs the full 4.5 Gyr
   // pipeline — this file adds only the determinism check on top of it.
   it('is deterministic: same seed + params ⇒ bit-identical CO₂ trajectory', () => {
-    const params = createPlanetParams({ seed: 1337, gridN: 16, stepYears: 4e6 });
+    const params = createPlanetParams({ forceKinematics: false, emergentSuture: false, tensionRift: false, seed: 1337, gridN: 16, stepYears: 4e6 });
     const runTrace = (): number[] => {
       const ctx: SimContext = { rng: createRng(1337).fork('sim') };
       let s = createInitialState(params);

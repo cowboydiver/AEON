@@ -4,22 +4,24 @@ import { createInitialState, createPlanetParams } from '../src/state';
 
 /**
  * Stage-1 scaffolding contract (Tectonics V2, #111, proposal §2.2/§2.3): the
- * `forceKinematics` mechanism and the extended `PlateRecord` state exist and
- * default to OFF / zero, so the default (flag-off) path is byte-identical to
- * the pre-#111 kernel. The physics pass (`plateDynamics`) lands in chunk 2.
+ * `forceKinematics` mechanism and the extended `PlateRecord` state exist, and
+ * the kinematic state zero-initializes at t=0. As of the stage-5 promotion
+ * (#115, KERNEL_BEHAVIOR_VERSION 17) the mechanism is default-ON with onset 0
+ * (active from formation); the flag-OFF path's byte-identity to the pre-#111
+ * kernel is now pinned by the pre-V2-promotion default golden spine.
  */
 describe('forceKinematics scaffolding', () => {
-  it('exposes forceKinematics=false and forceKinematicsOnsetYears=0 by default', () => {
+  it('exposes forceKinematics=true and forceKinematicsOnsetYears=0 by default (#115 promotion)', () => {
     const params = createPlanetParams({ seed: 1 });
-    expect(params.forceKinematics).toBe(false);
+    expect(params.forceKinematics).toBe(true);
     expect(params.forceKinematicsOnsetYears).toBe(0);
   });
 
-  it('registers forceKinematics as a mechanism, off by default', () => {
+  it('registers forceKinematics as a mechanism, on by default (#115 promotion)', () => {
     const entry = MECHANISMS.find((m) => m.key === 'forceKinematics');
     expect(entry).toBeDefined();
     expect(entry?.issue).toBe(111);
-    expect(defaultMechanismToggles().forceKinematics).toBe(false);
+    expect(defaultMechanismToggles().forceKinematics).toBe(true);
   });
 
   it('zero-initializes the new PlateRecord kinematic state', () => {

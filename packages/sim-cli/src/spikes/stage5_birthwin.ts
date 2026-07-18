@@ -27,7 +27,7 @@ let stepNo = 0;
 for (let t = 0; t < 300e6; t += 1e6) {
   state = step(state, 1e6, ctx); stepNo++;
   if (stepNo % 10 !== 0) continue;
-  const plateId = state.fields.plateId, crustType = state.fields.crustType, plates = state.plates, np = plates.length;
+  const plateId = state.fields.plateId, plates = state.plates, np = plates.length;
   const owned = new Int32Array(np);
   for (let i = 0; i < count; i++) { const p = plateId[i]!; if (p >= 0 && p < np) owned[p]!++; }
   const sp: number[] = [], sl: number[] = [];
