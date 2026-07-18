@@ -44,7 +44,7 @@ and `sim-cli` → `sim-kernel`. Never the reverse. `sim-kernel` imports nothing.
 ## Commands
 
 ```
-pnpm test                 # all Vitest suites (kernel tests must stay < 30 s)
+pnpm test                 # all Vitest suites (kernel-test budget: see note below)
 pnpm -F sim-kernel test   # kernel only — run after ANY kernel change
 pnpm sim -- --seed 42 --until 500e6 --report
                           # headless run: prints summary stats per checkpoint
@@ -58,6 +58,18 @@ pnpm typecheck            # tsc --noEmit across all packages
 
 Note: `pnpm -F web e2e` runs a headed browser under Xvfb on displayless Linux
 (WebGPU cannot present from plain headless Chromium; see PHASE0_REPORT.md).
+
+Note (kernel-test budget): the original rule was "kernel tests must stay < 30 s."
+Since the Tectonics V2 promotion (`KERNEL_BEHAVIOR_VERSION` 17), the default world
+runs the per-step torque balance (`forceKinematics`) plus `tensionRift` and
+`emergentSuture`, which are materially costlier per step. The owner lifted the
+budget for the V2 default world (issue #109/#115): the kernel suite now runs
+~60–75 s wall, and the 4.5 Gyr phase-1 invariant carries an explicit 90 s
+per-test timeout as a runaway tripwire, not a perf target. The intent is
+unchanged — keep tests fast, prefer many small brutally-specific tests, and treat
+a suite blow-up as a signal — but the hard `< 30 s` number no longer applies to
+the V2 default world. New individual tests that are not full-history invariants
+should still be sub-second.
 
 ## Verification workflow (follow this, in order)
 
