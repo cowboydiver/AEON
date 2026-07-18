@@ -1005,6 +1005,13 @@ export const MAX_PLATES = 16;
  * continent-continent grind before each merge stays above the #20 10%
  * floor).
  */
+// LEGACY (flag-off `--no-emergent-suture` spine only since
+// KERNEL_BEHAVIOR_VERSION 17 / stage-5 promotion): the promoted default runs
+// `emergentSuture`, which *detects* the kinematic stall (net-signed shortening
+// integral) instead of scheduling the merge on this fixed countdown. Still read
+// on the flag-off path (and as the scaling anchor for the derived stall/timeout
+// windows), so kept. The post-rift RIFT_SUTURE_COOLDOWN_YEARS lock is unchanged
+// and remains active on the promoted default.
 export const SUTURE_AFTER_YEARS = 60e6;
 
 /** Minimum simultaneous cont-cont convergent boundary cells to count as contact. */
@@ -1071,6 +1078,10 @@ export const SUTURE_TIMEOUT_YEARS = 1.5e8;
  * ordering stable (hemisphere-scale rift gate vs suture clock), which the
  * wilson test windows are derived from.
  */
+// LEGACY (flag-off `--no-tension-rift` spine only since KERNEL_BEHAVIOR_VERSION
+// 17 / stage-5 promotion): the promoted default runs `tensionRift`, which
+// deletes the maturity age gate. Kept because the pinned legacy tests still
+// exercise the size-ramp trigger path.
 export const RIFT_MIN_AGE_YEARS = 600e6;
 
 /** A plate must own at least this fraction of the sphere to rift. */
@@ -1111,6 +1122,10 @@ export const RIFT_DRAW_QUANTUM_YEARS = 1e4;
  * issue targets, vs ~45 Myr before. The old 0.006 was tuned to pass the
  * #57/#59 dispersal metrics, not to match a believable tempo.
  */
+// LEGACY (flag-off `--no-tension-rift` spine only since KERNEL_BEHAVIOR_VERSION
+// 17 / stage-5 promotion): `tensionRift` replaces this flat base rate × size
+// ramp with a physical λ = RIFT_HAZARD_AT_REF_PER_MYR × tension² × blanket. Kept
+// for the pinned legacy tests.
 export const RIFT_PROBABILITY_PER_MYR = 0.0015;
 
 /**
@@ -1172,6 +1187,10 @@ export const RIFT_FRAGMENT_MAX_FRACTION = 0.4;
  * all but vanish). Ordinary sub-knee plates still feel the full 4x
  * slowdown; the ramp just reaches the (halved) reference sooner.
  */
+// LEGACY (flag-off `--no-tension-rift` spine only since KERNEL_BEHAVIOR_VERSION
+// 17 / stage-5 promotion): the whole size-ramp trigger is superseded by the
+// tension²+blanket hazard on the promoted default path. The carve machinery it
+// fed is unchanged; only the *trigger* moved. Kept for the pinned legacy tests.
 export const RIFT_SIZE_RATE_KNEE = 0.3;
 export const RIFT_SIZE_RATE_REF_FRACTION = 0.55;
 export const RIFT_SIZE_RATE_REF_MULTIPLE = 16;
@@ -1188,6 +1207,12 @@ export const RIFT_SIZE_RATE_EXPONENT = 2;
  * subducting oceanic crust — continent-on-continent grinding during the
  * post-rift lock was the dominant continental-area bleed (#16, #58).
  */
+// LEGACY (flag-off `--no-tension-rift` spine only since KERNEL_BEHAVIOR_VERSION
+// 17 / stage-5 promotion): under `tensionRift` a fragment inherits the parent's
+// ω⃗/pole and the halves separate on ridge push, so the perpendicular
+// translating-pole construction and this ocean-seeking azimuth fan
+// (RIFT_AZIMUTH_CANDIDATES / RIFT_OCEAN_SCAN_RAD / RIFT_OCEAN_SCAN_SAMPLES) go
+// dead on the default path. Kept for the pinned legacy tests.
 export const RIFT_AZIMUTH_CANDIDATES = 8;
 
 /**
