@@ -391,7 +391,7 @@ passive: a rift stamps both halves with `sutureLockUntilYears = now +
 RIFT_SUTURE_COOLDOWN_YEARS` (120 Myr) and a locked plate's contact is not
 recorded, so it can't re-suture until the lock lifts (then needs a fresh
 60 Myr). **Stall-triggered suture (`emergentSuture`, #112, Tectonics V2
-stage 2, default-off):** when the flag is on (after its branched-A/B
+stage 2, default on since KERNEL_BEHAVIOR_VERSION 17, #115):** when the flag is on (after its branched-A/B
 `emergentSutureOnsetYears`), wilson replaces the fixed `SUTURE_AFTER_YEARS`
 countdown with *detection* of the collision death `forceKinematics` produces.
 The contact scan drops its stress gate and instead counts continent–continent
@@ -407,7 +407,16 @@ advection-quantum noise floor that never falls below 2 mm/yr, so it measured dea
 only at the window boundary (net summed across the whole 20 Myr first) makes a
 lone jittering step unable to reset the clock; a window that reaches threshold
 re-arms the anchor. The derived reset tolerance is 2 mm/yr × 20 Myr (≈40 km net
-shortening/window) — no independent tuned constant. A loud backstop
+shortening/window) — no independent tuned constant. A low net rate alone is not
+enough (#127 item 2.2): the net-signed test is blind to a shearing transform
+(all tangential slip) or a boundary rotating about a nearby pole (signed normal
+segments cancel), both of which read net≈0 while the plates still move at plate
+speed. A **gross relative-motion gate** also requires the pair's mean
+|v_own − v_other| — the smooth Euler-pole-derived speed, free of the û-projection
+jitter that forced the net-signed integral — to stay below
+`SUTURE_SHEAR_MAX_M_PER_YR` (8 mm/yr): a genuine stalled collision is
+near-comoving, so only near-comoving pairs stall-weld. The loud timeout is
+deliberately NOT gated, so a long-lived head-on grind still merges (tagged). A loud backstop
 merges any contact that persists `SUTURE_TIMEOUT_YEARS` (150 Myr) without ever
 stalling and emits a distinct **`sutureTimeout`** event, so the stall-never-fires
 failure mode (a plate driven by a remote slab) is visible in the log rather than

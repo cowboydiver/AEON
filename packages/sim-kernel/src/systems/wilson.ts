@@ -101,6 +101,7 @@ import {
   RIFT_SUTURE_COOLDOWN_YEARS,
   SUTURE_AFTER_YEARS,
   SUTURE_MIN_CONTACT_CELLS,
+  SUTURE_SHEAR_MAX_M_PER_YR,
   SUTURE_STALL_AFTER_YEARS,
   SUTURE_STALL_SPEED_M_PER_YR,
   SUTURE_TIMEOUT_YEARS,
@@ -110,7 +111,7 @@ import { EVENT_KINDS, type SimEvent } from '../events';
 import { cellCenterTable, cellCount, directionToIndex, neighborTable, type Vec3 } from '../grid';
 import { hash2, hash3, hashString } from '../hash';
 import { TriHeap } from '../heap';
-import type { PlateRecord } from '../plates';
+import { plateVelocityAt, type PlateRecord } from '../plates';
 import type { PlanetState } from '../state';
 import type { System } from '../step';
 import { cross3, normalize3, perpendicular3 } from '../vec';
@@ -201,6 +202,13 @@ function applyWilson(state: PlanetState, dtYears: number): PlanetState {
   const contactSince: Record<string, number> = {};
   const stallSince: Record<string, number> = {};
   const shorteningIntegral: Record<string, number> = {};
+  // emergentSuture only, NOT persisted: this step's mean gross relative speed
+  // |v_own − v_other| over each pair's contact cells (#127 item 2.2). A genuine
+  // stalled collision is near-comoving (→0); a shearing transform or a mixed
+  // convergent/divergent (rotating) contact keeps a large relative speed even
+  // though its SIGNED net normal closing cancels to ≈0. The merge gate below
+  // requires low motion so those two classes no longer weld as "stalled".
+  const stallMotion: Record<string, number> = {};
   let sortedKeys: string[];
 
   if (!emergentSuture) {
@@ -241,8 +249,11 @@ function applyWilson(state: PlanetState, dtYears: number): PlanetState {
     // separating rift pair has a large NEGATIVE net rate, so |net rate| stays
     // above threshold and it never registers a (convergent) stall — the pre-#59
     // re-suture pathology cannot recur (proposal §7).
+    const centers = cellCenterTable(N);
+    const R = state.params.radiusMeters;
     const pairCells = new Map<string, number>();
     const pairNetSum = new Map<string, number>();
+    const pairMotionSum = new Map<string, number>();
     for (let i = 0; i < count; i++) {
       if (crustType[i] !== 1) continue;
       for (let k = 0; k < 4; k++) {
@@ -254,6 +265,20 @@ function applyWilson(state: PlanetState, dtYears: number): PlanetState {
         const key = `${a}-${b}`;
         pairCells.set(key, (pairCells.get(key) ?? 0) + 1);
         pairNetSum.set(key, (pairNetSum.get(key) ?? 0) + boundaryStress[i]!);
+        // Gross relative speed |v_own − v_other| at this cell — the SMOOTH,
+        // tangent-inclusive motion (a pure Euler-pole function, so free of the
+        // advection-quantum jitter that forced the net-closing test to use a
+        // windowed SIGNED sum). Summed here, averaged per pair below.
+        const pos: Vec3 = [centers[i * 3]!, centers[i * 3 + 1]!, centers[i * 3 + 2]!];
+        const vOwn = plateVelocityAt(state.plates[plateId[i]!]!, pos, R);
+        const vOther = plateVelocityAt(state.plates[q]!, pos, R);
+        const dvx = vOwn[0] - vOther[0];
+        const dvy = vOwn[1] - vOther[1];
+        const dvz = vOwn[2] - vOther[2];
+        pairMotionSum.set(
+          key,
+          (pairMotionSum.get(key) ?? 0) + Math.sqrt(dvx * dvx + dvy * dvy + dvz * dvz),
+        );
         break; // count each cell once
       }
     }
@@ -264,6 +289,7 @@ function applyWilson(state: PlanetState, dtYears: number): PlanetState {
       const [a, b] = key.split('-').map(Number) as [number, number];
       if (locked(a) || locked(b)) continue;
       contactSince[key] = state.wilson.contactSince[key] ?? state.timeYears;
+      stallMotion[key] = pairMotionSum.get(key)! / cells;
 
       // Tumbling-window shortening integral. On the step that opens a window the
       // pair's net closing is the window's left endpoint, not shortening *within*
@@ -323,10 +349,16 @@ function applyWilson(state: PlanetState, dtYears: number): PlanetState {
         // here so the merge decision is self-contained.)
         const anchor = stallSince[key];
         const elapsed = anchor === undefined ? 0 : state.timeYears - anchor;
-        const stalled =
+        const netStalled =
           anchor !== undefined &&
           elapsed >= SUTURE_STALL_AFTER_YEARS &&
           Math.abs(shorteningIntegral[key]!) / elapsed < SUTURE_STALL_SPEED_M_PER_YR;
+        // Gross-motion gate (#127 item 2.2): a low-net-closing window is only a
+        // genuine stalled collision if the pair is also near-comoving. A shearing
+        // transform or a rotating (mixed-sign) contact reads net≈0 yet keeps a
+        // large relative speed, and must NOT weld as "stalled".
+        const motion = stallMotion[key] ?? Infinity;
+        const stalled = netStalled && motion < SUTURE_SHEAR_MAX_M_PER_YR;
         // Loud backstop: a contact that never stalls long enough still merges
         // after SUTURE_TIMEOUT_YEARS, tagged sutureTimeout so the miss is
         // visible in the event log instead of a silent full-speed grind.

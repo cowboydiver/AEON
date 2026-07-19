@@ -1095,6 +1095,28 @@ export const SUTURE_STALL_SPEED_M_PER_YR = 0.002;
 export const SUTURE_STALL_AFTER_YEARS = 2e7;
 
 /**
+ * `emergentSuture` stall gross-motion gate, m/yr (#127 item 2.2,
+ * TECTONICS_V2_REVIEW_FINDINGS §2.2). The net-closing stall test above is
+ * SIGN-BLIND to how the ≈0 net arose: a shearing continental transform (normal
+ * motion ≈0, large tangential slip) and a mixed convergent/divergent contact
+ * (a boundary rotating about a nearby pole, whose signed segments cancel) both
+ * read net≈0 and used to weld as "stalled" after only 20 Myr — a merge class
+ * impossible on the pre-V2 kernel. A genuinely stalled head-on collision is
+ * near-COMOVING: its mean gross relative speed |v_own − v_other| → 0 (collision
+ * damping kills the normal closing; a head-on pair has no tangential slip). A
+ * transform or a rotating contact keeps a relative speed at plate scale
+ * (cm/yr). Gate the stall on the mean gross speed staying below this — a genuine
+ * lock passes, the two false classes do not. |v_rel| is a pure Euler-pole
+ * function (no advection jitter), so this reads instantaneously without the
+ * windowing the net-closing test needs. The loud SUTURE_TIMEOUT_YEARS backstop
+ * is deliberately NOT gated: a contact that persists 150 Myr merges regardless,
+ * so a long-lived head-on grind still sutures (tagged). Set an order below plate
+ * speeds and just above the ACTIVE_MARGIN_STRESS 5 mm/yr active gate, so only
+ * clearly-moving (shearing / rotating) contacts are refused.
+ */
+export const SUTURE_SHEAR_MAX_M_PER_YR = 0.008;
+
+/**
  * `emergentSuture` loud backstop (margin-ledger graft, #112, proposal §2.3):
  * if a continental contact persists this long *without* ever stalling long
  * enough, merge anyway and emit a distinct `sutureTimeout` event. This surfaces
