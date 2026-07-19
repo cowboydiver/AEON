@@ -4,7 +4,6 @@ import { parseArgs } from 'node:util';
 import { PNG } from 'pngjs';
 import {
   CONTINENTAL_CRUST_FRACTION,
-  EVENT_KINDS,
   FIELD_NAMES,
   createPlanetParams,
   hashFloat32Array,
@@ -20,10 +19,12 @@ import {
   computePlateCensusRow,
   createRiftConvergenceProbe,
   formatPlateCensusRow,
+  isReorgEvent,
   summarizeMetrics,
   summarizePairedMetrics,
   summarizePlateCensus,
   summarizeReSutureIntervals,
+  summarizeReorgTempo,
   summarizeRiftConvergence,
   type KeyframeMetrics,
   type PlateCensusRow,
@@ -107,21 +108,25 @@ Options:
                               balance (slab pull, ridge push, collision damping,
                               basal drag) makes each plate's angular velocity
                               derived state instead of a fixed random draw
-                              (default off — measure with --ab force-kinematics
-                              and --plate-census)
+                              (default ON since the V2 promotion, #115;
+                              --no-force-kinematics disables; measure the
+                              marginal effect with --ab force-kinematics
+                              --plate-census)
   --emergent-suture           suture on kinematic stall instead of the fixed
                               contact countdown (Tectonics V2 stage 2, #112):
                               a cont-cont pair merges when force-balance collision
                               damping stalls its closing speed, with a loud
-                              sutureTimeout backstop (default off — needs
-                              --force-kinematics on; measure with
-                              --ab emergent-suture)
+                              sutureTimeout backstop (default ON since the V2
+                              promotion, #115; --no-emergent-suture disables;
+                              needs --force-kinematics on to be meaningful;
+                              measure with --ab emergent-suture)
   --tension-rift              enable tension-driven rift timing (Tectonics V2
                               stage 3, #113): rift hazard ∝ (boundary tension)²
                               × supercontinent thermal blanket, retiring the flat
                               hazard × size ramp; fragment inherits parent ω⃗.
                               Needs --force-kinematics for a non-zero tension
-                              (default off)
+                              (default ON since the V2 promotion, #115;
+                              --no-tension-rift disables)
   --rift-suture-cooldown <yr> post-rift suture cooldown under --tension-rift
                               (Tectonics V2 stage 4, #114); default 120e6, swept
                               120e6→30e6→0 for the cooldown-retirement measurement.
@@ -518,46 +523,6 @@ function dump(keyframe: Keyframe): void {
 }
 
 /**
- * Wilson-cycle tempo summary (#66): reorganizations (rifts + sutures) per
- * 100 Myr, and the mean interval between successive reorganizations that
- * involve the same plate — the tracked number for "does the clock feel
- * Earth-like" (target ~100-300 Myr), instead of an eyeball call on the
- * event log.
- */
-function reportTempo(events: readonly SimEvent[], simulatedYears: number): void {
-  const reorgs = events.filter(
-    (e) => e.kind === EVENT_KINDS.plateRift || e.kind === EVENT_KINDS.plateSuture,
-  );
-  const rifts = reorgs.filter((e) => e.kind === EVENT_KINDS.plateRift).length;
-  const per100Myr = (reorgs.length / (simulatedYears / 1e6)) * 100;
-  // Interval between consecutive reorganizations touching the same plate:
-  // a rift involves {plate, newPlate}, a suture {absorbed, into}.
-  const lastSeen = new Map<number, number>();
-  let intervalSum = 0;
-  let intervalCount = 0;
-  for (const e of reorgs) {
-    const d = e.data!;
-    const involved =
-      e.kind === EVENT_KINDS.plateRift ? [d.plate!, d.newPlate!] : [d.absorbed!, d.into!];
-    for (const p of involved) {
-      const prev = lastSeen.get(p);
-      if (prev !== undefined) {
-        intervalSum += e.timeYears - prev;
-        intervalCount++;
-      }
-      lastSeen.set(p, e.timeYears);
-    }
-  }
-  const meanInterval =
-    intervalCount > 0 ? `${(intervalSum / intervalCount / 1e6).toFixed(0)} Myr` : 'n/a';
-  console.log(
-    `tempo: ${rifts} rifts + ${reorgs.length - rifts} sutures in ${(simulatedYears / 1e6).toFixed(0)} Myr` +
-      ` = ${per100Myr.toFixed(2)} reorganizations / 100 Myr` +
-      `; mean interval per plate involved: ${meanInterval}`,
-  );
-}
-
-/**
  * Paired branched A/B (#84, generalized for #88-#91): both arms share the
  * seed and every pre-branch byte (the flag-on arm's onset makes the
  * mechanism inert until the branch, and no gated system consumes RNG), so
@@ -642,11 +607,11 @@ run(params, untilYears, (keyframe) => {
   keyframeIndex++;
   finalEvents = keyframe.events;
 });
-if (values.report) reportTempo(finalEvents, untilYears);
+if (values.report) console.log(summarizeReorgTempo(finalEvents, untilYears));
 if (values.metrics) {
-  const reorgs = finalEvents.filter(
-    (e) => e.kind === EVENT_KINDS.plateRift || e.kind === EVENT_KINDS.plateSuture,
-  );
+  // "last tectonic event" is the last reorganization of ANY kind — including a
+  // `sutureTimeout` merge, same as the tempo line (#127 item 2).
+  const reorgs = finalEvents.filter(isReorgEvent);
   console.log(summarizeMetrics(metricsSeries, reorgs.at(-1)?.timeYears));
 }
 if (values['plate-census']) {
