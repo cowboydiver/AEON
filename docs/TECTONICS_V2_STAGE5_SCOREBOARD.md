@@ -83,3 +83,36 @@ seed 1) is recorded as an owned baseline property.
   legacy ~1150) — the #111-flagged outgassing risk, confirmed and documented,
   not hidden. The V2 world's own climate health (CO₂ regulated, sane land over
   4.5 Gyr) is covered by the phase-1 invariant suite.
+
+## Post-promotion re-verification — #127 items 4(a) & 5
+
+The #127 follow-ups changed two default-on behaviors: item 4(a) made `tensionN`
+a true pull-class scalar (slab pull + slab suction on the overrider; ridge push
+and collision damping excluded), and item 5 gated the `emergentSuture` stall on
+the pair's gross relative motion (mean |v_own − v_other| < `SUTURE_SHEAR_MAX_M_PER_YR`
+= 8 mm/yr), so shearing / rotating contacts no longer weld as "stalled".
+`riftSutureCooldownYears` (120 Myr) was left untouched. Re-scored against the
+authoritative seed-42 N=128 column above (4.5 Gyr, `--plate-census --metrics
+--suture-analysis`):
+
+| §3 claim | scoreboard s42 N=128 | #127 s42 N=128 | verdict |
+|---|---|---|---|
+| Speed census median (2–6 cm/yr) | 6.10 | 6.14 | = owned overshoot, unchanged |
+| speed–slab-attach corr (owned miss) | 0.070 | 0.016 | still washes out deep-time (owned) |
+| Seafloor age median (< 200 Myr) | 56 | 49 | ✓ |
+| Pole mean cos (< 1 ⇒ migrating) | 0.986 | 0.982 | ✓ |
+| Dispersal, min Gyr-bucket (≥ 0.7) | 0.91 | 0.93 | ✓ |
+| Land min % (≥ 10 hard floor) | 22.3 | 22.2 | ✓ |
+| > 85% monopoly window (< 400 Myr) | 0 | 0 | ✓ |
+| Re-suture min interval (> 100 Myr) | 140 | **270** (median 320) | ✓ **improved** |
+| Boundary churn (context) | 8876 | 9599 | — still the more-active engine |
+
+Every must-not-regress floor holds; both owned misses are unchanged. The
+re-suture interval rose 140 → 270 Myr — removing the shearing/mixed false
+sutures (and their compensating re-rifts) reduces rift↔re-weld flicker, the
+intended direction. Companion N=64 grid (seeds 1/42/1337): dispersal 94.5–99.8 %,
+land min 25–28 %, zero monopoly, same-plate reorg interval 168–194 Myr (inside
+the 100–300 band), slot peak ~130–145. Goldens are byte-identical (the 10-step
+spine hashes fields, not the plate records `tensionN` lives in, and no rift/
+suture decision differs that early); the deep-time change is carried by the
+phase-1 4.5 Gyr invariant, which passes.
