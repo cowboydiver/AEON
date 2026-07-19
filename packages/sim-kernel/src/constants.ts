@@ -992,6 +992,29 @@ export const MIN_PLATES = 2;
 export const MAX_PLATES = 16;
 
 /**
+ * Hard ceiling on the plate-SLOT table size (#127 item 7). Distinct from
+ * MAX_PLATES, which bounds only the LIVE count: `riftPlate` assigns each new
+ * plate `newId = plates.length` and dead slots are NEVER reclaimed (the hash
+ * input stays unique per rift), so the table grows monotonically over deep
+ * time. The history codec stores `plateId` as a categorical Uint8
+ * (`codec.ts` LEVELS_U8 = 255), so a plate id must fit [0, 255] and the table
+ * must never exceed 256 entries or the codec's per-cell assertion throws
+ * mid-run. `riftPlate` refuses to mint a slot at/beyond this — a graceful skip
+ * in place of that loud assertion. Source: codec.ts LEVELS_U8 + 1 = 256.
+ */
+export const PLATE_SLOT_CODEC_LIMIT = 256;
+
+/**
+ * Warn margin below PLATE_SLOT_CODEC_LIMIT (#127 item 7): the step whose rift
+ * first grows the slot table to this size emits one `plateSlotPressure` event,
+ * a heads-up in the event log ~32 slots before the codec ceiling. The measured
+ * deep-time slot peak is 176 across seeds/grids over 4.5 Gyr (≥31 % headroom),
+ * so this is dormant on shipped worlds; it exists to make a pathological,
+ * ceiling-approaching config visible long before the hard limit bites.
+ */
+export const PLATE_SLOT_WARN_COUNT = 224;
+
+/**
  * Continuous continent-continent convergent contact required before the two
  * plates suture into one, yr. Real collision-to-suture times are a few tens
  * of Myr (India-Asia has been converging ~55 Myr and is still suturing).

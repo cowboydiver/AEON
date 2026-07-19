@@ -79,6 +79,8 @@ import {
   PLATE_FILL_JITTER,
   PLATE_OMEGA_MAX_RAD_PER_YR,
   PLATE_OMEGA_MIN_RAD_PER_YR,
+  PLATE_SLOT_CODEC_LIMIT,
+  PLATE_SLOT_WARN_COUNT,
   RIFT_AZIMUTH_CANDIDATES,
   RIFT_DRAW_QUANTUM_YEARS,
   RIFT_HAZARD_AT_REF_PER_MYR,
@@ -687,6 +689,13 @@ export function riftPlate(
   if (plateCells < 2) return state; // degenerate single-cell plate: skip
 
   const newId = state.plates.length;
+  // Codec-ceiling guard (#127 item 7): plate ids are stored as a categorical
+  // Uint8 in the history codec, so a plate id must fit [0, 255] and the slot
+  // table — ids handed out densely from 0, dead slots NEVER reclaimed — must
+  // not exceed PLATE_SLOT_CODEC_LIMIT entries. Refuse to mint a slot the codec
+  // cannot store: a graceful skip in place of the codec's loud mid-run
+  // assertion. Dormant on shipped worlds (measured deep-time slot peak 176).
+  if (newId >= PLATE_SLOT_CODEC_LIMIT) return state;
   // Fragment size: a sub-half fraction of the plate, drawn per rift (the
   // hash input newId is unique per rift because dead slots are never
   // reclaimed).
@@ -854,20 +863,33 @@ export function riftPlate(
     tensionN: 0,
     // Not inherited: recomputed next step from the fragment's own margins.
     slabPullN: 0,
-    stallSinceYears: 0,
     blanketYears: 0,
   });
 
-  const event: SimEvent = {
-    timeYears: state.timeYears,
-    kind: EVENT_KINDS.plateRift,
-    data: { plate: p, newPlate: newId, newPlateCells: cellsB },
-  };
+  const events: SimEvent[] = [
+    ...state.events,
+    {
+      timeYears: state.timeYears,
+      kind: EVENT_KINDS.plateRift,
+      data: { plate: p, newPlate: newId, newPlateCells: cellsB },
+    },
+  ];
+  // One-time slot-pressure heads-up (#127 item 7): the table grows by exactly
+  // one slot per rift, so it equals PLATE_SLOT_WARN_COUNT on exactly the step
+  // that first reaches it — a single, deterministic warning well before the
+  // hard PLATE_SLOT_CODEC_LIMIT. `plates.length` is `newId + 1` after the push.
+  if (plates.length === PLATE_SLOT_WARN_COUNT) {
+    events.push({
+      timeYears: state.timeYears,
+      kind: EVENT_KINDS.plateSlotPressure,
+      data: { slots: plates.length, limit: PLATE_SLOT_CODEC_LIMIT },
+    });
+  }
 
   return {
     ...state,
     fields: { ...state.fields, plateId },
     plates,
-    events: [...state.events, event],
+    events,
   };
 }

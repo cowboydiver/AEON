@@ -25,7 +25,6 @@ export function makePlate(spec: TestPlateSpec): PlateRecord {
     omegaVec: [0, 0, 0],
     tensionN: 0,
     slabPullN: 0,
-    stallSinceYears: 0,
     blanketYears: 0,
   };
 }

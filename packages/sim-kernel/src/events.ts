@@ -20,6 +20,13 @@ export const EVENT_KINDS = {
   sutureTimeout: 'sutureTimeout',
   /** A plate whose last cell was consumed by advection (fully subducted / overridden). */
   plateConsumed: 'plateConsumed',
+  /** Plate-slot pressure heads-up (#127 item 7): the monotonically growing
+   *  plate-slot table (ids handed out densely from 0, dead slots never
+   *  reclaimed) first crossed `PLATE_SLOT_WARN_COUNT` — a visible warning well
+   *  before the history codec's `plateId < 256` categorical ceiling, whose
+   *  per-cell assertion is otherwise the only (loud, mid-run) backstop. Data
+   *  `{slots, limit}`. Dormant on shipped worlds (measured deep-time peak 176). */
+  plateSlotPressure: 'plateSlotPressure',
   /** Ocean life originates (sets `globals.abiogenesisYear`), #37. */
   abiogenesis: 'abiogenesis',
   /** `globals.oxygen` first crosses the oxidation threshold — the emergent Great Oxidation, #37. */

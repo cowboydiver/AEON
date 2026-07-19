@@ -719,7 +719,7 @@ export function computeReSutureIntervals(events: readonly SimEvent[]): ReSutureI
   for (const e of events) {
     if (e.kind === EVENT_KINDS.plateRift) {
       rifts.push({ t: e.timeYears, key: pairKey(e.data!.plate!, e.data!.newPlate!) });
-    } else if (e.kind === EVENT_KINDS.plateSuture || e.kind === EVENT_KINDS.sutureTimeout) {
+    } else if (isMergeEvent(e)) {
       sutures.push({ t: e.timeYears, key: pairKey(e.data!.absorbed!, e.data!.into!), used: false });
     }
   }
@@ -759,6 +759,95 @@ export function summarizeReSutureIntervals(events: readonly SimEvent[]): string 
     `re-suture: ${r.count} rifted pairs re-merged; interval Myr [min ${r.minMyr.toFixed(0)}` +
     ` median ${r.medianMyr.toFixed(0)}]; ${r.underFloorCount} ≤ ${RE_SUTURE_FLOOR_YEARS / 1e6} Myr` +
     ` (gate: min > ${RE_SUTURE_FLOOR_YEARS / 1e6} Myr — the pre-#59 ~16 Myr re-suture is the tripwire)`
+  );
+}
+
+/**
+ * A plate MERGE, for event accounting: both `plateSuture` and the
+ * `sutureTimeout` backstop — the timeout is a real suture that merely hit the
+ * stall-criterion deadline instead of closing fully (#127 item 2). This is the
+ * one place the "a timeout is a suture" rule lives; `computeReSutureIntervals`
+ * and `computeReorgTempo` both read it so the rule can never drift between them.
+ */
+export function isMergeEvent(e: SimEvent): boolean {
+  return e.kind === EVENT_KINDS.plateSuture || e.kind === EVENT_KINDS.sutureTimeout;
+}
+
+/**
+ * A plate reorganization for tempo accounting: a rift ({plate, newPlate}) OR a
+ * merge ({absorbed, into}). Counting the `sutureTimeout` merge (via
+ * `isMergeEvent`) is the #127 item 2 fix — the tempo line must not silently
+ * drop it.
+ */
+export function isReorgEvent(e: SimEvent): boolean {
+  return e.kind === EVENT_KINDS.plateRift || isMergeEvent(e);
+}
+
+export interface ReorgTempo {
+  /** `plateRift` events over the run. */
+  rifts: number;
+  /** Merge events: `plateSuture` + `sutureTimeout`. */
+  sutures: number;
+  /** rifts + sutures. */
+  reorgs: number;
+  /** Reorganizations per 100 Myr over the simulated window. */
+  per100Myr: number;
+  /** Mean interval (years) between successive reorganizations that touch the
+   *  same plate id, or `null` when no plate appears in two of them. */
+  meanIntervalYears: number | null;
+}
+
+/**
+ * Wilson-cycle tempo (#66): reorganizations per 100 Myr, plus the mean interval
+ * between successive reorganizations that involve the same plate — the tracked
+ * "does the clock feel Earth-like" number (target ~100–300 Myr). A rift
+ * involves {plate, newPlate}; either suture kind involves {absorbed, into}.
+ * Counts `sutureTimeout` as a merge (#127 item 2); before that fix the
+ * seed-42 default run reported 4.71 reorg/100 Myr against a true ≈ 5.2 with 14
+ * of 78 sutures dropped.
+ */
+export function computeReorgTempo(
+  events: readonly SimEvent[],
+  simulatedYears: number,
+): ReorgTempo {
+  const reorgEvents = events.filter(isReorgEvent);
+  const rifts = reorgEvents.filter((e) => e.kind === EVENT_KINDS.plateRift).length;
+  const reorgs = reorgEvents.length;
+  const sutures = reorgs - rifts;
+  const per100Myr = simulatedYears > 0 ? (reorgs / (simulatedYears / 1e6)) * 100 : 0;
+  // Interval between consecutive reorganizations touching the same plate id.
+  const lastSeen = new Map<number, number>();
+  let intervalSum = 0;
+  let intervalCount = 0;
+  for (const e of reorgEvents) {
+    const d = e.data!;
+    const involved =
+      e.kind === EVENT_KINDS.plateRift ? [d.plate!, d.newPlate!] : [d.absorbed!, d.into!];
+    for (const p of involved) {
+      const prev = lastSeen.get(p);
+      if (prev !== undefined) {
+        intervalSum += e.timeYears - prev;
+        intervalCount++;
+      }
+      lastSeen.set(p, e.timeYears);
+    }
+  }
+  const meanIntervalYears = intervalCount > 0 ? intervalSum / intervalCount : null;
+  return { rifts, sutures, reorgs, per100Myr, meanIntervalYears };
+}
+
+/** One-line Wilson-tempo summary for `--report` (#66; counts sutureTimeout, #127 item 2). */
+export function summarizeReorgTempo(
+  events: readonly SimEvent[],
+  simulatedYears: number,
+): string {
+  const t = computeReorgTempo(events, simulatedYears);
+  const meanInterval =
+    t.meanIntervalYears !== null ? `${(t.meanIntervalYears / 1e6).toFixed(0)} Myr` : 'n/a';
+  return (
+    `tempo: ${t.rifts} rifts + ${t.sutures} sutures in ${(simulatedYears / 1e6).toFixed(0)} Myr` +
+    ` = ${t.per100Myr.toFixed(2)} reorganizations / 100 Myr` +
+    `; mean interval per plate involved: ${meanInterval}`
   );
 }
 

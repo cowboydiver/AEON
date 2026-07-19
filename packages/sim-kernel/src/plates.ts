@@ -86,11 +86,6 @@ export interface PlateRecord {
    * `plateDynamics` writes it. Not read by any physics — pure diagnostic. */
   slabPullN: number;
   /**
-   * `emergentSuture` (stage 2) memory: sim time at which the plate's current
-   * stalled continental contact began, yr (0 = not currently stalled). 0
-   * flag-off and until stage 2 writes it. */
-  stallSinceYears: number;
-  /**
    * `tensionRift` (stage 3) memory: accumulated supercontinent thermal-blanket
    * age, yr. 0 flag-off and until stage 3 writes it. */
   blanketYears: number;
@@ -250,7 +245,6 @@ export function applyInitialPlates(state: PlanetState): PlanetState {
       omegaVec: [0, 0, 0],
       tensionN: 0,
       slabPullN: 0,
-      stallSinceYears: 0,
       blanketYears: 0,
     });
   }

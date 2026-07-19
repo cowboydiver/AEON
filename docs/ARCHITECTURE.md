@@ -124,10 +124,9 @@ PlateRecord = { eulerPole (unit Vec3), angularVelRadPerYr,
                 createdAtYears,
                 sutureLockUntilYears,      // rift children can't suture before this (#57 follow-up)
                 continentalFraction, alive,
-                // Tectonics V2 (default-off mechanisms; all 0 flag-off):
+                // Tectonics V2 (default-on since KERNEL_BEHAVIOR_VERSION 17; all 0 flag-off):
                 omegaVec,                  // ω⃗, derived kinematic state under forceKinematics (#111 stage 1)
                 tensionN, slabPullN,       // gross−|net| driving force / attached slab pull, N — diagnostics + tensionRift input
-                stallSinceYears,           // emergentSuture stall clock (#112 stage 2)
                 blanketYears }             // tensionRift supercontinent thermal-blanket age (#113 stage 3)
 ```
 
@@ -1068,10 +1067,13 @@ accumulation.
 SimEvent = { timeYears, kind: SimEventKind, data?: Record<string, number> }
 ```
 
-Discrete events — plate rifts/sutures/consumptions, and the #37 biosphere events
-`abiogenesis` (life originates, sets `abiogenesisYear`) and `greatOxidation`
-(`oxygen` first crosses the oxidation threshold, the emergent Great Oxidation) —
-are recorded in simulation order on `PlanetState.events`. Event kinds are a const
+Discrete events — plate rifts/sutures/consumptions, the `plateSlotPressure`
+heads-up (the never-reclaimed plate-slot table first crossed
+`PLATE_SLOT_WARN_COUNT`, a warning well before the codec's `plateId < 256`
+ceiling, #127 item 7), and the #37 biosphere events `abiogenesis` (life
+originates, sets `abiogenesisYear`) and `greatOxidation` (`oxygen` first crosses
+the oxidation threshold, the emergent Great Oxidation) — are recorded in
+simulation order on `PlanetState.events`. Event kinds are a const
 object in `events.ts` (`EVENT_KINDS`), single source of truth like `FIELDS`.
 Payloads are numbers only, so events are trivially deterministic and
 serializable. **Purity rule:** a system never mutates the list — it returns a

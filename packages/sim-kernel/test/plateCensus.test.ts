@@ -21,7 +21,6 @@ function plate(over: Partial<PlateRecord> & { eulerPole: Vec3; angularVelRadPerY
     omegaVec: [0, 0, 0],
     tensionN: 0,
     slabPullN: 0,
-    stallSinceYears: 0,
     blanketYears: 0,
     ...over,
   };

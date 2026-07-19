@@ -13,10 +13,12 @@ import {
   computeCrustStats,
   computeKeyframeMetrics,
   computePlateCensusRow,
+  computeReorgTempo,
   computeReSutureIntervals,
   createRiftConvergenceProbe,
   CONVERGENCE_LOOKAHEAD_YEARS,
   DISPERSED_MAX_PLATE_FRAC,
+  isReorgEvent,
   PLATENESS_TOP_DECILE,
   RE_SUTURE_FLOOR_YEARS,
   SEAFLOOR_AGE_BIN_COUNT,
@@ -25,6 +27,7 @@ import {
   summarizeMetrics,
   summarizePairedMetrics,
   summarizePlateCensus,
+  summarizeReorgTempo,
   summarizeReSutureIntervals,
   summarizeRiftConvergence,
   type KeyframeMetrics,
@@ -498,6 +501,66 @@ describe('computeReSutureIntervals (#114 re-suture gate)', () => {
     const s = summarizeReSutureIntervals([rift(100e6, 0, 5), suture(310e6, 5, 0)]);
     expect(s).toContain('re-suture');
     expect(s).toContain(`${RE_SUTURE_FLOOR_YEARS / 1e6}`); // the 100 Myr floor
+  });
+});
+
+describe('computeReorgTempo (#66 Wilson tempo; #127 item 2 sutureTimeout)', () => {
+  it('counts a sutureTimeout merge as a suture (the #127 undercount fix)', () => {
+    // The old `plateRift || plateSuture` filter dropped this event entirely.
+    const t = computeReorgTempo([suture(100e6, 1, 2, /* timeout */ true)], 1e9);
+    expect(t.sutures).toBe(1);
+    expect(t.rifts).toBe(0);
+    expect(t.reorgs).toBe(1);
+  });
+
+  it('splits reorganizations into rifts and sutures across all three kinds', () => {
+    const events: SimEvent[] = [
+      rift(100e6, 0, 5),
+      suture(200e6, 5, 0), // normal plateSuture
+      suture(300e6, 2, 3, true), // sutureTimeout backstop — still a merge
+    ];
+    const t = computeReorgTempo(events, 1e9);
+    expect(t.rifts).toBe(1);
+    expect(t.sutures).toBe(2);
+    expect(t.reorgs).toBe(3);
+    // 3 reorganizations over 1000 Myr = 0.3 per 100 Myr.
+    expect(t.per100Myr).toBeCloseTo(0.3, 10);
+  });
+
+  it('means the interval between consecutive reorganizations on the same plate', () => {
+    // Plate 0 rifts at 100 Myr, then is absorbed via a timeout suture at 250 Myr:
+    // one 150 Myr interval for plate 0; the fresh ids (5, 7) contribute nothing.
+    const t = computeReorgTempo([rift(100e6, 0, 5), suture(250e6, 0, 7, true)], 1e9);
+    expect(t.meanIntervalYears).toBe(150e6);
+  });
+
+  it('reports a null interval when no plate appears in two reorganizations', () => {
+    const t = computeReorgTempo([rift(100e6, 0, 5)], 1e9);
+    expect(t.meanIntervalYears).toBeNull();
+  });
+
+  it('handles an empty / zero-duration event log without dividing by zero', () => {
+    const t = computeReorgTempo([], 0);
+    expect(t).toEqual({ rifts: 0, sutures: 0, reorgs: 0, per100Myr: 0, meanIntervalYears: null });
+  });
+
+  it('isReorgEvent accepts rifts and both suture kinds, rejects others', () => {
+    expect(isReorgEvent(rift(0, 0, 1))).toBe(true);
+    expect(isReorgEvent(suture(0, 0, 1))).toBe(true);
+    expect(isReorgEvent(suture(0, 0, 1, true))).toBe(true);
+    expect(isReorgEvent({ timeYears: 0, kind: EVENT_KINDS.plateConsumed, data: { plate: 0 } })).toBe(
+      false,
+    );
+  });
+
+  it('summary line reports counts, tempo, and mean interval, counting the timeout', () => {
+    const s = summarizeReorgTempo(
+      [rift(100e6, 0, 5), suture(200e6, 5, 0), suture(300e6, 2, 3, true)],
+      1e9,
+    );
+    expect(s).toContain('1 rifts + 2 sutures'); // the timeout is in the suture count
+    expect(s).toContain('0.30 reorganizations / 100 Myr');
+    expect(s).toContain('100 Myr'); // mean interval per plate involved
   });
 });
 
