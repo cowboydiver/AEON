@@ -24,12 +24,12 @@ describe('forceKinematics scaffolding', () => {
     expect(defaultMechanismToggles().forceKinematics).toBe(true);
   });
 
-  it('zero-initializes the new PlateRecord kinematic state', () => {
+  it('zero-initializes the PlateRecord force diagnostics', () => {
     const state = createInitialState(createPlanetParams({ seed: 42 }));
     expect(state.plates.length).toBeGreaterThan(0);
     for (const p of state.plates) {
-      expect(p.omegaVec).toEqual([0, 0, 0]);
       expect(p.tensionN).toBe(0);
+      expect(p.slabPullN).toBe(0);
       expect(p.blanketYears).toBe(0);
     }
   });

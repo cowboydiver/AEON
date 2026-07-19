@@ -264,6 +264,18 @@ function applyWilson(state: PlanetState, dtYears: number): PlanetState {
         const b = Math.max(plateId[i]!, q);
         const key = `${a}-${b}`;
         pairCells.set(key, (pairCells.get(key) ?? 0) + 1);
+        // NOTE (#127 item 8d): boundaryStress[i] is the cell's net normal closing
+        // signed against its DOMINANT other plate, but here it is attributed to
+        // the pair formed with the FIRST differing continental neighbor. At a
+        // cont-cont-cont triple junction those can differ, so the cell's stress
+        // is borrowed for the wrong pair. It is bounded — such triple junctions
+        // are rare (continental crust is a minority on 4-6 plates), the value is
+        // averaged over the pair's ≥ SUTURE_MIN_CONTACT_CELLS cells below, and
+        // the merge is additionally gated by the per-pair gross-motion test
+        // (which IS computed for the exact neighbor q). The correct fix (a
+        // per-pair signed-normal closing recomputed from plateVelocityAt, like
+        // pairMotionSum) is deferred rather than risk destabilizing the
+        // freshly-calibrated stall detector (review §2, findings §7).
         pairNetSum.set(key, (pairNetSum.get(key) ?? 0) + boundaryStress[i]!);
         // Gross relative speed |v_own − v_other| at this cell — the SMOOTH,
         // tangent-inclusive motion (a pure Euler-pole function, so free of the
@@ -621,13 +633,10 @@ function suture(
         ...p,
         eulerPole,
         angularVelRadPerYr,
-        // emergentSuture keeps ω⃗ and the winner's pending sub-cell motion
-        // (up to ~2.5 cells) that the legacy merge silently dropped; off, both
-        // omegaVec (unread when forceKinematics is off) and accumulatedRadians
-        // reset exactly as before.
-        omegaVec: opts.blend
-          ? ([eulerPole[0] * angularVelRadPerYr, eulerPole[1] * angularVelRadPerYr, eulerPole[2] * angularVelRadPerYr] as Vec3)
-          : p.omegaVec,
+        // emergentSuture keeps ω⃗ (the drag-weighted blend, in eulerPole/
+        // angularVelRadPerYr above) and the winner's pending sub-cell motion (up
+        // to ~2.5 cells) that the legacy merge silently dropped; off,
+        // accumulatedRadians resets exactly as before.
         accumulatedRadians: opts.blend ? p.accumulatedRadians : 0,
         continentalFraction:
           (stats[winner]!.continental + stats[loser]!.continental) / (aw + al),
@@ -786,9 +795,9 @@ export function riftPlate(
   if (tensionRiftActive) {
     // Tectonics V2 stage 3 (#113, proposal §2.4): the fragment inherits the
     // parent's kinematics. Under `forceKinematics` the parent's
-    // eulerPole/angularVelRadPerYr are the derived form of its ω⃗ (also copied
-    // into the fragment's `omegaVec` below), so the fragment rotates with the
-    // parent at creation and the halves separate next step because ridge push
+    // eulerPole/angularVelRadPerYr are the derived form of its ω⃗, so the
+    // fragment rotates with the parent at creation and the halves separate next
+    // step because ridge push
     // registers on their new divergent margin — forces separate them, not a
     // prescribed translating pole. The perpendicular-pole construction and the
     // ocean-seeking azimuth fan go dead, along with their salt-5 and salt-3
@@ -888,10 +897,10 @@ export function riftPlate(
     sutureLockUntilYears: state.timeYears + cooldown,
     continentalFraction: contB / cellsB,
     alive: true,
-    // Force-balance kinematics state (#111): the fragment inherits the
-    // parent's ω⃗ (a copy, not the shared reference; §2.4 — ridge push at the
-    // new divergent margin separates the halves next step). Zero flag-off.
-    omegaVec: [...state.plates[p]!.omegaVec],
+    // Force-balance diagnostics (#111): recomputed next step from the fragment's
+    // own margins. The fragment's kinematics live in eulerPole/angularVelRadPerYr
+    // above (the parent's, inherited); ridge push at the new divergent margin
+    // separates the halves next step (§2.4).
     tensionN: 0,
     // Not inherited: recomputed next step from the fragment's own margins.
     slabPullN: 0,

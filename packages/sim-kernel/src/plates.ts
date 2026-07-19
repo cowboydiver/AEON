@@ -63,15 +63,6 @@ export interface PlateRecord {
   /** Dead plates (consumed by suturing, #18) keep their slot so ids stay stable. */
   alive: boolean;
   /**
-   * ω⃗ in rad/yr — the plate's angular-velocity vector and THE kinematic state
-   * under `forceKinematics` (Tectonics V2 stage 1, #111, proposal §2.2). The
-   * `plateDynamics` system relaxes it toward a boundary-integrated torque
-   * balance each step and then derives `eulerPole`/`angularVelRadPerYr` from
-   * it, so every existing consumer is unchanged. All-zero on the default
-   * (flag-off) path — the drawn `eulerPole`/`angularVelRadPerYr` remain the
-   * permanent kinematics and nothing reads `omegaVec`. */
-  omegaVec: Vec3;
-  /**
    * Diagnostic: gross − |net| boundary driving force on the plate, N — the
    * scalar `tensionRift` (stage 3) will convert into a rift hazard. 0 flag-off
    * and until `plateDynamics` writes it. */
@@ -240,9 +231,9 @@ export function applyInitialPlates(state: PlanetState): PlanetState {
       sutureLockUntilYears: 0,
       continentalFraction: continentalCells[p]! / plateCells[p]!,
       alive: true,
-      // Force-balance kinematics state (#111): zero flag-off, so the drawn
-      // eulerPole/omega above stay the permanent kinematics.
-      omegaVec: [0, 0, 0],
+      // Force-balance diagnostics (#111): 0 until plateDynamics writes them
+      // under forceKinematics; the drawn eulerPole/omega above are the source
+      // of truth for kinematics on every path.
       tensionN: 0,
       slabPullN: 0,
       blanketYears: 0,

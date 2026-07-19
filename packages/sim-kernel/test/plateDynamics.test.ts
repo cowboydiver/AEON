@@ -438,7 +438,11 @@ describe('flag-off byte-identity', () => {
       withoutSys = step(withoutSys, params.stepYears, ctx2, withoutDynamics);
     }
     expect(fieldHashes(withSys)).toEqual(fieldHashes(withoutSys));
-    // And every plate's kinematic state is untouched (omegaVec stays zero).
-    for (const p of withSys.plates) expect(p.omegaVec).toEqual([0, 0, 0]);
+    // And plateDynamics wrote nothing flag-off: the force diagnostics it owns
+    // (tensionN, slabPullN) stay at their 0 init on every plate.
+    for (const p of withSys.plates) {
+      expect(p.tensionN).toBe(0);
+      expect(p.slabPullN).toBe(0);
+    }
   });
 });

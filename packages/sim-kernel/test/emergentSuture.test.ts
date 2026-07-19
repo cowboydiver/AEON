@@ -144,7 +144,6 @@ function threePlateContactState(seed: number): PlanetState {
   const plates = state.plates.map((p) => ({
     ...p,
     angularVelRadPerYr: 0,
-    omegaVec: [0, 0, 0] as Vec3,
   }));
   return { ...state, plates, fields: { ...state.fields, crustType, crustAge } };
 }
@@ -289,7 +288,6 @@ describe('emergentSuture gross-motion gate — shearing/mixed contacts do not st
             ...p,
             eulerPole: poles[idx]!,
             angularVelRadPerYr: omega,
-            omegaVec: [poles[idx]![0] * omega, poles[idx]![1] * omega, poles[idx]![2] * omega] as Vec3,
           }
         : p,
     );
