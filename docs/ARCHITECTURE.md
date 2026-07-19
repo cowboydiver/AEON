@@ -301,6 +301,18 @@ persist until erosion (#19) ages them.
 > promoted world's measured Earth-scoreboard (with its honest misses — the
 > deep-time speed–slab-attachment correlation washes out in the busier stack;
 > census speed runs ~6 cm/yr) is in `TECTONICS_V2_STAGE5_SCOREBOARD.md`.
+>
+> **Dependency guard (#127 item 6).** `tensionRift` and `emergentSuture` both
+> read state only `forceKinematics` produces — the boundary tension `tensionN`
+> and the force-balance closing-speed collapse — so either one on with
+> `forceKinematics` off is a silently degenerate world: `tensionRift` gives a
+> rift-dead planet (`tensionN` is 0 forever and the flag deletes the legacy
+> age/size hazard), `emergentSuture` grinds every real collision to the 150 Myr
+> `SUTURE_TIMEOUT_YEARS` backstop. `validateKinematicDependencies`
+> (state.ts, called from `createPlanetParams` and `createInitialState`) throws on
+> the combo; the sim-cli resolves it loudly (`--no-force-kinematics` cascades the
+> two dependents off, `--ab force-kinematics` ablates the whole stack) and the web
+> sidebar cascades + grays the dependents via `resolveMechanismDependencies`.
 
 The `wilson` system (after tectonics in the pipeline) reorganizes plates so
 deep time tells a story. The whole trigger clock was retuned 4× slower in

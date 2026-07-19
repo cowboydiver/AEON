@@ -116,6 +116,41 @@ export const MECHANISMS: readonly MechanismInfo[] = [
 /** On/off states for every mechanism, e.g. a UI's toggle state. */
 export type MechanismToggles = Record<MechanismKey, boolean>;
 
+/**
+ * Mechanism → its required prerequisite mechanism (#127 item 6). `tensionRift`
+ * and `emergentSuture` both read state only `forceKinematics` produces, so
+ * enabling either without it is a silently degenerate world — the kernel rejects
+ * the combo (`validateKinematicDependencies` in state.ts). This map is the UI-
+ * facing form of that dependency: a sidebar can gray out a dependent whose
+ * prerequisite is off, and `resolveMechanismDependencies` cascades it.
+ */
+export const MECHANISM_PREREQUISITE: Partial<Record<MechanismKey, MechanismKey>> = {
+  tensionRift: 'forceKinematics',
+  emergentSuture: 'forceKinematics',
+};
+
+/**
+ * Normalize a UI toggle set so it never expresses a degenerate partial-flag
+ * config (#127 item 6): any mechanism whose prerequisite (per
+ * `MECHANISM_PREREQUISITE`) is off is forced off too. Pure; returns the same
+ * reference when nothing changes so callers can cheaply detect a no-op. A UI
+ * should route toggle edits through this before handing them to
+ * `createPlanetParams` (which throws on the un-normalized degenerate combo).
+ */
+export function resolveMechanismDependencies(toggles: MechanismToggles): MechanismToggles {
+  let resolved: MechanismToggles | undefined;
+  for (const [dependent, prerequisite] of Object.entries(MECHANISM_PREREQUISITE) as [
+    MechanismKey,
+    MechanismKey,
+  ][]) {
+    if (toggles[dependent] && !toggles[prerequisite]) {
+      resolved ??= { ...toggles };
+      resolved[dependent] = false;
+    }
+  }
+  return resolved ?? toggles;
+}
+
 /** The kernel-default toggle states, read live from `createPlanetParams`.
  *  (The seed is irrelevant — mechanism defaults are seed-independent.) */
 export function defaultMechanismToggles(): MechanismToggles {

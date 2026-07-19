@@ -220,7 +220,11 @@ export interface PlanetParams {
    * combined plate relaxes to) and the winner's `accumulatedRadians` is
    * preserved. **Default ON** since v17 (#115); the flag-off suture path stays
    * byte-identical. Zero new RNG draws. Meaningful only with `forceKinematics`
-   * on (it supplies the closing-speed collapse the stall criterion reads).
+   * on (it supplies the closing-speed collapse the stall criterion reads) — so
+   * `emergentSuture` on + `forceKinematics` off is rejected at construction
+   * (`validateKinematicDependencies`, #127 item 6): without the closing-speed
+   * collapse every real collision grinds to the 150 Myr `SUTURE_TIMEOUT_YEARS`
+   * backstop, a silently degenerate world.
    */
   emergentSuture: boolean;
   /** Sim year before which emergentSuture is inert even when enabled — the
@@ -240,6 +244,10 @@ export interface PlanetParams {
    * pole + azimuth fan go dead flag-on). Requires `forceKinematics` for a
    * non-zero `tensionN`; zero new RNG draws. **Default ON** since v17 (#115);
    * the flag-off path stays byte-identical to the pre-V2 `main` spine.
+   * `tensionRift` on + `forceKinematics` off is rejected at construction
+   * (`validateKinematicDependencies`, #127 item 6): `tensionN` is 0 forever and
+   * this flag deletes the legacy age/size rift hazard, so the planet never
+   * rifts — a silently rift-dead world.
    */
   tensionRift: boolean;
   /** Sim year before which tensionRift is inert even when enabled — the #113
@@ -492,8 +500,48 @@ export interface PlanetState {
   };
 }
 
+/**
+ * Reject the degenerate Tectonics-V2 partial-flag configs (#127 item 6, review
+ * finding §2.3). `tensionRift` and `emergentSuture` both read state that only
+ * `forceKinematics` produces — the boundary tension `tensionN` and the
+ * force-balance closing-speed collapse — so with `forceKinematics` off each is a
+ * silently broken world, not a measurable one:
+ *
+ *  - `tensionRift` on + `forceKinematics` off ⇒ `tensionN` is 0 forever and the
+ *    flag deletes the legacy age/size rift hazard, so the planet NEVER rifts:
+ *    plates only merge, straight to a monopoly.
+ *  - `emergentSuture` on + `forceKinematics` off ⇒ no closing-speed collapse for
+ *    the stall detector to see, so every real collision grinds the full 150 Myr
+ *    to the `SUTURE_TIMEOUT_YEARS` backstop.
+ *
+ * Both are documented in the help text but were previously unguarded, so a web
+ * sidebar toggle or a stray `--no-force-kinematics` could hand the kernel a dead
+ * world with no warning. We fail loudly at construction (`createPlanetParams`)
+ * and at run entry (`createInitialState`) instead. The check is at the FLAG
+ * level: a `forceKinematics` that is on but onset-gated (inert until its onset
+ * year) satisfies the dependency — its onset-window transient self-heals and is
+ * out of scope here. UIs should cascade the dependents off (see
+ * `resolveMechanismDependencies`) rather than trip this.
+ */
+export function validateKinematicDependencies(
+  params: Pick<PlanetParams, 'forceKinematics' | 'tensionRift' | 'emergentSuture'>,
+): void {
+  if (params.forceKinematics) return;
+  const dependents: string[] = [];
+  if (params.tensionRift) dependents.push('tensionRift');
+  if (params.emergentSuture) dependents.push('emergentSuture');
+  if (dependents.length === 0) return;
+  throw new Error(
+    `Degenerate tectonics config: ${dependents.join(' and ')} require forceKinematics ` +
+      `(they read the boundary tension / force-balance closing speed it produces). With ` +
+      `forceKinematics off, tensionRift makes a rift-dead planet and emergentSuture grinds ` +
+      `every collision to the 150 Myr suture timeout. Enable forceKinematics, or disable ` +
+      `${dependents.join(' and ')}. (#127 item 6, review finding §2.3)`,
+  );
+}
+
 export function createPlanetParams(partial: Partial<PlanetParams> & { seed: number }): PlanetParams {
-  return {
+  const params: PlanetParams = {
     radiusMeters: EARTH_RADIUS_M,
     gridN: DEFAULT_GRID_N,
     stepYears: DEFAULT_STEP_YEARS,
@@ -534,9 +582,14 @@ export function createPlanetParams(partial: Partial<PlanetParams> & { seed: numb
     plateCensus: false,
     ...partial,
   };
+  validateKinematicDependencies(params);
+  return params;
 }
 
 export function createInitialState(params: PlanetParams): PlanetState {
+  // Backstop for callers that assemble params by other means (raw spreads, the
+  // codec) and hand them straight to the step pipeline (#127 item 6).
+  validateKinematicDependencies(params);
   const count = cellCount(params.gridN);
   const fields = Object.fromEntries(
     FIELD_NAMES.map((name) => [name, new Float32Array(count)]),

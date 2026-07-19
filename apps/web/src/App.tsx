@@ -4,8 +4,10 @@ import { WebGPURenderer } from 'three/webgpu';
 import {
   DEFAULT_GRID_N,
   MECHANISMS,
+  MECHANISM_PREREQUISITE,
   defaultMechanismToggles,
   planHistory,
+  resolveMechanismDependencies,
   type MechanismKey,
   type MechanismToggles,
 } from 'sim-kernel';
@@ -96,7 +98,10 @@ export function App() {
 
   const toggleMechanism = useCallback((key: MechanismKey, on: boolean) => {
     setReady(false);
-    setMechanisms((prev) => ({ ...prev, [key]: on }));
+    // #127 item 6: cascade prerequisites so the worker never receives a
+    // degenerate partial-flag config (which createPlanetParams throws on) —
+    // unchecking forceKinematics also disables tensionRift + emergentSuture.
+    setMechanisms((prev) => resolveMechanismDependencies({ ...prev, [key]: on }));
   }, []);
 
   const streaming = progress !== null && !done;
@@ -310,22 +315,28 @@ function MechanismSidebar({ toggles, onToggle, streaming }: MechanismSidebarProp
       <div style={{ fontWeight: 600, opacity: 0.85 }}>Mechanisms</div>
       {MECHANISMS.map((m) => {
         const nonDefault = toggles[m.key] !== defaults[m.key];
+        // #127 item 6: a mechanism whose prerequisite (forceKinematics) is off
+        // can't be enabled — gray it out so the dependency is visible.
+        const prerequisite = MECHANISM_PREREQUISITE[m.key];
+        const prerequisiteUnmet = prerequisite !== undefined && !toggles[prerequisite];
         return (
           <label
             key={m.key}
-            title={m.summary}
+            title={prerequisiteUnmet ? `Requires ${prerequisite}` : m.summary}
             style={{
               display: 'flex',
               alignItems: 'center',
               gap: 6,
-              cursor: 'pointer',
+              cursor: prerequisiteUnmet ? 'not-allowed' : 'pointer',
               userSelect: 'none',
+              opacity: prerequisiteUnmet ? 0.45 : 1,
             }}
           >
             <input
               type="checkbox"
               data-mechanism={m.key}
               checked={toggles[m.key]}
+              disabled={prerequisiteUnmet}
               onChange={(e) => onToggle(m.key, e.target.checked)}
             />
             <span style={{ color: nonDefault ? '#e0b050' : 'inherit' }}>
