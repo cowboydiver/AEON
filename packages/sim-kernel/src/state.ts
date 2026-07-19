@@ -199,10 +199,10 @@ export interface PlanetParams {
    * terminal velocity of a boundary-integrated rigid-plate torque balance
    * (slab pull, slab suction, ridge push, collision damping, closed by basal
    * drag with a continental-keel multiplier), replacing the immutable random
-   * Euler vector drawn once at creation. Zero new RNG draws. Default **OFF** —
-   * a default-off mechanism prototype in the standard onset pattern; the
-   * physics pass lands in stage-1 chunk 2 and the main goldens stay
-   * byte-identical while off.
+   * Euler vector drawn once at creation. Zero new RNG draws. **Default ON**
+   * since the Tectonics V2 promotion (`KERNEL_BEHAVIOR_VERSION` 17, #115); the
+   * flag-off path is still pinned byte-identical to the pre-V2 `main` spine by
+   * the carried-over legacy golden.
    */
   forceKinematics: boolean;
   /** Sim year before which forceKinematics is inert even when enabled — the
@@ -218,9 +218,9 @@ export interface PlanetParams {
    * collision death `forceKinematics` produces rather than scheduling it. The
    * merged plate's ω⃗ is the drag-tensor-weighted blend (the fixed point the
    * combined plate relaxes to) and the winner's `accumulatedRadians` is
-   * preserved. Default **OFF**; the flag-off suture path stays byte-identical.
-   * Zero new RNG draws. Meaningful only with `forceKinematics` on (it supplies
-   * the closing-speed collapse the stall criterion reads).
+   * preserved. **Default ON** since v17 (#115); the flag-off suture path stays
+   * byte-identical. Zero new RNG draws. Meaningful only with `forceKinematics`
+   * on (it supplies the closing-speed collapse the stall criterion reads).
    */
   emergentSuture: boolean;
   /** Sim year before which emergentSuture is inert even when enabled — the
@@ -238,9 +238,8 @@ export interface PlanetParams {
    * safety gates stay. The fragment inherits the parent's ω⃗ and separates
    * because ridge push registers on the new divergent margin (the perpendicular
    * pole + azimuth fan go dead flag-on). Requires `forceKinematics` for a
-   * non-zero `tensionN`; zero new RNG draws. Default **OFF** — a default-off
-   * mechanism prototype in the standard onset pattern; the main goldens stay
-   * byte-identical while off.
+   * non-zero `tensionN`; zero new RNG draws. **Default ON** since v17 (#115);
+   * the flag-off path stays byte-identical to the pre-V2 `main` spine.
    */
   tensionRift: boolean;
   /** Sim year before which tensionRift is inert even when enabled — the #113

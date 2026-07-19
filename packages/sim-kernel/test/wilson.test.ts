@@ -2,6 +2,8 @@ import { describe, expect, it } from 'vitest';
 import {
   PLATE_OMEGA_MAX_RAD_PER_YR,
   PLATE_OMEGA_MIN_RAD_PER_YR,
+  PLATE_SLOT_CODEC_LIMIT,
+  PLATE_SLOT_WARN_COUNT,
   RIFT_FRAGMENT_MAX_FRACTION,
   RIFT_FRAGMENT_MIN_FRACTION,
   RIFT_MIN_AGE_YEARS,
@@ -165,6 +167,59 @@ describe('suturing (#18)', () => {
     // Both plates still alive and still colliding.
     expect(state.plates[0]!.alive).toBe(true);
     expect(state.plates[1]!.alive).toBe(true);
+  });
+});
+
+describe('plate-slot codec ceiling guard (#127 item 7)', () => {
+  const riftSeed = hash2(7, hashString('wilsonRift'), 0);
+
+  /** collisionWorld(0) padded with retired (dead, cell-less) slots so the plate
+   *  table has `targetLen` entries — plate 0 stays the only riftable plate.
+   *  Models the monotonic dead-slot growth riftPlate produces over deep time. */
+  function withSlots(targetLen: number): PlanetState {
+    const s = collisionWorld(0);
+    const plates = [...s.plates];
+    while (plates.length < targetLen) {
+      plates.push({ ...makePlate({ pole: [0, 1, 0], omega: 0 }), alive: false });
+    }
+    return { ...s, plates };
+  }
+
+  it('refuses to mint a slot at the codec ceiling, returning the state unchanged', () => {
+    const state = withSlots(PLATE_SLOT_CODEC_LIMIT);
+    const next = riftPlate(state, 0, riftSeed);
+    // Same reference: the guard skips before any field/plate/event mutation, so
+    // the codec's loud mid-run plateId<256 assertion can never be reached.
+    expect(next).toBe(state);
+    expect(next.plates.length).toBe(PLATE_SLOT_CODEC_LIMIT);
+  });
+
+  it('does not emit a slot-pressure event on an ordinary rift far from the ceiling', () => {
+    const next = riftPlate(collisionWorld(0), 0, riftSeed);
+    expect(next.plates.length).toBe(3);
+    expect(next.events.filter((e) => e.kind === EVENT_KINDS.plateSlotPressure)).toEqual([]);
+  });
+
+  it('emits exactly one plateSlotPressure event on the rift that first reaches the warn count', () => {
+    const state = withSlots(PLATE_SLOT_WARN_COUNT - 1);
+    const next = riftPlate(state, 0, riftSeed);
+    expect(next.plates.length).toBe(PLATE_SLOT_WARN_COUNT); // the mint that crosses the line
+    const pressure = next.events.filter((e) => e.kind === EVENT_KINDS.plateSlotPressure);
+    expect(pressure.length).toBe(1);
+    expect(pressure[0]!.data).toMatchObject({
+      slots: PLATE_SLOT_WARN_COUNT,
+      limit: PLATE_SLOT_CODEC_LIMIT,
+    });
+    expect(pressure[0]!.timeYears).toBe(state.timeYears);
+    // Still a genuine rift: the fragment slot was minted and its event recorded.
+    expect(next.events.filter((e) => e.kind === EVENT_KINDS.plateRift).length).toBe(1);
+  });
+
+  it('does not re-emit the heads-up once the table is already past the warn count', () => {
+    const state = withSlots(PLATE_SLOT_WARN_COUNT);
+    const next = riftPlate(state, 0, riftSeed);
+    expect(next.plates.length).toBe(PLATE_SLOT_WARN_COUNT + 1);
+    expect(next.events.filter((e) => e.kind === EVENT_KINDS.plateSlotPressure)).toEqual([]);
   });
 });
 

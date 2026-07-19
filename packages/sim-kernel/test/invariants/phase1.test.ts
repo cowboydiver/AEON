@@ -246,7 +246,14 @@ describe('phase 1 invariants (#20)', () => {
     // optimize prematurely. This guard stays only as a runaway tripwire, not a
     // <30 s enforcer; tighten it again when the hot path is optimized.
     expect(performance.now() - started).toBeLessThan(90_000);
-  });
+    // Explicit 90 s vitest timeout (matches the hypsometry test above, #127
+    // item 1): the internal soft budget guard only runs if vitest has not
+    // already aborted the callback at its default 30 s. The N=16 4.5 Gyr V2
+    // default world (torque balance + tension rifting) can exceed 30 s on slow
+    // hardware on both pre-merge main and V2 — not a V2 regression, but V2's
+    // ~2× slower kernel widens the exposure. Lift the test-level timeout to the
+    // same 90 s runaway tripwire so the soft guard is the thing that fires.
+  }, 90_000);
 });
 
 // --- Mutation sanity: the detectors must catch planted bugs -------------------

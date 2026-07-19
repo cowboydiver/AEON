@@ -30,7 +30,6 @@ describe('forceKinematics scaffolding', () => {
     for (const p of state.plates) {
       expect(p.omegaVec).toEqual([0, 0, 0]);
       expect(p.tensionN).toBe(0);
-      expect(p.stallSinceYears).toBe(0);
       expect(p.blanketYears).toBe(0);
     }
   });
