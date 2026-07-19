@@ -134,7 +134,10 @@ export interface PlanetParams {
    * plain, and no continental crust stays flooded. The oceanic age-depth
    * curve deliberately stays absolute: re-keying it would make the seafloor
    * chase the falling sea level in an unbounded feedback (see the findings
-   * doc). Default OFF — measurement prototype, same posture as #84/#88-#91.
+   * doc). **Default ON** since the datum-trio promotion
+   * (`KERNEL_BEHAVIOR_VERSION` 18, #127 item 9); the flag-off path stays
+   * byte-identical, pinned by the legacy all-off and pre-datum-promotion
+   * default goldens.
    */
   seaLevelDatums: boolean;
   /** Sim year before which seaLevelDatums is inert even when enabled — the
@@ -154,10 +157,11 @@ export interface PlanetParams {
    * PASSIVE_MARGIN_SHELF_M` — post-rift thermal subsidence building
    * flooded shelves; (3) the land-relief datums (`OROGENIC_ROOT_REFERENCE_M`,
    * `OROGENY_MAX_ELEVATION_M`) become sea-level-relative via
-   * `landDatumOffsetM` (datums.ts). Default OFF — measurement prototype,
-   * same posture as #84/#88-#91; designed to be measured with
-   * `seaLevelDatums` also on (it regulates the regime those re-keyed
-   * platform datums describe).
+   * `landDatumOffsetM` (datums.ts). **Default ON** since the datum-trio
+   * promotion (`KERNEL_BEHAVIOR_VERSION` 18, #127 item 9); runs with
+   * `seaLevelDatums` also on (it regulates the regime those re-keyed platform
+   * datums describe). The flag-off path stays byte-identical, pinned by the
+   * legacy all-off and pre-datum-promotion default goldens.
    */
   freeboard: boolean;
   /** Sim year before which freeboard is inert even when enabled — the
@@ -180,12 +184,14 @@ export interface PlanetParams {
    * ocean relief relax rate even WITH the freeboard anchor: the keyed basin
    * capacity exceeds the conserved water inventory ~2.3×, so no equilibrium
    * exists (see docs/SEA_LEVEL_DATUM_FINDINGS.md). Designed to
-   * run as the third layer of the datum stack — measured with
+   * run as the third layer of the datum stack — runs with
    * `seaLevelDatums` AND `freeboard` also on; with the stack off, the
    * re-keyed floor and the absolute platform/land datums disagree by the
    * full sea-level fall (documented cross-mechanism interaction, same
-   * posture as the blockElevationCap note in blockIsostasy.ts). Default
-   * OFF — measurement prototype, same posture as #84/#88-#91.
+   * posture as the blockElevationCap note in blockIsostasy.ts). **Default
+   * ON** since the datum-trio promotion (`KERNEL_BEHAVIOR_VERSION` 18, #127
+   * item 9); the flag-off path stays byte-identical, pinned by the legacy
+   * all-off and pre-datum-promotion default goldens.
    */
   bathymetryDatum: boolean;
   /** Sim year before which bathymetryDatum is inert even when enabled — the
@@ -561,11 +567,11 @@ export function createPlanetParams(partial: Partial<PlanetParams> & { seed: numb
     marinePlanationOnsetYears: 0,
     emergentArcTaper: false,
     emergentArcTaperOnsetYears: 0,
-    seaLevelDatums: false,
+    seaLevelDatums: true,
     seaLevelDatumsOnsetYears: 0,
-    freeboard: false,
+    freeboard: true,
     freeboardOnsetYears: 0,
-    bathymetryDatum: false,
+    bathymetryDatum: true,
     bathymetryDatumOnsetYears: 0,
     forceKinematics: true,
     forceKinematicsOnsetYears: 0,

@@ -379,7 +379,19 @@ function fieldHashes(state: PlanetState): Record<string, string> {
 
 describe('flag-on golden + engaged spine (#102 pattern)', () => {
   const runFlagOn = (seed: number): PlanetState => {
-    const params = createPlanetParams({ seed, gridN: 32, forceKinematics: true, emergentSuture: false, tensionRift: false });
+    // Datum trio pinned off (they promoted to default-on in #127 item 9): this
+    // spine isolates the force balance, so it must stay byte-identical to the
+    // pre-promotion snapshot rather than fold in datum engagement.
+    const params = createPlanetParams({
+      seed,
+      gridN: 32,
+      forceKinematics: true,
+      emergentSuture: false,
+      tensionRift: false,
+      seaLevelDatums: false,
+      freeboard: false,
+      bathymetryDatum: false,
+    });
     const ctx = makeCtx(seed);
     let s = createInitialState(params);
     for (let i = 0; i < 100; i++) s = step(s, params.stepYears, ctx);
@@ -392,7 +404,16 @@ describe('flag-on golden + engaged spine (#102 pattern)', () => {
   // silently pinning an inert path).
   for (const seed of [1, 42, 1337] as const) {
     it(`seed ${seed}: engaged (≥1 plate speed changed > 20%) and pinned`, () => {
-      const params = createPlanetParams({ seed, gridN: 32, forceKinematics: true, emergentSuture: false, tensionRift: false });
+      const params = createPlanetParams({
+        seed,
+        gridN: 32,
+        forceKinematics: true,
+        emergentSuture: false,
+        tensionRift: false,
+        seaLevelDatums: false,
+        freeboard: false,
+        bathymetryDatum: false,
+      });
       const speed0 = createInitialState(params).plates.map((p) => p.angularVelRadPerYr);
       const final = runFlagOn(seed);
       let maxRel = 0;

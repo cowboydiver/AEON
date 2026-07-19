@@ -562,10 +562,16 @@ harness. After the ISSUE_88_91_FINDINGS.md campaign, **`crustFates` and
 main goldens regenerated deliberately) — the promoted pair measures
 healthier than the old baseline over full 4.5 Gyr histories (N=128 seed 42:
 land min 11.4%, final land 14.3%, ~20 consolidated continental components
-vs 275 baseline). `compactArcs` and `emergentArcTaper` **stay default-off**:
-measured together at default-on they starve continental creation into a
-near-waterworld (N=64 final land 2–5%, N=128 land min 5.3% — far below the
-standing 10% land-sanity floor). The pre-promotion kernel path is pinned
+vs 275 baseline). `compactArcs` and `emergentArcTaper` **stay default-off,
+and are now INCOMPATIBLE with the promoted V2 + datum defaults** (#127 item 9):
+under the busy V2 engine arc maturation is the dominant continental-crust
+source, and each flag alone chokes it — `compactArcs` starves crust to ~9% of
+the sphere (worst measured confetti: 596 final land fragments) and
+`emergentArcTaper` to ~4–6% (TECTONICS_V2_REVIEW_FINDINGS §3), the opposite of
+their #89/#91 intent. They were designed against `main`'s quieter engine; leave
+them off with the promoted defaults. (Originally, at default-on together they
+already starved creation into a near-waterworld: N=64 final land 2–5%, N=128
+land min 5.3%.) The pre-promotion kernel path is pinned
 unchanged by the legacy all-mechanisms-off goldens, and each mechanism's
 isolated flag-on path has its own golden spine. The mechanism registry
 (`sim-kernel/src/mechanisms.ts`, exported as `MECHANISMS` +
@@ -642,7 +648,10 @@ key:
   fringes) and arc maturation re-submerges, but flooded *continental*
   crust does not return — drowned platforms are transient (crustFates
   retires them) and large continents still never subside, which is the
-  freeboard mechanism's job.
+  freeboard mechanism's job. **Default ON** since the datum-trio promotion
+  (`KERNEL_BEHAVIOR_VERSION` 18, #127 item 9; runs with `freeboard` +
+  `bathymetryDatum`); the flag-off path is byte-identical, pinned by the
+  legacy all-off and pre-datum-promotion default goldens.
 - **`freeboard` (no tracking issue — scoped, specified and measured in
   `SEA_LEVEL_DATUM_FINDINGS.md`; `systems/freeboard.ts` + call-site
   re-keys via `landDatumOffsetM` in `datums.ts`):** freeboard regulation,
@@ -671,7 +680,8 @@ key:
   *insensitive* to `FREEBOARD_TARGET_M` — the overshoot vs Earth's ~25%
   is structural (rate-bound relaxation + a flooded lobe piled against the
   buoyancy floor), so the target keeps its cleanly-anchored 400 m; see
-  the findings doc. Default OFF — measurement prototype.
+  the findings doc. **Default ON** since the datum-trio promotion
+  (`KERNEL_BEHAVIOR_VERSION` 18, #127 item 9); flag-off is byte-identical.
 - **`bathymetryDatum` (#102; `seaKeyedOceanicDepthForAge` in
   `bathymetry.ts` + `bathymetryDatumOffsetM` in `datums.ts`):** the
   age-depth re-key — the third datum layer, retiring the emergent
@@ -701,8 +711,26 @@ key:
   inventory holds (a water-inventory follow-up, not a datum one).
   Flag-off (offset 0) returns the design curve bit-exactly. See
   `SEA_LEVEL_DATUM_FINDINGS.md` for the trajectories, the dt-halving
-  check, and the crest-depth calibration. Default OFF — measurement
-  prototype, designed to run with `seaLevelDatums` + `freeboard` on.
+  check, and the crest-depth calibration. **Default ON** since the
+  datum-trio promotion (`KERNEL_BEHAVIOR_VERSION` 18, #127 item 9); runs
+  with `seaLevelDatums` + `freeboard` (all three promoted together);
+  flag-off is byte-identical.
+
+  > **Datum-trio promotion (#127 item 9, `KERNEL_BEHAVIOR_VERSION` 18).**
+  > `seaLevelDatums` + `freeboard` + `bathymetryDatum` are now default-on —
+  > the review's recommended best-in-class config (TECTONICS_V2_REVIEW_FINDINGS
+  > §4: dispersal 95–97%, land 25–31%, coherent continents, monopoly 0). One
+  > deep-time consequence to know: the stack re-keys continents (freeboard) AND
+  > ridge crests (bathymetryDatum) to the falling dynamic sea while the abyssal
+  > floor stays absolute (the #102 volume anchor), so the promoted world's
+  > hypsometry is COMPRESSED relative to the falling sea — the strict
+  > abyssal+platform bimodality invariant is pinned to the datum-off substrate
+  > (phase1.test.ts), and the shipped world's two-level shape is guarded instead
+  > by the 4.5 Gyr land/elevation bounds and the acceptance-grid metrics. The
+  > freeboard-lowered land regime also makes silicate weathering more
+  > event-sensitive, so deep-time CO₂ shows larger (bounded, temperature-safe,
+  > recovering) transients — the phase-1 CO₂ ceiling was widened 10k→20k ppm
+  > accordingly (still 2% of the 1e6 clamp).
 
 `energyBalance` (#30): the Phase 3 climate hub. A Budyko–Sellers **zonal
 energy-balance model** solved on `ENERGY_BALANCE_BANDS` (90) equal-area

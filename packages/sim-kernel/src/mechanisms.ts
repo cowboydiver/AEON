@@ -48,7 +48,7 @@ export const MECHANISMS: readonly MechanismInfo[] = [
     label: 'Compact arc maturation',
     issue: 89,
     summary:
-      'New continental crust matures only against ≥2 continental neighbors, growing compact blobs instead of island chains.',
+      'New continental crust matures only against ≥2 continental neighbors, growing compact blobs instead of island chains. INCOMPATIBLE with the promoted V2 defaults (#127 item 9): arc maturation is the busy V2 world’s dominant crust source, and this flag alone starves it to ~9% of the sphere (findings §3) — designed against main’s quieter engine, kept default-off.',
   },
   {
     key: 'marinePlanation',
@@ -62,7 +62,7 @@ export const MECHANISMS: readonly MechanismInfo[] = [
     label: 'Emergent-arc taper',
     issue: 91,
     summary:
-      'Arc growth above sea level is heavily tapered, so only long-lived subduction margins build emergent island-arc chains.',
+      'Arc growth above sea level is heavily tapered, so only long-lived subduction margins build emergent island-arc chains. INCOMPATIBLE with the promoted V2 defaults (#127 item 9): it chokes the V2 world’s dominant crust source, collapsing continental crust to ~4–6% of the sphere (findings §3) — kept default-off.',
   },
   {
     key: 'blockIsostasy',

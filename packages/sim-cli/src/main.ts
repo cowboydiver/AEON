@@ -87,22 +87,23 @@ Options:
                               ceiling) to the dynamic sea level instead of the
                               fixed 0 m datum, so drowned platforms and shallow
                               shelves survive the deep-time sea-level fall
-                              (default off — prototype; see
+                              (default ON since the datum-trio promotion, #127
+                              item 9; --no-sea-level-datums disables; see
                               docs/SEA_LEVEL_DATUM_FINDINGS.md)
   --freeboard                 enable freeboard regulation (the findings-doc
                               follow-up): continental mean elevation relaxes
                               toward a target freeboard above the dynamic sea
                               level, passive margins subside toward shelf
                               depth, and the land-relief datums ride the sea
-                              level (default off — prototype; measure with
-                              --sea-level-datums also on)
+                              level (default ON since #127 item 9; runs with
+                              --sea-level-datums; --no-freeboard disables)
   --bathymetry-datum          key the oceanic age-depth reference (ridge
                               crest, trench pinning, gap fill, shelf room) to
                               the dynamic sea level (#102), so ridge crests
                               stay submerged instead of crossing the deep-time
-                              oceans as emergent island chains (default off —
-                              prototype; measure with --sea-level-datums
-                              --freeboard also on)
+                              oceans as emergent island chains (default ON since
+                              #127 item 9; runs with --sea-level-datums
+                              --freeboard; --no-bathymetry-datum disables)
   --force-kinematics          enable force-driven plate kinematics (Tectonics
                               V2 stage 1, #111): a per-step rigid-plate torque
                               balance (slab pull, ridge push, collision damping,

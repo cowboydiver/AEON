@@ -148,16 +148,18 @@ describe('golden field hashes: legacy all-mechanisms-off', () => {
 });
 
 /**
- * Pre-V2-promotion default spine: the shipped DEFAULT world with only the three
- * Tectonics V2 mechanisms (#111/#112/#113) explicitly off, everything else at
- * its default (crustFates + marinePlanation on). These are the exact hashes the
- * MAIN goldens above carried BEFORE the KERNEL_BEHAVIOR_VERSION 17 promotion
- * (auto-populated verbatim, not regenerated), so they pin that the promotion
- * changed only the three V2 defaults — the V2 flag-off code path stayed
- * byte-identical on the real default world, not merely on the all-off world the
- * legacy spine covers.
+ * Pre-V2-promotion default spine: the shipped DEFAULT world with the three
+ * Tectonics V2 mechanisms (#111/#112/#113) AND the datum trio (#127 item 9)
+ * explicitly off, everything else at its default (crustFates + marinePlanation
+ * on). These are the exact hashes the MAIN goldens carried BEFORE the
+ * KERNEL_BEHAVIOR_VERSION 17 promotion (auto-populated verbatim, not
+ * regenerated). Both the V2 flags and the datum trio are pinned off here so the
+ * v18 datum promotion cannot silently drift this spine — it keeps pinning the
+ * pre-V2 world byte-identically, proving the V2 flag-off code path is unchanged
+ * on the real default world, not merely on the all-off world the legacy spine
+ * covers.
  */
-describe('golden field hashes: pre-V2-promotion default (forceKinematics/emergentSuture/tensionRift off)', () => {
+describe('golden field hashes: pre-V2-promotion default (V2 + datum trio off)', () => {
   for (const seed of GOLDEN_SEEDS) {
     it(`seed ${seed}: initial state and after 10 steps`, () => {
       const params = createPlanetParams({
@@ -165,6 +167,42 @@ describe('golden field hashes: pre-V2-promotion default (forceKinematics/emergen
         forceKinematics: false,
         emergentSuture: false,
         tensionRift: false,
+        seaLevelDatums: false,
+        freeboard: false,
+        bathymetryDatum: false,
+      });
+      const initial = createInitialState(params);
+      const ctx: SimContext = { rng: createRng(params.seed).fork('sim') };
+      let stepped = initial;
+      for (let i = 0; i < 10; i++) {
+        stepped = step(stepped, params.stepYears, ctx);
+      }
+      expect({
+        initial: fieldHashes(initial),
+        after10Steps: { timeYears: stepped.timeYears, ...fieldHashes(stepped) },
+      }).toMatchSnapshot();
+    });
+  }
+});
+
+/**
+ * Pre-datum-promotion default spine (#127 item 9): the shipped DEFAULT world
+ * with ONLY the three datum flags (`seaLevelDatums`/`freeboard`/`bathymetryDatum`)
+ * explicitly off, the V2 stack at its v17 defaults (crustFates + marinePlanation
+ * + forceKinematics + emergentSuture + tensionRift on). These are the exact
+ * hashes the MAIN goldens above carried BEFORE the KERNEL_BEHAVIOR_VERSION 18
+ * datum promotion (auto-populated verbatim, not regenerated), so they pin that
+ * the promotion changed ONLY the three datum defaults — the datum-off code path
+ * stays byte-identical on the real V2 default world.
+ */
+describe('golden field hashes: pre-datum-promotion default (seaLevelDatums/freeboard/bathymetryDatum off)', () => {
+  for (const seed of GOLDEN_SEEDS) {
+    it(`seed ${seed}: initial state and after 10 steps`, () => {
+      const params = createPlanetParams({
+        seed,
+        seaLevelDatums: false,
+        freeboard: false,
+        bathymetryDatum: false,
       });
       const initial = createInitialState(params);
       const ctx: SimContext = { rng: createRng(params.seed).fork('sim') };

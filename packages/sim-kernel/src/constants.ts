@@ -274,8 +274,27 @@
  *     plateId width (256) is adequate under the V2 rift regime — measured worst
  *     case 176/256 slots at N=128 seed 42 over 4.5 Gyr (31% headroom); dead-slot
  *     reclamation is deferred as a future change, unneeded for the shipped grids.
+ * 18 — Sea-level datum trio promotion (#127 item 9, the review's recommended
+ *     config in TECTONICS_V2_REVIEW_FINDINGS §4): `seaLevelDatums`, `freeboard`
+ *     and `bathymetryDatum` promoted to default-on (onsets stay 0 — active from
+ *     formation), on top of the v17 V2 defaults. The three re-key the platform/
+ *     arc/land datums, the continental freeboard regulator, and the oceanic
+ *     age-depth reference to the DYNAMIC sea level instead of the fixed 0 m crust
+ *     datum, so the ~3 km deep-time sea-level fall no longer strands drowned
+ *     platforms as dry islands, flattens the alpine continental mean back to a
+ *     realistic freeboard, and keeps mid-ocean ridge crests submerged instead of
+ *     crossing the late-time oceans as emergent island chains. Measured
+ *     best-in-class world shape on seeds {1,42,1337} (dispersal 95–97%, land
+ *     25–31%, fewest/largest land components, monopoly 0; findings §4). Main
+ *     goldens regenerated deliberately for the new defaults; the datum-off code
+ *     path is pinned unchanged by the legacy all-mechanisms-off goldens AND a new
+ *     pre-datum-promotion default spine (the three datum flags explicitly off,
+ *     the V2 stack at its v17 defaults). `compactArcs` (#89) and `emergentArcTaper`
+ *     (#91) stay default-off and are now documented as INCOMPATIBLE with the
+ *     promoted defaults: each starves continental crust to 4–9% of the sphere
+ *     under the V2 engine (findings §3), the opposite of their #89/#91 intent.
  */
-export const KERNEL_BEHAVIOR_VERSION = 17;
+export const KERNEL_BEHAVIOR_VERSION = 18;
 
 /** IUGG mean Earth radius, m. */
 export const EARTH_RADIUS_M = 6.371e6;
