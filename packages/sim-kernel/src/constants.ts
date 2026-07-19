@@ -467,9 +467,10 @@ export const DRAG_TENSOR_REGULARIZATION = 1e-3;
  * Under `tensionRift` the flat Bernoulli hazard × the #61 size ramp is
  * replaced by a hazard proportional to (boundary tension)² × a supercontinent
  * thermal-blanket factor: a plate rifts *because it is being pulled apart*
- * (high gross / low net driving force), a continuous physical scalar with no
- * knee — replacing the #66-measured-bimodal size ramp. Only the rift *timing*
- * changes; the carve machinery is byte-identical (proposal §7).
+ * (high opposed slab pull — gross ≫ |net| over the pull-class forces), a
+ * continuous physical scalar with no knee — replacing the #66-measured-bimodal
+ * size ramp. Only the rift *timing* changes; the carve machinery is
+ * byte-identical (proposal §7).
  */
 
 /**
@@ -479,6 +480,19 @@ export const DRAG_TENSOR_REGULARIZATION = 1e-3;
  * hazard's tension factor is min(4, (tensionN/this)²) — quadratic in the
  * fraction of the driving force that does not cancel, capped at 4× the
  * reference rate so a runaway-tension plate cannot rift every step.
+ *
+ * #127 item 2.1 restricted `tensionN` to the pull-class forces — slab pull on
+ * the subducting side and slab suction on the overriding side (ridge push and
+ * continental collision damping, both compression-side, no longer leak in).
+ * This reference was already DERIVED from opposed slab pull, so it needed no
+ * retune: the corrected scalar reproduces a healthy deep-time world with no
+ * monopoly lock at N=16 (the phase-1 invariant) AND N=64 across seeds
+ * {1,42,1337} — reorg 5.0–5.4/100 Myr, dispersal 96–100 %, land 25–37 %,
+ * continental crust 0.30–0.32 of sphere — measurably cleaner dispersal than the
+ * pre-change V2 default (89 %). Slab suction is the term that prevents coarse-
+ * grid monopoly: a large overriding continent girdled by subduction accrues
+ * radially-opposed suction tension and rifts — the physical supercontinent-
+ * breakup driver the old sign-blind collision-damping tension was faking.
  */
 export const RIFT_TENSION_REF_N = 3e19;
 

@@ -480,10 +480,10 @@ export function blanketFactor(blanketYears: number): number {
  * #113, proposal §2.4). Hazard λ = `RIFT_HAZARD_AT_REF_PER_MYR` ×
  * min(4, (tensionN/`RIFT_TENSION_REF_N`)²) × blanketFactor(blanketYears), and
  * the probability the step's Bernoulli draw must clear is 1 − exp(−λ·dtMyr).
- * `tensionN` (gross − |net| boundary driving force, ≥ 0) is the physical scalar
- * the old size ramp was faking: a supercontinent ringed by opposed subduction
- * carries high gross / low net force and rifts *because it is being pulled
- * apart*. The tension factor is quadratic (a plate at twice the reference
+ * `tensionN` (gross − |net| over slab-pull forces only, ≥ 0; #127 item 2.1) is
+ * the physical scalar the old size ramp was faking: a supercontinent ringed by
+ * opposed subduction carries high gross / low net slab pull and rifts *because
+ * it is being pulled apart*. The tension factor is quadratic (a plate at twice the reference
  * tension rifts ~4× as readily), capped at 4× the reference rate so a
  * runaway-tension plate cannot rift every step. Exported for the contract test.
  */

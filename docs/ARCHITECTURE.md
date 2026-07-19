@@ -126,7 +126,7 @@ PlateRecord = { eulerPole (unit Vec3), angularVelRadPerYr,
                 continentalFraction, alive,
                 // Tectonics V2 (default-on since KERNEL_BEHAVIOR_VERSION 17; all 0 flag-off):
                 omegaVec,                  // ω⃗, derived kinematic state under forceKinematics (#111 stage 1)
-                tensionN, slabPullN,       // gross−|net| driving force / attached slab pull, N — diagnostics + tensionRift input
+                tensionN, slabPullN,       // gross−|net| slab-pull force (opposed pull, #127 item 2.1) / attached slab pull, N — diagnostics + tensionRift input
                 blanketYears }             // tensionRift supercontinent thermal-blanket age (#113 stage 3)
 ```
 
@@ -360,15 +360,18 @@ chaotically sensitive to the oversize rate (between 12× and 16× it is bimodal:
 seed 42 collapses to ~49% at 12×), which is why the oversize safety net is the
 one knob the #66 clock scaling did not slow proportionally.
 **Tension-driven rift timing (`tensionRift`, Tectonics V2 stage 3, #113,
-default off):** under the flag the flat-hazard × bimodal-size-ramp scheme is
+default on since KERNEL_BEHAVIOR_VERSION 17, #115):** under the flag the
+flat-hazard × bimodal-size-ramp scheme is
 replaced by a physical hazard drawn at the *same* hash site — only the
 acceptance threshold changes. λ = `RIFT_HAZARD_AT_REF_PER_MYR` (0.0075/Myr) ×
 min(4, (`tensionN`/`RIFT_TENSION_REF_N`)²) × a supercontinent thermal-blanket
 factor, and the per-step draw must clear 1 − exp(−λ·dtMyr) (`riftTensionHazardProbability`).
-`tensionN` (gross − |net| boundary driving force, written by `plateDynamics`
-under `forceKinematics`) is the physical scalar the size ramp was faking: a
-supercontinent ringed by opposed subduction carries high gross / low net force
-and rifts *because it is being pulled apart* — continuous, no knee. The blanket
+`tensionN` (gross − |net| over slab-pull forces only — #127 item 2.1 — written
+by `plateDynamics` under `forceKinematics`) is the physical scalar the size ramp
+was faking: a supercontinent ringed by opposed subduction carries high gross /
+low net slab pull and rifts *because it is being pulled apart* — continuous, no
+knee. Ridge push and continental collision damping (both compression-side) are
+excluded, so an actively colliding plate no longer accrues rift hazard. The blanket
 is the one deliberately *pseudo-mantle* term: `blanketYears` accrues while a
 plate holds ≥ `BLANKET_CONTINENT_FRACTION` (25%) of the sphere as continent and
 multiplies the hazard by 1 + (`BLANKET_MAX_FACTOR`−1)(1 − e^(−blanketYears/`BLANKET_EFOLD_YEARS`))

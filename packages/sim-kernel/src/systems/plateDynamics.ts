@@ -251,7 +251,12 @@ function apply(state: PlanetState, dtYears: number): PlanetState {
   const cellA = cellAreaM2(N, R);
 
   // Per-plate accumulators. Drag tensor K is symmetric (6 unique entries);
-  // torque, net driving force (Vec3) and gross |force| are the tension inputs.
+  // torque is the full driving torque. The tension bookkeeping (pullNet Vec3 +
+  // pullGross scalar) sums ONLY the pull-class forces — slab pull on the
+  // subducting side and slab suction on the overriding side, the two trench-pull
+  // drives — so tensionN measures opposed pull, not opposed compression (#127
+  // item 2.1 / TECTONICS_V2_REVIEW_FINDINGS §2.1). Ridge push and continental
+  // collision damping (compression-side) are excluded.
   const kxx = new Float64Array(nPlates);
   const kxy = new Float64Array(nPlates);
   const kxz = new Float64Array(nPlates);
@@ -261,10 +266,10 @@ function apply(state: PlanetState, dtYears: number): PlanetState {
   const tqx = new Float64Array(nPlates);
   const tqy = new Float64Array(nPlates);
   const tqz = new Float64Array(nPlates);
-  const netx = new Float64Array(nPlates);
-  const nety = new Float64Array(nPlates);
-  const netz = new Float64Array(nPlates);
-  const gross = new Float64Array(nPlates);
+  const pullNetX = new Float64Array(nPlates);
+  const pullNetY = new Float64Array(nPlates);
+  const pullNetZ = new Float64Array(nPlates);
+  const pullGross = new Float64Array(nPlates);
   // Attached down-going slab-pull force per plate (N) — the Forsyth & Uyeda
   // slab-attachment variable the census correlates speed against (#111). Only
   // the subducting side's own pull is summed; slab suction (a drive on the
@@ -342,14 +347,26 @@ function apply(state: PlanetState, dtYears: number): PlanetState {
         fx = u[0] * pull;
         fy = u[1] * pull;
         fz = u[2] * pull;
+        // Pull-class tension bookkeeping (#127 item 2.1): slab pull stretches
+        // the subducting plate's interior (it drags the plate trench-ward).
+        // Accumulate its vector (pullNet) and magnitude (pullGross, = pull since
+        // |û|=1) so tensionN = pullGross − |pullNet| reads the OPPOSED pull —
+        // large only when a plate is girdled by subduction pulling it in
+        // conflicting directions. Ridge push and continental collision damping
+        // (both compression-side) are deliberately excluded, so an actively
+        // colliding plate no longer reads as "being pulled apart". (Slab suction
+        // adds the overrider's share of the same trench pull, below.)
+        pullGross[p]! += pull;
+        pullNetX[p]! += fx;
+        pullNetY[p]! += fy;
+        pullNetZ[p]! += fz;
         // Attached-slab diagnostic: sum the pull magnitude on this (subducting)
         // plate. |û|=1 ⇒ |f| = pull. Census correlate; not a physics term.
         slabPull[p]! += pull;
         // Slab suction: a fraction of that pull also drags the OVERRIDING
         // plate trench-ward (from its cell toward this subducting plate),
-        // so the margin organizes both plates. Added straight to the
-        // overrider's torque — it is a drive on `other`, not part of this
-        // cell's tension bookkeeping.
+        // so the margin organizes both plates. Added to the overrider's torque
+        // AND (below) its pull-class tension bookkeeping.
         const uo = pairConsistentTangent(centers, nbTable, plateId, other.cell, p);
         if (uo !== null) {
           const so = SLAB_SUCTION_FACTOR * pull;
@@ -362,6 +379,17 @@ function apply(state: PlanetState, dtYears: number): PlanetState {
           tqx[other.plate]! += ory * foz - orz * foy;
           tqy[other.plate]! += orz * fox - orx * foz;
           tqz[other.plate]! += orx * foy - ory * fox;
+          // Suction is pull-class too: it drags the OVERRIDER trench-ward, so a
+          // large overriding continent girdled by subduction accrues radially-
+          // opposed suction — the physical supercontinent-breakup driver. Feed
+          // it into the overrider's tension bookkeeping (|uo|=1 ⇒ |f| = so).
+          // Without this a swallowing plate loses its own slab-pull tension as it
+          // grows (fewer of its OWN margins subduct) and monopoly-locks at coarse
+          // grid; the old sign-blind sum masked this with collision-damping tension.
+          pullGross[other.plate]! += so;
+          pullNetX[other.plate]! += fox;
+          pullNetY[other.plate]! += foy;
+          pullNetZ[other.plate]! += foz;
         }
       }
       // The overriding oceanic/continental side of a subduction margin (the
@@ -370,17 +398,14 @@ function apply(state: PlanetState, dtYears: number): PlanetState {
       // suction (above) and its own margins elsewhere.
     }
 
-    // Torque about the origin: (R·r̂) × F⃗. Accumulate tension bookkeeping.
+    // Torque about the origin: (R·r̂) × F⃗ — every force class drives the plate.
+    // (Pull-class tension bookkeeping — slab pull + suction — lives above.)
     const px = rx * R;
     const py = ry * R;
     const pz = rz * R;
     tqx[p]! += py * fz - pz * fy;
     tqy[p]! += pz * fx - px * fz;
     tqz[p]! += px * fy - py * fx;
-    netx[p]! += fx;
-    nety[p]! += fy;
-    netz[p]! += fz;
-    gross[p]! += Math.sqrt(fx * fx + fy * fy + fz * fz);
   }
 
   // Pass 2 — per-plate closed-form solve + semi-implicit relaxation.
@@ -429,7 +454,10 @@ function apply(state: PlanetState, dtYears: number): PlanetState {
     }
 
     const tensionN =
-      gross[p]! - Math.sqrt(netx[p]! * netx[p]! + nety[p]! * nety[p]! + netz[p]! * netz[p]!);
+      pullGross[p]! -
+      Math.sqrt(
+        pullNetX[p]! * pullNetX[p]! + pullNetY[p]! * pullNetY[p]! + pullNetZ[p]! * pullNetZ[p]!,
+      );
 
     if (mag < OMEGA_REST_THRESHOLD_RAD_PER_YR) {
       // At rest: keep the previous pole direction (can't normalize ~0), zero

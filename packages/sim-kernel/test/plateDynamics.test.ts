@@ -288,6 +288,66 @@ describe('slabPullN diagnostic (the census slab-attachment predictor, #111)', ()
   });
 });
 
+describe('tensionN is pull-class (slab-pull) only (#127 item 2.1)', () => {
+  // The review found tensionN summed gross − |net| over ALL boundary forces
+  // sign-blind, so opposed collision damping and opposed ridge push (both
+  // compression-side) registered as "being pulled apart" — an actively
+  // colliding plate accruing rift hazard, the opposite of the stated physics.
+  // tensionN now sums only slab pull, the sole interior-extensional drive.
+
+  it('an all-continental converging world produces exactly zero tensionN', () => {
+    // Pure continent–continent collision: the only forces are collision damping
+    // (compression). Continents never subduct ⇒ no slab pull ⇒ tensionN must be
+    // exactly 0. Under the old sign-blind sum any non-collinear damping leaked in.
+    const { state } = twoContinentClosingState(3);
+    const after = step(state, state.params.stepYears, makeCtx(3), ONLY_DYNAMICS);
+    for (const p of after.plates) expect(p.tensionN).toBe(0);
+  });
+
+  it('an all-oceanic diverging (young-crust) world produces exactly zero tensionN', () => {
+    // Young crust everywhere ⇒ slabAgeRamp = 0 ⇒ no slab pull; the driving force
+    // is ridge push (compression-side). tensionN must be exactly 0 — ridge push
+    // is excluded from the pull-class bookkeeping.
+    const params = createPlanetParams({ seed: 3, gridN: 16, numPlates: 2, forceKinematics: true });
+    let state = createInitialState(params);
+    const count = cellCount(params.gridN);
+    const crustType = new Float32Array(count).fill(0);
+    const crustAge = new Float32Array(count).fill(1e6);
+    state = { ...state, fields: { ...state.fields, crustType, crustAge } };
+    state = { ...state, fields: { ...state.fields, boundaryStress: computeBoundaryStress(state) } };
+    const after = step(state, params.stepYears, makeCtx(3), ONLY_DYNAMICS);
+    for (const p of after.plates) expect(p.tensionN).toBe(0);
+  });
+
+  it('opposed slab pull AND opposed slab suction both produce positive tensionN', () => {
+    // Positive control for both pull-class channels. Plate 0 is an OLD oceanic
+    // cap subducting all around its perimeter under the young plate 1.
+    //  - The cap (subducting side) is torn by radially-opposed SLAB PULL: its
+    //    tensionN > 0 and, since it overrides nowhere, is bounded by slabPullN
+    //    (= its gross slab pull; tensionN = gross − |net| ≤ gross).
+    //  - The overrider (plate 1) has NO attached slab (slabPullN = 0) yet is
+    //    torn by radially-opposed SLAB SUCTION pulling it toward the ring of
+    //    trenches — the supercontinent-breakup driver — so its tensionN > 0.
+    const params = createPlanetParams({ seed: 11, gridN: 16, numPlates: 2, forceKinematics: true });
+    let state = createInitialState(params);
+    const count = cellCount(params.gridN);
+    const plateId = state.fields.plateId;
+    const crustType = new Float32Array(count).fill(0);
+    const crustAge = new Float32Array(count);
+    for (let i = 0; i < count; i++) crustAge[i] = plateId[i] === 0 ? 1.5e8 : 1e7;
+    state = { ...state, fields: { ...state.fields, crustType, crustAge } };
+    state = { ...state, fields: { ...state.fields, boundaryStress: computeBoundaryStress(state) } };
+    const after = step(state, params.stepYears, makeCtx(11), ONLY_DYNAMICS);
+    const cap = after.plates[0]!;
+    expect(cap.slabPullN).toBeGreaterThan(0);
+    expect(cap.tensionN).toBeGreaterThan(0);
+    expect(cap.tensionN).toBeLessThanOrEqual(cap.slabPullN);
+    const overrider = after.plates[1]!;
+    expect(overrider.slabPullN).toBe(0); // no attached slab
+    expect(overrider.tensionN).toBeGreaterThan(0); // opposed slab suction
+  });
+});
+
 describe('speed envelope on a full small run', () => {
   it('every live plate stays in [0, 20] cm/yr with a plausible median', () => {
     // Full pipeline, forceKinematics on, N=16 to 1 Gyr. The census speed target
