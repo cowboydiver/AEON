@@ -126,7 +126,7 @@ PlateRecord = { eulerPole (unit Vec3), angularVelRadPerYr,
                 continentalFraction, alive,
                 // Tectonics V2 (default-on since KERNEL_BEHAVIOR_VERSION 17; all 0 flag-off):
                 omegaVec,                  // ω⃗, derived kinematic state under forceKinematics (#111 stage 1)
-                tensionN, slabPullN,       // gross−|net| driving force / attached slab pull, N — diagnostics + tensionRift input
+                tensionN, slabPullN,       // gross−|net| slab-pull force (opposed pull, #127 item 2.1) / attached slab pull, N — diagnostics + tensionRift input
                 blanketYears }             // tensionRift supercontinent thermal-blanket age (#113 stage 3)
 ```
 
@@ -301,6 +301,18 @@ persist until erosion (#19) ages them.
 > promoted world's measured Earth-scoreboard (with its honest misses — the
 > deep-time speed–slab-attachment correlation washes out in the busier stack;
 > census speed runs ~6 cm/yr) is in `TECTONICS_V2_STAGE5_SCOREBOARD.md`.
+>
+> **Dependency guard (#127 item 6).** `tensionRift` and `emergentSuture` both
+> read state only `forceKinematics` produces — the boundary tension `tensionN`
+> and the force-balance closing-speed collapse — so either one on with
+> `forceKinematics` off is a silently degenerate world: `tensionRift` gives a
+> rift-dead planet (`tensionN` is 0 forever and the flag deletes the legacy
+> age/size hazard), `emergentSuture` grinds every real collision to the 150 Myr
+> `SUTURE_TIMEOUT_YEARS` backstop. `validateKinematicDependencies`
+> (state.ts, called from `createPlanetParams` and `createInitialState`) throws on
+> the combo; the sim-cli resolves it loudly (`--no-force-kinematics` cascades the
+> two dependents off, `--ab force-kinematics` ablates the whole stack) and the web
+> sidebar cascades + grays the dependents via `resolveMechanismDependencies`.
 
 The `wilson` system (after tectonics in the pipeline) reorganizes plates so
 deep time tells a story. The whole trigger clock was retuned 4× slower in
@@ -360,15 +372,18 @@ chaotically sensitive to the oversize rate (between 12× and 16× it is bimodal:
 seed 42 collapses to ~49% at 12×), which is why the oversize safety net is the
 one knob the #66 clock scaling did not slow proportionally.
 **Tension-driven rift timing (`tensionRift`, Tectonics V2 stage 3, #113,
-default off):** under the flag the flat-hazard × bimodal-size-ramp scheme is
+default on since KERNEL_BEHAVIOR_VERSION 17, #115):** under the flag the
+flat-hazard × bimodal-size-ramp scheme is
 replaced by a physical hazard drawn at the *same* hash site — only the
 acceptance threshold changes. λ = `RIFT_HAZARD_AT_REF_PER_MYR` (0.0075/Myr) ×
 min(4, (`tensionN`/`RIFT_TENSION_REF_N`)²) × a supercontinent thermal-blanket
 factor, and the per-step draw must clear 1 − exp(−λ·dtMyr) (`riftTensionHazardProbability`).
-`tensionN` (gross − |net| boundary driving force, written by `plateDynamics`
-under `forceKinematics`) is the physical scalar the size ramp was faking: a
-supercontinent ringed by opposed subduction carries high gross / low net force
-and rifts *because it is being pulled apart* — continuous, no knee. The blanket
+`tensionN` (gross − |net| over slab-pull forces only — #127 item 2.1 — written
+by `plateDynamics` under `forceKinematics`) is the physical scalar the size ramp
+was faking: a supercontinent ringed by opposed subduction carries high gross /
+low net slab pull and rifts *because it is being pulled apart* — continuous, no
+knee. Ridge push and continental collision damping (both compression-side) are
+excluded, so an actively colliding plate no longer accrues rift hazard. The blanket
 is the one deliberately *pseudo-mantle* term: `blanketYears` accrues while a
 plate holds ≥ `BLANKET_CONTINENT_FRACTION` (25%) of the sphere as continent and
 multiplies the hazard by 1 + (`BLANKET_MAX_FACTOR`−1)(1 − e^(−blanketYears/`BLANKET_EFOLD_YEARS`))
@@ -388,7 +403,7 @@ passive: a rift stamps both halves with `sutureLockUntilYears = now +
 RIFT_SUTURE_COOLDOWN_YEARS` (120 Myr) and a locked plate's contact is not
 recorded, so it can't re-suture until the lock lifts (then needs a fresh
 60 Myr). **Stall-triggered suture (`emergentSuture`, #112, Tectonics V2
-stage 2, default-off):** when the flag is on (after its branched-A/B
+stage 2, default on since KERNEL_BEHAVIOR_VERSION 17, #115):** when the flag is on (after its branched-A/B
 `emergentSutureOnsetYears`), wilson replaces the fixed `SUTURE_AFTER_YEARS`
 countdown with *detection* of the collision death `forceKinematics` produces.
 The contact scan drops its stress gate and instead counts continent–continent
@@ -404,7 +419,16 @@ advection-quantum noise floor that never falls below 2 mm/yr, so it measured dea
 only at the window boundary (net summed across the whole 20 Myr first) makes a
 lone jittering step unable to reset the clock; a window that reaches threshold
 re-arms the anchor. The derived reset tolerance is 2 mm/yr × 20 Myr (≈40 km net
-shortening/window) — no independent tuned constant. A loud backstop
+shortening/window) — no independent tuned constant. A low net rate alone is not
+enough (#127 item 2.2): the net-signed test is blind to a shearing transform
+(all tangential slip) or a boundary rotating about a nearby pole (signed normal
+segments cancel), both of which read net≈0 while the plates still move at plate
+speed. A **gross relative-motion gate** also requires the pair's mean
+|v_own − v_other| — the smooth Euler-pole-derived speed, free of the û-projection
+jitter that forced the net-signed integral — to stay below
+`SUTURE_SHEAR_MAX_M_PER_YR` (8 mm/yr): a genuine stalled collision is
+near-comoving, so only near-comoving pairs stall-weld. The loud timeout is
+deliberately NOT gated, so a long-lived head-on grind still merges (tagged). A loud backstop
 merges any contact that persists `SUTURE_TIMEOUT_YEARS` (150 Myr) without ever
 stalling and emits a distinct **`sutureTimeout`** event, so the stall-never-fires
 failure mode (a plate driven by a remote slab) is visible in the log rather than
@@ -538,10 +562,16 @@ harness. After the ISSUE_88_91_FINDINGS.md campaign, **`crustFates` and
 main goldens regenerated deliberately) — the promoted pair measures
 healthier than the old baseline over full 4.5 Gyr histories (N=128 seed 42:
 land min 11.4%, final land 14.3%, ~20 consolidated continental components
-vs 275 baseline). `compactArcs` and `emergentArcTaper` **stay default-off**:
-measured together at default-on they starve continental creation into a
-near-waterworld (N=64 final land 2–5%, N=128 land min 5.3% — far below the
-standing 10% land-sanity floor). The pre-promotion kernel path is pinned
+vs 275 baseline). `compactArcs` and `emergentArcTaper` **stay default-off,
+and are now INCOMPATIBLE with the promoted V2 + datum defaults** (#127 item 9):
+under the busy V2 engine arc maturation is the dominant continental-crust
+source, and each flag alone chokes it — `compactArcs` starves crust to ~9% of
+the sphere (worst measured confetti: 596 final land fragments) and
+`emergentArcTaper` to ~4–6% (TECTONICS_V2_REVIEW_FINDINGS §3), the opposite of
+their #89/#91 intent. They were designed against `main`'s quieter engine; leave
+them off with the promoted defaults. (Originally, at default-on together they
+already starved creation into a near-waterworld: N=64 final land 2–5%, N=128
+land min 5.3%.) The pre-promotion kernel path is pinned
 unchanged by the legacy all-mechanisms-off goldens, and each mechanism's
 isolated flag-on path has its own golden spine. The mechanism registry
 (`sim-kernel/src/mechanisms.ts`, exported as `MECHANISMS` +
@@ -618,7 +648,10 @@ key:
   fringes) and arc maturation re-submerges, but flooded *continental*
   crust does not return — drowned platforms are transient (crustFates
   retires them) and large continents still never subside, which is the
-  freeboard mechanism's job.
+  freeboard mechanism's job. **Default ON** since the datum-trio promotion
+  (`KERNEL_BEHAVIOR_VERSION` 18, #127 item 9; runs with `freeboard` +
+  `bathymetryDatum`); the flag-off path is byte-identical, pinned by the
+  legacy all-off and pre-datum-promotion default goldens.
 - **`freeboard` (no tracking issue — scoped, specified and measured in
   `SEA_LEVEL_DATUM_FINDINGS.md`; `systems/freeboard.ts` + call-site
   re-keys via `landDatumOffsetM` in `datums.ts`):** freeboard regulation,
@@ -647,7 +680,8 @@ key:
   *insensitive* to `FREEBOARD_TARGET_M` — the overshoot vs Earth's ~25%
   is structural (rate-bound relaxation + a flooded lobe piled against the
   buoyancy floor), so the target keeps its cleanly-anchored 400 m; see
-  the findings doc. Default OFF — measurement prototype.
+  the findings doc. **Default ON** since the datum-trio promotion
+  (`KERNEL_BEHAVIOR_VERSION` 18, #127 item 9); flag-off is byte-identical.
 - **`bathymetryDatum` (#102; `seaKeyedOceanicDepthForAge` in
   `bathymetry.ts` + `bathymetryDatumOffsetM` in `datums.ts`):** the
   age-depth re-key — the third datum layer, retiring the emergent
@@ -677,8 +711,26 @@ key:
   inventory holds (a water-inventory follow-up, not a datum one).
   Flag-off (offset 0) returns the design curve bit-exactly. See
   `SEA_LEVEL_DATUM_FINDINGS.md` for the trajectories, the dt-halving
-  check, and the crest-depth calibration. Default OFF — measurement
-  prototype, designed to run with `seaLevelDatums` + `freeboard` on.
+  check, and the crest-depth calibration. **Default ON** since the
+  datum-trio promotion (`KERNEL_BEHAVIOR_VERSION` 18, #127 item 9); runs
+  with `seaLevelDatums` + `freeboard` (all three promoted together);
+  flag-off is byte-identical.
+
+  > **Datum-trio promotion (#127 item 9, `KERNEL_BEHAVIOR_VERSION` 18).**
+  > `seaLevelDatums` + `freeboard` + `bathymetryDatum` are now default-on —
+  > the review's recommended best-in-class config (TECTONICS_V2_REVIEW_FINDINGS
+  > §4: dispersal 95–97%, land 25–31%, coherent continents, monopoly 0). One
+  > deep-time consequence to know: the stack re-keys continents (freeboard) AND
+  > ridge crests (bathymetryDatum) to the falling dynamic sea while the abyssal
+  > floor stays absolute (the #102 volume anchor), so the promoted world's
+  > hypsometry is COMPRESSED relative to the falling sea — the strict
+  > abyssal+platform bimodality invariant is pinned to the datum-off substrate
+  > (phase1.test.ts), and the shipped world's two-level shape is guarded instead
+  > by the 4.5 Gyr land/elevation bounds and the acceptance-grid metrics. The
+  > freeboard-lowered land regime also makes silicate weathering more
+  > event-sensitive, so deep-time CO₂ shows larger (bounded, temperature-safe,
+  > recovering) transients — the phase-1 CO₂ ceiling was widened 10k→20k ppm
+  > accordingly (still 2% of the 1e6 clamp).
 
 `energyBalance` (#30): the Phase 3 climate hub. A Budyko–Sellers **zonal
 energy-balance model** solved on `ENERGY_BALANCE_BANDS` (90) equal-area

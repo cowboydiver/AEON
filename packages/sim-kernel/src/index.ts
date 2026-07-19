@@ -35,6 +35,7 @@ export {
 export {
   createPlanetParams,
   createInitialState,
+  validateKinematicDependencies,
   type PlanetParams,
   type Globals,
   type PlanetState,
@@ -60,7 +61,9 @@ export { blockIsostasySystem, blockElevationCap } from './systems/blockIsostasy'
 export { crustFatesSystem } from './systems/crustFates';
 export {
   MECHANISMS,
+  MECHANISM_PREREQUISITE,
   defaultMechanismToggles,
+  resolveMechanismDependencies,
   type MechanismInfo,
   type MechanismKey,
   type MechanismToggles,

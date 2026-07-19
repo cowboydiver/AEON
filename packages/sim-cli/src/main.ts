@@ -87,31 +87,34 @@ Options:
                               ceiling) to the dynamic sea level instead of the
                               fixed 0 m datum, so drowned platforms and shallow
                               shelves survive the deep-time sea-level fall
-                              (default off — prototype; see
+                              (default ON since the datum-trio promotion, #127
+                              item 9; --no-sea-level-datums disables; see
                               docs/SEA_LEVEL_DATUM_FINDINGS.md)
   --freeboard                 enable freeboard regulation (the findings-doc
                               follow-up): continental mean elevation relaxes
                               toward a target freeboard above the dynamic sea
                               level, passive margins subside toward shelf
                               depth, and the land-relief datums ride the sea
-                              level (default off — prototype; measure with
-                              --sea-level-datums also on)
+                              level (default ON since #127 item 9; runs with
+                              --sea-level-datums; --no-freeboard disables)
   --bathymetry-datum          key the oceanic age-depth reference (ridge
                               crest, trench pinning, gap fill, shelf room) to
                               the dynamic sea level (#102), so ridge crests
                               stay submerged instead of crossing the deep-time
-                              oceans as emergent island chains (default off —
-                              prototype; measure with --sea-level-datums
-                              --freeboard also on)
+                              oceans as emergent island chains (default ON since
+                              #127 item 9; runs with --sea-level-datums
+                              --freeboard; --no-bathymetry-datum disables)
   --force-kinematics          enable force-driven plate kinematics (Tectonics
                               V2 stage 1, #111): a per-step rigid-plate torque
                               balance (slab pull, ridge push, collision damping,
                               basal drag) makes each plate's angular velocity
                               derived state instead of a fixed random draw
                               (default ON since the V2 promotion, #115;
-                              --no-force-kinematics disables; measure the
-                              marginal effect with --ab force-kinematics
-                              --plate-census)
+                              --no-force-kinematics disables — and, since
+                              tensionRift + emergentSuture require it, also
+                              disables those two, giving the legacy pre-V2 world
+                              (#127 item 6); measure the marginal effect with
+                              --ab force-kinematics --plate-census)
   --emergent-suture           suture on kinematic stall instead of the fixed
                               contact countdown (Tectonics V2 stage 2, #112):
                               a cont-cont pair merges when force-balance collision
@@ -177,7 +180,10 @@ Options:
                               flags and --dump. Since the #88-#91 promotion
                               BOTH arms inherit the promoted defaults for the
                               other mechanisms — the A/B measures the marginal
-                              effect against the shipped default world.
+                              effect against the shipped default world. --ab
+                              force-kinematics ablates the whole V2 kinematics
+                              stack (it + tensionRift + emergentSuture, which
+                              depend on it; #127 item 6).
   --ab-branch <years>         branch year for --ab (both arms identical before
                               it; required with --ab)
   --ab-block-isostasy <years> alias for --ab block-isostasy --ab-branch <years>
@@ -348,6 +354,51 @@ const dumpFields: FieldName[] = (values.dump ?? '')
     return s as FieldName;
   });
 
+// Single-arm mechanism flags compose (e.g. --block-isostasy --crust-fates
+// measures the pair together); --no-* forms disable a default-on mechanism.
+// The paired --ab harness takes one at a time.
+const mechanismOverrides = MECHANISM_FLAGS.reduce<Partial<PlanetParams>>((acc, flag) => {
+  const on = values[flag];
+  const off = values[`no-${flag}`];
+  if (on && off) {
+    console.error(`sim-cli: --${flag} and --no-${flag} are mutually exclusive`);
+    process.exit(2);
+  }
+  if (!on && !off) return acc; // kernel default rules
+  return { ...acc, ...MECHANISMS[flag]!(Boolean(on), 0) };
+}, {});
+
+// #127 item 6: forceKinematics is the prerequisite for tensionRift and
+// emergentSuture — both read the boundary tension / force-balance closing-speed
+// collapse only it produces. Resolve the dependency loudly here so we never hand
+// the kernel a silently degenerate (rift-dead / 150 Myr suture-timeout) world.
+{
+  const defaults = createPlanetParams({ seed });
+  const eff = (k: 'forceKinematics' | 'tensionRift' | 'emergentSuture'): boolean =>
+    (k in mechanismOverrides ? mechanismOverrides[k] : defaults[k]) as boolean;
+  if (!eff('forceKinematics')) {
+    const contradicted: string[] = [];
+    if (values['tension-rift']) contradicted.push('--tension-rift');
+    if (values['emergent-suture']) contradicted.push('--emergent-suture');
+    if (contradicted.length > 0) {
+      console.error(
+        `sim-cli: ${contradicted.join(' and ')} ${contradicted.length > 1 ? 'require' : 'requires'} ` +
+          `force-kinematics, but --no-force-kinematics is set (#127 item 6). ` +
+          `Drop ${contradicted.join('/')}, or drop --no-force-kinematics.`,
+      );
+      process.exit(2);
+    }
+    if (eff('tensionRift') || eff('emergentSuture')) {
+      console.error(
+        'sim-cli: note: --no-force-kinematics also disables tensionRift and emergentSuture ' +
+          '(they require force-kinematics; #127 item 6) — this is the legacy pre-V2 world.',
+      );
+      mechanismOverrides.tensionRift = false;
+      mechanismOverrides.emergentSuture = false;
+    }
+  }
+}
+
 const params = createPlanetParams({
   seed,
   ...(gridN !== undefined ? { gridN } : {}),
@@ -362,19 +413,7 @@ const params = createPlanetParams({
   // cooldown. No effect unless --tension-rift is also set. Byte-identical when
   // omitted (kernel default = RIFT_SUTURE_COOLDOWN_YEARS).
   ...(riftSutureCooldownYears !== undefined ? { riftSutureCooldownYears } : {}),
-  // Single-arm mechanism flags compose (e.g. --block-isostasy --crust-fates
-  // measures the pair together); --no-* forms disable a default-on mechanism.
-  // The paired --ab harness takes one at a time.
-  ...MECHANISM_FLAGS.reduce<Partial<PlanetParams>>((acc, flag) => {
-    const on = values[flag];
-    const off = values[`no-${flag}`];
-    if (on && off) {
-      console.error(`sim-cli: --${flag} and --no-${flag} are mutually exclusive`);
-      process.exit(2);
-    }
-    if (!on && !off) return acc; // kernel default rules
-    return { ...acc, ...MECHANISMS[flag]!(on, 0) };
-  }, {}),
+  ...mechanismOverrides,
 });
 
 // pnpm runs this script with cwd = packages/sim-cli; resolve --out relative
@@ -540,6 +579,30 @@ if (abMechanism !== undefined && abBranchYears !== undefined) {
     process.exit(2);
   }
   const mechanismParams = MECHANISMS[abMechanism]!;
+  // #127 item 6: ablating force-kinematics has to ablate its dependents too —
+  // tensionRift + emergentSuture require it, so the off-arm would otherwise be a
+  // silently degenerate rift-dead world (and the kernel rejects it). Key the
+  // dependents to the SAME branch onset so both arms stay bit-identical before
+  // the branch; this makes `--ab force-kinematics` a whole V2-kinematics-stack
+  // ablation (force balance + stall suture + tension rift), the only coherent
+  // reading against the promoted defaults.
+  const armMechanismParams = (on: boolean): Partial<PlanetParams> => {
+    const base = mechanismParams(on, abBranchYears);
+    if (abMechanism !== 'force-kinematics') return base;
+    return {
+      ...base,
+      tensionRift: on,
+      tensionRiftOnsetYears: abBranchYears,
+      emergentSuture: on,
+      emergentSutureOnsetYears: abBranchYears,
+    };
+  };
+  if (abMechanism === 'force-kinematics') {
+    console.log(
+      'ab: force-kinematics ablation includes its dependents tensionRift + emergentSuture ' +
+        '(the V2 kinematics stack; #127 item 6)',
+    );
+  }
   const runArm = (on: boolean): { series: KeyframeMetrics[]; preBranchElev: string[] } => {
     const armParams = createPlanetParams({
       seed,
@@ -548,7 +611,7 @@ if (abMechanism !== undefined && abBranchYears !== undefined) {
       ...(stepYears !== undefined ? { stepYears } : {}),
       ...(waterScale !== undefined ? { waterInventoryScale: waterScale } : {}),
       ...(initialLandFraction !== undefined ? { initialLandFraction } : {}),
-      ...mechanismParams(on, abBranchYears),
+      ...armMechanismParams(on),
     });
     const series: KeyframeMetrics[] = [];
     const preBranchElev: string[] = [];

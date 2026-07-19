@@ -119,9 +119,10 @@ describe('oxygen: bounds, ablation and the Great Oxidation (#37)', () => {
     // Same reservoir state, twice the productivity ⇒ twice the gross source ⇒ a
     // higher next O₂ (the directional §5 invariant: raise productivity ⇒ plateau
     // rises). Build a live-ocean state and scale its marineLife field. Pinned to
-    // the legacy (V2-off) substrate: this is an OXYGEN-system property test, and
-    // the #115 promotion's shifted tectonic/climate substrate otherwise moves the
-    // abiogenesis window so no marine life exists at step 60 (both arms zero).
+    // the legacy (V2 + datum trio off) substrate: this is an OXYGEN-system
+    // property test, and the #115/#127-item-9 promotions' shifted tectonic/climate
+    // substrate otherwise move the abiogenesis window so no marine life exists at
+    // step 60 (both arms zero).
     const params = createPlanetParams({
       seed: 42,
       gridN: 16,
@@ -129,6 +130,9 @@ describe('oxygen: bounds, ablation and the Great Oxidation (#37)', () => {
       forceKinematics: false,
       emergentSuture: false,
       tensionRift: false,
+      seaLevelDatums: false,
+      freeboard: false,
+      bathymetryDatum: false,
     });
     const s = runFull(params, 60);
     const half: PlanetState = { ...s, fields: { ...s.fields, marineLife: s.fields.marineLife.map((v) => v * 0.5) } };

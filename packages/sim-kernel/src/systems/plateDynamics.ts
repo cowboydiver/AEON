@@ -13,7 +13,10 @@
  *   - **ridge push** on each flank of a divergent boundary, pushing away from
  *     the ridge;
  *   - **continent–continent collision damping** — pure damping that opposes
- *     the closing motion (it can stall a collision but never reverse it);
+ *     the closing motion: it can stall a collision and, under a one-step-lagged
+ *     stress spike, transiently overshoot the stall by a hair (the review
+ *     measured ≲0.1 mm/yr, TECTONICS_V2_REVIEW_FINDINGS §2), but the speed cap
+ *     bars a super-physical reversal and it never drives a *sustained* reversal;
  *   - closed by **linear basal drag** −c_d·v with a continental-keel
  *     multiplier, integrated per cell into a per-plate drag tensor K.
  *
@@ -35,15 +38,16 @@
  * byte-identical. It consumes **zero RNG draws** in all cases, satisfying the
  * A/B contract by construction.
  *
- * ω⃗ is written to each plate's `omegaVec`, and `eulerPole`/`angularVelRadPerYr`
- * are re-derived from it (|ω⃗| and its unit direction), so every existing
- * consumer — advection, `computeBoundaryStress`, `plateVelocityAt`, the wilson
- * stats — is unchanged. The current ω⃗ fed into the relaxation is reconstructed
- * from that derived pair (`angularVelRadPerYr·eulerPole`), which is the single
- * source of truth every other system already reads: on the first engaged step
- * that is the initial random draw, so the drawn kinematics act as the ~3τ
- * symmetry-breaking transient (§2.5) rather than being discarded, and a rift
- * fragment (whose pole/ω wilson still constructs in stage 1) stays consistent.
+ * The updated ω⃗ is stored as `eulerPole`/`angularVelRadPerYr` (its unit
+ * direction and |ω⃗|), the single source of truth every existing consumer —
+ * advection, `computeBoundaryStress`, `plateVelocityAt`, the wilson stats,
+ * `emergentSuture`'s merge blend — already reads. The current ω⃗ fed into the
+ * relaxation is likewise reconstructed from that pair (`angularVelRadPerYr·
+ * eulerPole`): on the first engaged step that is the initial random draw, so the
+ * drawn kinematics act as the ~3τ symmetry-breaking transient (§2.5) rather than
+ * being discarded, and a rift fragment (whose pole/ω wilson constructs in stage
+ * 1) stays consistent. (The redundant write-only `omegaVec` mirror was dropped
+ * in #127 item 8 — nothing ever read its value.)
  *
  * Purity: one ascending-index O(cells) sweep (fixed FP summation order)
  * accumulating per-plate drag tensors + boundary torques, then an O(plates)
@@ -247,11 +251,25 @@ function apply(state: PlanetState, dtYears: number): PlanetState {
 
   // Boundary length per boundary cell (arc width of one cell on a cube face)
   // and equal-area cell area — the geometric weights for forces and drag.
+  // NOTE (#127 item 8b): this is a FIXED per-cell edge length, orientation-
+  // blind. A staircased diagonal margin has ~√2× as many boundary cells per
+  // unit of true geodesic boundary length as an axis-aligned one, so each 45°
+  // margin accrues ~√2× the total force-length — a known cube-sphere staircase
+  // anisotropy. The force calibration (SLAB_PULL_COEF/RIDGE_PUSH/COLLISION_DAMP)
+  // was tuned against this actual discretized geometry, so it is absorbed into
+  // the constants; a true fix (weighting cellW by a per-cell boundary-normal
+  // estimate) is disproportionate to the bounded √2 effect. Documented, not
+  // fixed (review §2, TECTONICS_V2_REVIEW_FINDINGS §7).
   const cellW = (Math.PI / 2) * (R / N);
   const cellA = cellAreaM2(N, R);
 
   // Per-plate accumulators. Drag tensor K is symmetric (6 unique entries);
-  // torque, net driving force (Vec3) and gross |force| are the tension inputs.
+  // torque is the full driving torque. The tension bookkeeping (pullNet Vec3 +
+  // pullGross scalar) sums ONLY the pull-class forces — slab pull on the
+  // subducting side and slab suction on the overriding side, the two trench-pull
+  // drives — so tensionN measures opposed pull, not opposed compression (#127
+  // item 2.1 / TECTONICS_V2_REVIEW_FINDINGS §2.1). Ridge push and continental
+  // collision damping (compression-side) are excluded.
   const kxx = new Float64Array(nPlates);
   const kxy = new Float64Array(nPlates);
   const kxz = new Float64Array(nPlates);
@@ -261,10 +279,10 @@ function apply(state: PlanetState, dtYears: number): PlanetState {
   const tqx = new Float64Array(nPlates);
   const tqy = new Float64Array(nPlates);
   const tqz = new Float64Array(nPlates);
-  const netx = new Float64Array(nPlates);
-  const nety = new Float64Array(nPlates);
-  const netz = new Float64Array(nPlates);
-  const gross = new Float64Array(nPlates);
+  const pullNetX = new Float64Array(nPlates);
+  const pullNetY = new Float64Array(nPlates);
+  const pullNetZ = new Float64Array(nPlates);
+  const pullGross = new Float64Array(nPlates);
   // Attached down-going slab-pull force per plate (N) — the Forsyth & Uyeda
   // slab-attachment variable the census correlates speed against (#111). Only
   // the subducting side's own pull is summed; slab suction (a drive on the
@@ -316,10 +334,11 @@ function apply(state: PlanetState, dtYears: number): PlanetState {
         // Continent–continent collision: pure damping opposing the closing
         // motion (−û). The closing speed feeding the damper is clamped at the
         // plate speed cap so a one-step-lagged stress spike cannot inject a
-        // super-physical retarding torque that would REVERSE the plate — the
-        // "capped, can stall never reverse" clause of COLLISION_DAMP. With a
-        // realistic dt (a = dt/τ ≈ 0.1) the clamp rarely binds; it is the
-        // pathological-config guard the §2.4 `min(…, cap)` calls for.
+        // super-physical retarding torque — the "capped, can stall, at most a
+        // ≲0.1 mm/yr transient overshoot, never a sustained reversal" clause of
+        // COLLISION_DAMP (review §2 measured the overshoot). With a realistic dt
+        // (a = dt/τ ≈ 0.1) the clamp rarely binds; it is the pathological-config
+        // guard the §2.4 `min(…, cap)` calls for.
         const dampSpeed = Math.min(uN, PLATE_SPEED_CAP_M_PER_YR);
         const mag = COLLISION_DAMP_N_YR_PER_M2 * dampSpeed * cellW;
         fx = -u[0] * mag;
@@ -335,6 +354,19 @@ function apply(state: PlanetState, dtYears: number): PlanetState {
         // crustAge is physically ≥ 0 everywhere; clamp defensively so a stray
         // negative age can never turn √age into NaN and poison the pole.
         const age = Math.max(0, crustAge[i]!);
+        // NOTE (#127 item 8a, verified): √age has NO old-age saturation, so the
+        // oldest subducting slabs are super-calibrated. Measured over a seed-42
+        // 2.5 Gyr default run, the age of cells where this branch fires is P50 40
+        // / P90 141 / P99 389 Myr with a max ~4.5 Gyr (deep ocean basins that
+        // never rode a ridge to subduction) — the top decile exceeds the ~100
+        // Myr calibration point, giving up to ~6.7× the 100-Myr pull at the tail.
+        // Real slabs saturate (half-space √age holds only to the plate-model
+        // thickness, ~tens of Myr). The consequence is bounded here by the plate
+        // speed cap and the stage-5 world measures healthy (speed median ~6
+        // cm/yr, no runaway), so a saturation clamp (min(√age, √~100 Myr)) is a
+        // deferred physics refinement — a force-balance change needing its own
+        // golden regen + acceptance grid, out of scope for the item-8 hygiene
+        // pass. See TECTONICS_V2_REVIEW_FINDINGS §7.
         const pull =
           SLAB_PULL_COEF_N_PER_M_PER_SQRT_YR * Math.sqrt(age) * slabAgeRamp(age) * cellW;
         // Slab pull drags the subducting plate trench-ward (toward the other
@@ -342,14 +374,26 @@ function apply(state: PlanetState, dtYears: number): PlanetState {
         fx = u[0] * pull;
         fy = u[1] * pull;
         fz = u[2] * pull;
+        // Pull-class tension bookkeeping (#127 item 2.1): slab pull stretches
+        // the subducting plate's interior (it drags the plate trench-ward).
+        // Accumulate its vector (pullNet) and magnitude (pullGross, = pull since
+        // |û|=1) so tensionN = pullGross − |pullNet| reads the OPPOSED pull —
+        // large only when a plate is girdled by subduction pulling it in
+        // conflicting directions. Ridge push and continental collision damping
+        // (both compression-side) are deliberately excluded, so an actively
+        // colliding plate no longer reads as "being pulled apart". (Slab suction
+        // adds the overrider's share of the same trench pull, below.)
+        pullGross[p]! += pull;
+        pullNetX[p]! += fx;
+        pullNetY[p]! += fy;
+        pullNetZ[p]! += fz;
         // Attached-slab diagnostic: sum the pull magnitude on this (subducting)
         // plate. |û|=1 ⇒ |f| = pull. Census correlate; not a physics term.
         slabPull[p]! += pull;
         // Slab suction: a fraction of that pull also drags the OVERRIDING
         // plate trench-ward (from its cell toward this subducting plate),
-        // so the margin organizes both plates. Added straight to the
-        // overrider's torque — it is a drive on `other`, not part of this
-        // cell's tension bookkeeping.
+        // so the margin organizes both plates. Added to the overrider's torque
+        // AND (below) its pull-class tension bookkeeping.
         const uo = pairConsistentTangent(centers, nbTable, plateId, other.cell, p);
         if (uo !== null) {
           const so = SLAB_SUCTION_FACTOR * pull;
@@ -362,6 +406,17 @@ function apply(state: PlanetState, dtYears: number): PlanetState {
           tqx[other.plate]! += ory * foz - orz * foy;
           tqy[other.plate]! += orz * fox - orx * foz;
           tqz[other.plate]! += orx * foy - ory * fox;
+          // Suction is pull-class too: it drags the OVERRIDER trench-ward, so a
+          // large overriding continent girdled by subduction accrues radially-
+          // opposed suction — the physical supercontinent-breakup driver. Feed
+          // it into the overrider's tension bookkeeping (|uo|=1 ⇒ |f| = so).
+          // Without this a swallowing plate loses its own slab-pull tension as it
+          // grows (fewer of its OWN margins subduct) and monopoly-locks at coarse
+          // grid; the old sign-blind sum masked this with collision-damping tension.
+          pullGross[other.plate]! += so;
+          pullNetX[other.plate]! += fox;
+          pullNetY[other.plate]! += foy;
+          pullNetZ[other.plate]! += foz;
         }
       }
       // The overriding oceanic/continental side of a subduction margin (the
@@ -370,17 +425,14 @@ function apply(state: PlanetState, dtYears: number): PlanetState {
       // suction (above) and its own margins elsewhere.
     }
 
-    // Torque about the origin: (R·r̂) × F⃗. Accumulate tension bookkeeping.
+    // Torque about the origin: (R·r̂) × F⃗ — every force class drives the plate.
+    // (Pull-class tension bookkeeping — slab pull + suction — lives above.)
     const px = rx * R;
     const py = ry * R;
     const pz = rz * R;
     tqx[p]! += py * fz - pz * fy;
     tqy[p]! += pz * fx - px * fz;
     tqz[p]! += px * fy - py * fx;
-    netx[p]! += fx;
-    nety[p]! += fy;
-    netz[p]! += fz;
-    gross[p]! += Math.sqrt(fx * fx + fy * fy + fz * fz);
   }
 
   // Pass 2 — per-plate closed-form solve + semi-implicit relaxation.
@@ -390,8 +442,15 @@ function apply(state: PlanetState, dtYears: number): PlanetState {
 
   const plates = state.plates.map((plate, p) => {
     const trK = kxx[p]! + kyy[p]! + kzz[p]!;
-    // dead / cell-less plate: kinematics unchanged, no attached slab this step.
-    if (trK <= 0) return plate.slabPullN === 0 ? plate : { ...plate, slabPullN: 0 };
+    // Dead / cell-less plate: kinematics unchanged, and it owns no boundary this
+    // step, so its force diagnostics are stale — clear slabPullN AND tensionN so
+    // a retired plate doesn't carry a phantom attached slab / tension (#127 item
+    // 8). Same reference back when already clean.
+    if (trK <= 0) {
+      return plate.slabPullN === 0 && plate.tensionN === 0
+        ? plate
+        : { ...plate, slabPullN: 0, tensionN: 0 };
+    }
 
     // Regularize the (PSD) drag tensor: add REG·tr(K)/3 to its diagonal so a
     // near-point plate's singular radial spin-axis is pinned deterministically,
@@ -429,14 +488,16 @@ function apply(state: PlanetState, dtYears: number): PlanetState {
     }
 
     const tensionN =
-      gross[p]! - Math.sqrt(netx[p]! * netx[p]! + nety[p]! * nety[p]! + netz[p]! * netz[p]!);
+      pullGross[p]! -
+      Math.sqrt(
+        pullNetX[p]! * pullNetX[p]! + pullNetY[p]! * pullNetY[p]! + pullNetZ[p]! * pullNetZ[p]!,
+      );
 
     if (mag < OMEGA_REST_THRESHOLD_RAD_PER_YR) {
       // At rest: keep the previous pole direction (can't normalize ~0), zero
       // speed. A revived torque next step lifts it off rest again.
       return {
         ...plate,
-        omegaVec: [0, 0, 0] as Vec3,
         angularVelRadPerYr: 0,
         tensionN,
         slabPullN: slabPull[p]!,
@@ -445,7 +506,6 @@ function apply(state: PlanetState, dtYears: number): PlanetState {
     const inv = 1 / mag;
     return {
       ...plate,
-      omegaVec: [ox, oy, oz] as Vec3,
       eulerPole: [ox * inv, oy * inv, oz * inv] as Vec3,
       angularVelRadPerYr: mag,
       tensionN,

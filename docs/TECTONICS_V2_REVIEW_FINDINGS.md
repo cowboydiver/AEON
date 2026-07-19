@@ -168,3 +168,54 @@ continental mean; uplift-vs-cap sets how much orogen stands above it).
 | `tectonics-v2-review-evidence/recommended-v2-datums-4500Myr.png` | recommended config |
 | `tectonics-v2-review-evidence/antipattern-v2-compactarcs-4500Myr.png` | V2 + compactArcs — crust starvation |
 | `tectonics-v2-review-evidence/recommended-2x-erosion-4500Myr.png` | recommended + 2× erosion — near-identical to stock |
+
+## 7. #127 item 8 verification dispositions (verify-then-fix candidates)
+
+The §2 "not independently re-verified" candidates were each checked before
+touching anything. Three were fixed (they were unambiguous and golden-neutral);
+three are real but disproportionate/risky to fix now and are documented in the
+code with the evidence below.
+
+**Fixed (hygiene, goldens byte-identical):**
+
+- **`omegaVec` is write-only redundant state — dropped.** Confirmed nothing reads
+  its value: `plateDynamics`' relaxation and `emergentSuture`'s merge blend both
+  reconstruct ω⃗ from `eulerPole·angularVelRadPerYr` (the single source of truth),
+  and the rift fragment only *copies* it. The field was removed from
+  `PlateRecord`; no numeric change (it is not in the codec, which carries
+  fields/globals/events only).
+- **Stale force diagnostics on retired plates — cleared.** `plateDynamics` now
+  zeros both `slabPullN` *and* `tensionN` on a cell-less (retired) plate; a dead
+  plate owns no boundary, so a lingering tension/attached-slab was phantom
+  (harmless — dead plates never rift — but untidy).
+- **Collision-damping "never reverse" doc overstatement — corrected.** The
+  module header and inline comment now state the damping can transiently overshoot
+  the stall by ≲0.1 mm/yr under a one-step-lagged stress spike (as the review
+  measured), bounded by the speed cap, never a *sustained* reversal.
+
+**Documented, deferred (real but out of scope for a hygiene pass):**
+
+- **√age slab pull has no old-age saturation (item 8a).** Measured over a seed-42
+  2.5 Gyr N=32 default run, the age of cells where slab pull fires is **P50 40 /
+  P90 141 / P99 389 Myr, max ~4498 Myr** — the top decile exceeds the ~100 Myr
+  calibration point, giving up to ~6.7× the 100-Myr pull at the extreme tail (deep
+  ocean basins that never rode a ridge to subduction). Real slabs saturate near
+  the plate-model thickness (~tens of Myr). The consequence is bounded by the
+  plate speed cap and the stage-5 world measures healthy, so a saturation clamp
+  (`min(√age, √~100 Myr)`) is a force-balance change deferred to its own golden
+  regen + acceptance grid (the #66/#101 "don't tune a healthy number" discipline),
+  not conflated with the item-9 promotion. Documented at the slab-pull site.
+- **~√2 boundary-force anisotropy on diagonal margins (item 8b).** `cellW` is a
+  fixed, orientation-blind per-cell edge length; a staircased 45° margin accrues
+  ~√2× the force-length per unit true boundary length. The force calibration was
+  tuned against this discretized geometry so it is absorbed into the constants; a
+  per-cell boundary-normal weighting is disproportionate to the bounded effect.
+  Documented at the `cellW` definition.
+- **Triple-junction stress misattribution in the shortening integral (item 8d).**
+  The emergentSuture scan attributes `boundaryStress[i]` (signed against the
+  cell's *dominant* other plate) to the pair formed with the *first differing
+  continental neighbor*; at a rare cont-cont-cont triple junction those differ.
+  Bounded (rare junctions, averaged over the pair's cells, and the merge is also
+  gated by the per-pair gross-motion test computed for the exact neighbor). The
+  correct per-pair signed-normal recompute is deferred rather than risk
+  destabilizing the freshly-calibrated stall detector. Documented at the scan.

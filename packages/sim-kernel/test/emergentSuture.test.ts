@@ -134,7 +134,18 @@ function threePlateContactState(seed: number): PlanetState {
   const count = cellCount(16);
   const crustType = new Float32Array(count).fill(1);
   const crustAge = new Float32Array(count).fill(2e9);
-  return { ...state, fields: { ...state.fields, crustType, crustAge } };
+  // Zero the plates' kinematics so they are genuinely COMOVING (|v_rel| = 0).
+  // These tests inject a synthetic `boundaryStress` to exercise the net-closing
+  // shortening integral, which models advection-quantum jitter on an already-
+  // stopped collision — a stopped collision is comoving by construction. That
+  // keeps the #127 item 2.2 gross-motion gate neutral here, isolating the
+  // net-integral logic; the gate itself is tested separately below with real
+  // relative motion.
+  const plates = state.plates.map((p) => ({
+    ...p,
+    angularVelRadPerYr: 0,
+  }));
+  return { ...state, plates, fields: { ...state.fields, crustType, crustAge } };
 }
 
 /** Drive wilson step-by-step with a per-step uniform closing speed, advancing
@@ -248,6 +259,71 @@ describe('emergentSuture trigger — shortening-integral fallback (#112)', () =>
     // instantaneous metric lacked: one teleporting-boundary step cannot veto a
     // 20 Myr stall determination.
     const res = runUntilSuture(3, (t) => (t === 10e6 ? 0.01 : 0.001), 100e6);
+    expect(res).not.toBeNull();
+    expect(res!.kind).toBe(EVENT_KINDS.plateSuture);
+    expect(res!.timeYears).toBe(SUTURE_STALL_AFTER_YEARS);
+  });
+});
+
+describe('emergentSuture gross-motion gate — shearing/mixed contacts do not stall-weld (#127 item 2.2)', () => {
+  // The net-closing stall test is sign-blind to HOW net≈0 arose. A genuinely
+  // stalled collision is near-comoving; a shearing transform, or a boundary
+  // rotating about a nearby pole whose signed normal segments cancel, reads
+  // net≈0 yet its plates still move at plate speed — and used to weld as
+  // "stalled" after only 20 Myr. Give the three plates distinct fast spins so
+  // the real |v_own − v_other| ≫ the gate at every contact, then inject a
+  // sub-threshold NET closing so the net-integral WOULD stall. The merge must
+  // fall through to the loud 150 Myr timeout, never fire the 20 Myr stall.
+  function spinningState(seed: number): PlanetState {
+    const base = threePlateContactState(seed);
+    const omega = 1.5e-8; // |ω|·R ≈ 9.6 cm/yr ≫ SUTURE_SHEAR_MAX_M_PER_YR (8 mm/yr)
+    const poles: Vec3[] = [
+      [1, 0, 0],
+      [0, 1, 0],
+      [0, 0, 1],
+    ];
+    const plates = base.plates.map((p, idx) =>
+      idx < 3
+        ? {
+            ...p,
+            eulerPole: poles[idx]!,
+            angularVelRadPerYr: omega,
+          }
+        : p,
+    );
+    return { ...base, plates };
+  }
+
+  it('a fast-shearing net-zero contact merges only on the timeout, never the 20 Myr stall', () => {
+    const dt = 1e6;
+    const count = cellCount(16);
+    const ctx: SimContext = { rng: createRng(7).fork('sim') };
+    let s = spinningState(7);
+    let result: { timeYears: number; kind: string } | null = null;
+    for (let t = 0; t <= 200e6; t += dt) {
+      // 1 mm/yr uniform net closing < the 2 mm/yr stall speed: the net-integral
+      // stays sub-threshold and WOULD register a stall at 20 Myr — but the plates
+      // are shearing at ~10 cm/yr, so the gross-motion gate refuses it.
+      const boundaryStress = new Float32Array(count).fill(0.001);
+      s = { ...s, timeYears: t, fields: { ...s.fields, boundaryStress } };
+      const before = s.events.length;
+      s = wilsonSystem.apply(s, dt, ctx);
+      if (s.events.length > before) {
+        const ev = s.events[s.events.length - 1]!;
+        result = { timeYears: ev.timeYears, kind: ev.kind };
+        break;
+      }
+    }
+    expect(result).not.toBeNull();
+    expect(result!.kind).toBe(EVENT_KINDS.sutureTimeout);
+    expect(result!.timeYears).toBe(SUTURE_TIMEOUT_YEARS);
+  });
+
+  it('the same net-zero contact WOULD stall-weld at 20 Myr if the plates were comoving (control)', () => {
+    // Identical injected stress, but the default comoving fixture (|v_rel|=0):
+    // the gate is neutral and the net-integral stall fires at 20 Myr. This is
+    // the exact pair the gate discriminates on real relative motion alone.
+    const res = runUntilSuture(7, () => 0.001, 100e6);
     expect(res).not.toBeNull();
     expect(res!.kind).toBe(EVENT_KINDS.plateSuture);
     expect(res!.timeYears).toBe(SUTURE_STALL_AFTER_YEARS);

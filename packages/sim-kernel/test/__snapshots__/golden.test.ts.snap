@@ -3,21 +3,21 @@
 exports[`golden field hashes > seed 1: initial state and after 10 steps 1`] = `
 {
   "after10Steps": {
-    "biome": "a0010875",
-    "boundaryStress": "f973d25c",
-    "crustAge": "4d901fa3",
-    "crustType": "30daddf8",
-    "elevation": "7436cdf0",
-    "iceFraction": "8b9e7b93",
+    "biome": "a4c1fc85",
+    "boundaryStress": "afe54d0e",
+    "crustAge": "02b0ef3d",
+    "crustType": "244af558",
+    "elevation": "165db893",
+    "iceFraction": "b2efe813",
     "marineLife": "b0549dc5",
-    "plateId": "2c02d59b",
-    "precipitation": "2139b2aa",
-    "sedimentM": "00993e4f",
-    "sutureYears": "433c55c0",
-    "temperature": "c9ecdd5b",
+    "plateId": "137c5248",
+    "precipitation": "ccbef9fe",
+    "sedimentM": "92fd8389",
+    "sutureYears": "279e104b",
+    "temperature": "6891d4d5",
     "timeYears": 10000000,
-    "windU": "23a4b0f5",
-    "windV": "e1c22395",
+    "windU": "a6898865",
+    "windV": "d59ce7e5",
   },
   "initial": {
     "biome": "a7666ca5",
@@ -41,21 +41,21 @@ exports[`golden field hashes > seed 1: initial state and after 10 steps 1`] = `
 exports[`golden field hashes > seed 42: initial state and after 10 steps 1`] = `
 {
   "after10Steps": {
-    "biome": "7eab7835",
-    "boundaryStress": "5f3ef0c3",
-    "crustAge": "bf13eabf",
-    "crustType": "30afb6c5",
-    "elevation": "b5afbc93",
-    "iceFraction": "62d59b27",
-    "marineLife": "b1f33a27",
-    "plateId": "e9aa28c8",
-    "precipitation": "e4113231",
-    "sedimentM": "342e6b23",
-    "sutureYears": "8b821e23",
-    "temperature": "66e139f3",
+    "biome": "81189f48",
+    "boundaryStress": "03db3d1f",
+    "crustAge": "9cfe38c5",
+    "crustType": "9de06d15",
+    "elevation": "841ff209",
+    "iceFraction": "da6644e1",
+    "marineLife": "1958b059",
+    "plateId": "ddcb6ca8",
+    "precipitation": "86c4ca98",
+    "sedimentM": "b81ca2ad",
+    "sutureYears": "be7faf8b",
+    "temperature": "69937153",
     "timeYears": 10000000,
-    "windU": "a5786b85",
-    "windV": "a4a56aa5",
+    "windU": "d0b07f45",
+    "windV": "b32a99f5",
   },
   "initial": {
     "biome": "0dfa5ef5",
@@ -79,21 +79,21 @@ exports[`golden field hashes > seed 42: initial state and after 10 steps 1`] = `
 exports[`golden field hashes > seed 1337: initial state and after 10 steps 1`] = `
 {
   "after10Steps": {
-    "biome": "a87d2635",
-    "boundaryStress": "b2a193e7",
-    "crustAge": "2659a8aa",
-    "crustType": "933ff188",
-    "elevation": "ab2506cf",
-    "iceFraction": "71e8399f",
+    "biome": "9e4e82e8",
+    "boundaryStress": "2cf94da5",
+    "crustAge": "022ac4eb",
+    "crustType": "bbd6c3c5",
+    "elevation": "61d64ef0",
+    "iceFraction": "84fbc644",
     "marineLife": "b0549dc5",
-    "plateId": "d2fe03a8",
-    "precipitation": "7e870703",
-    "sedimentM": "47018d0b",
-    "sutureYears": "49497aa3",
-    "temperature": "53018f87",
+    "plateId": "67908652",
+    "precipitation": "5ed76eca",
+    "sedimentM": "079fe3d0",
+    "sutureYears": "bced1b8a",
+    "temperature": "2b3d7f07",
     "timeYears": 10000000,
-    "windU": "8ed6cb05",
-    "windV": "cb2d5ee5",
+    "windU": "2c114b75",
+    "windV": "b8147a35",
   },
   "initial": {
     "biome": "02ded838",
@@ -359,21 +359,21 @@ exports[`golden field hashes: blockIsostasy on (#84) > seed 1337: after 10 steps
 exports[`golden field hashes: initialLandFraction 0.15 (#106) > seed 42: initial state and after 10 steps, ocean-dominated start 1`] = `
 {
   "after10Steps": {
-    "biome": "e882db45",
-    "boundaryStress": "eb42bc52",
-    "crustAge": "d169f51d",
-    "crustType": "3c6ab7f8",
-    "elevation": "e210c000",
-    "iceFraction": "1c8f049a",
-    "marineLife": "0ee86512",
-    "plateId": "b98928b5",
-    "precipitation": "71db5396",
-    "sedimentM": "1bcdf43c",
-    "sutureYears": "7d751fb8",
-    "temperature": "1a28e744",
+    "biome": "f30b7108",
+    "boundaryStress": "53cfcbd6",
+    "crustAge": "650a2429",
+    "crustType": "ab19d678",
+    "elevation": "e3c123c0",
+    "iceFraction": "d69872a9",
+    "marineLife": "e2ee3e41",
+    "plateId": "78f29275",
+    "precipitation": "acefd129",
+    "sedimentM": "545b11d8",
+    "sutureYears": "71201d06",
+    "temperature": "f08cea44",
     "timeYears": 10000000,
-    "windU": "ab1c54c5",
-    "windV": "0d68e645",
+    "windU": "38c2e365",
+    "windV": "4a7bbe25",
   },
   "initial": {
     "biome": "20b77ed8",
@@ -508,7 +508,7 @@ exports[`golden field hashes: legacy all-mechanisms-off > seed 1337: initial sta
 }
 `;
 
-exports[`golden field hashes: pre-V2-promotion default (forceKinematics/emergentSuture/tensionRift off) > seed 1: initial state and after 10 steps 1`] = `
+exports[`golden field hashes: pre-V2-promotion default (V2 + datum trio off) > seed 1: initial state and after 10 steps 1`] = `
 {
   "after10Steps": {
     "biome": "c6838ca5",
@@ -546,7 +546,7 @@ exports[`golden field hashes: pre-V2-promotion default (forceKinematics/emergent
 }
 `;
 
-exports[`golden field hashes: pre-V2-promotion default (forceKinematics/emergentSuture/tensionRift off) > seed 42: initial state and after 10 steps 1`] = `
+exports[`golden field hashes: pre-V2-promotion default (V2 + datum trio off) > seed 42: initial state and after 10 steps 1`] = `
 {
   "after10Steps": {
     "biome": "b129b048",
@@ -584,7 +584,7 @@ exports[`golden field hashes: pre-V2-promotion default (forceKinematics/emergent
 }
 `;
 
-exports[`golden field hashes: pre-V2-promotion default (forceKinematics/emergentSuture/tensionRift off) > seed 1337: initial state and after 10 steps 1`] = `
+exports[`golden field hashes: pre-V2-promotion default (V2 + datum trio off) > seed 1337: initial state and after 10 steps 1`] = `
 {
   "after10Steps": {
     "biome": "c9a14048",
@@ -622,24 +622,138 @@ exports[`golden field hashes: pre-V2-promotion default (forceKinematics/emergent
 }
 `;
 
-exports[`golden field hashes: waterInventoryScale 2.0 (#105) > seed 42: after 10 steps, with the sea flooded above the 0 m datum 1`] = `
+exports[`golden field hashes: pre-datum-promotion default (seaLevelDatums/freeboard/bathymetryDatum off) > seed 1: initial state and after 10 steps 1`] = `
 {
   "after10Steps": {
-    "biome": "e9cb0cd8",
+    "biome": "a0010875",
+    "boundaryStress": "f973d25c",
+    "crustAge": "4d901fa3",
+    "crustType": "30daddf8",
+    "elevation": "7436cdf0",
+    "iceFraction": "8b9e7b93",
+    "marineLife": "b0549dc5",
+    "plateId": "2c02d59b",
+    "precipitation": "2139b2aa",
+    "sedimentM": "00993e4f",
+    "sutureYears": "433c55c0",
+    "temperature": "c9ecdd5b",
+    "timeYears": 10000000,
+    "windU": "23a4b0f5",
+    "windV": "e1c22395",
+  },
+  "initial": {
+    "biome": "a7666ca5",
+    "boundaryStress": "b0549dc5",
+    "crustAge": "012fbce4",
+    "crustType": "10946445",
+    "elevation": "e44964c0",
+    "iceFraction": "b0549dc5",
+    "marineLife": "b0549dc5",
+    "plateId": "15a8f862",
+    "precipitation": "be711940",
+    "sedimentM": "b0549dc5",
+    "sutureYears": "b0549dc5",
+    "temperature": "edda30dc",
+    "windU": "32f28705",
+    "windV": "2b109c45",
+  },
+}
+`;
+
+exports[`golden field hashes: pre-datum-promotion default (seaLevelDatums/freeboard/bathymetryDatum off) > seed 42: initial state and after 10 steps 1`] = `
+{
+  "after10Steps": {
+    "biome": "7eab7835",
     "boundaryStress": "5f3ef0c3",
     "crustAge": "bf13eabf",
     "crustType": "30afb6c5",
-    "elevation": "86b8f49f",
-    "iceFraction": "c31871c5",
-    "marineLife": "095f3af2",
+    "elevation": "b5afbc93",
+    "iceFraction": "62d59b27",
+    "marineLife": "b1f33a27",
     "plateId": "e9aa28c8",
-    "precipitation": "9f3e6665",
-    "sedimentM": "28464d21",
+    "precipitation": "e4113231",
+    "sedimentM": "342e6b23",
     "sutureYears": "8b821e23",
-    "temperature": "e459a793",
+    "temperature": "66e139f3",
     "timeYears": 10000000,
-    "windU": "f7d70295",
-    "windV": "a65bcf35",
+    "windU": "a5786b85",
+    "windV": "a4a56aa5",
+  },
+  "initial": {
+    "biome": "0dfa5ef5",
+    "boundaryStress": "b0549dc5",
+    "crustAge": "69172c16",
+    "crustType": "041eea65",
+    "elevation": "4cefbe1d",
+    "iceFraction": "b0549dc5",
+    "marineLife": "b0549dc5",
+    "plateId": "93938d05",
+    "precipitation": "5970823a",
+    "sedimentM": "b0549dc5",
+    "sutureYears": "b0549dc5",
+    "temperature": "05e4bd0a",
+    "windU": "9e350335",
+    "windV": "18f86d55",
+  },
+}
+`;
+
+exports[`golden field hashes: pre-datum-promotion default (seaLevelDatums/freeboard/bathymetryDatum off) > seed 1337: initial state and after 10 steps 1`] = `
+{
+  "after10Steps": {
+    "biome": "a87d2635",
+    "boundaryStress": "b2a193e7",
+    "crustAge": "2659a8aa",
+    "crustType": "933ff188",
+    "elevation": "ab2506cf",
+    "iceFraction": "71e8399f",
+    "marineLife": "b0549dc5",
+    "plateId": "d2fe03a8",
+    "precipitation": "7e870703",
+    "sedimentM": "47018d0b",
+    "sutureYears": "49497aa3",
+    "temperature": "53018f87",
+    "timeYears": 10000000,
+    "windU": "8ed6cb05",
+    "windV": "cb2d5ee5",
+  },
+  "initial": {
+    "biome": "02ded838",
+    "boundaryStress": "b0549dc5",
+    "crustAge": "d7f5b05d",
+    "crustType": "da81d005",
+    "elevation": "e624cd09",
+    "iceFraction": "b0549dc5",
+    "marineLife": "b0549dc5",
+    "plateId": "44207345",
+    "precipitation": "4a9e3318",
+    "sedimentM": "b0549dc5",
+    "sutureYears": "b0549dc5",
+    "temperature": "943c80bd",
+    "windU": "4d1f44f5",
+    "windV": "c917cae5",
+  },
+}
+`;
+
+exports[`golden field hashes: waterInventoryScale 2.0 (#105) > seed 42: after 10 steps, with the sea flooded above the 0 m datum 1`] = `
+{
+  "after10Steps": {
+    "biome": "01342515",
+    "boundaryStress": "18d8d1e0",
+    "crustAge": "9b6648a5",
+    "crustType": "a1e652a5",
+    "elevation": "e4f728ee",
+    "iceFraction": "021a860c",
+    "marineLife": "e3414ee0",
+    "plateId": "d032d5d8",
+    "precipitation": "8c7f2504",
+    "sedimentM": "8c703f3e",
+    "sutureYears": "90819a9d",
+    "temperature": "854e8696",
+    "timeYears": 10000000,
+    "windU": "84d69a45",
+    "windV": "53a136c5",
   },
 }
 `;

@@ -22,7 +22,6 @@ export function makePlate(spec: TestPlateSpec): PlateRecord {
     sutureLockUntilYears: 0,
     continentalFraction: 0,
     alive: true,
-    omegaVec: [0, 0, 0],
     tensionN: 0,
     slabPullN: 0,
     blanketYears: 0,
@@ -39,7 +38,18 @@ export function twoPlateState(
   plate0: TestPlateSpec,
   plate1: TestPlateSpec,
 ): PlanetState {
-  const params = createPlanetParams({ seed: 7, gridN: N, numPlates: 2 });
+  // Datum trio pinned off (they promoted to default-on in #127 item 9): this
+  // hand-built directional fixture predates the datum stack and the systems
+  // tested on it (tectonics/erosion/freeboard/…) expect the 0 m-datum substrate.
+  // Individual datum tests re-enable a flag explicitly when exercising it.
+  const params = createPlanetParams({
+    seed: 7,
+    gridN: N,
+    numPlates: 2,
+    seaLevelDatums: false,
+    freeboard: false,
+    bathymetryDatum: false,
+  });
   const count = cellCount(N);
   const fields = Object.fromEntries(
     FIELD_NAMES.map((n) => [n, new Float32Array(count)]),

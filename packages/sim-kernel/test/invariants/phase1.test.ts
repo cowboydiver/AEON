@@ -121,7 +121,28 @@ describe('phase 1 invariants (#20)', () => {
       // mode was always strongly bimodal (10–27×). N=64 resolves the platform mode
       // where the property is genuinely diagnosable. (The perf cost is fine — the
       // <30 s suite budget is lifted for the promotion, #115.)
-      const params = createPlanetParams({ seed, gridN: 64, stepYears: 3e6 });
+      //
+      // Datum trio pinned OFF (they promoted to default-on in #127 item 9): this
+      // test measures the structural abyssal+platform bimodality of the tectonic
+      // elevation FIELD on the fixed 0 m-datum substrate. The promoted datum stack
+      // deliberately re-keys continents (freeboard) AND ridge crests
+      // (bathymetryDatum) to the DYNAMIC sea level as it falls ~2.5–3.3 km over
+      // deep time, while the abyssal floor stays absolute (#102's volume anchor).
+      // That yields a COMPRESSED hypsometry (verified: the deep-ocean population
+      // relative to the fallen sea shrinks — abyssal ≈ 90 cells at seed 1337
+      // t=300) that no fixed-band criterion — absolute OR sea-relative — captures,
+      // so the strict histogram test does not transfer to the datum-on world. The
+      // shipped (datum-on) world's Earth-like two-level shape is instead guarded by
+      // the 4.5 Gyr land-fraction / min-elevation bounds below and the
+      // acceptance-grid land/component metrics (TECTONICS_V2_STAGE5_SCOREBOARD.md).
+      const params = createPlanetParams({
+        seed,
+        gridN: 64,
+        stepYears: 3e6,
+        seaLevelDatums: false,
+        freeboard: false,
+        bathymetryDatum: false,
+      });
       const ctx: SimContext = { rng: createRng(params.seed).fork('sim') };
       let state = createInitialState(params);
       expect(isBimodal(state.fields.elevation), `seed ${seed} t=0`).toBe(true);
@@ -224,15 +245,26 @@ describe('phase 1 invariants (#20)', () => {
         }
       });
       expect(end.timeYears).toBe(4.5e9);
-      // Thermostat regulation (#34): over 4.5 Gyr CO₂ stays in an Earth-like band
-      // far inside the [CO2_MIN_PPM, CO2_MAX_PPM] clamps — this catches
-      // DIVERGENCE (a runaway would ride a clamp; the floor headroom is the
+      // Thermostat regulation (#34): over 4.5 Gyr CO₂ stays in a band far inside
+      // the [CO2_MIN_PPM, CO2_MAX_PPM] = [10, 1e6] clamps — this catches
+      // DIVERGENCE (a runaway would ride the 1e6 clamp; the floor headroom is the
       // stronger claim, since a runaway drawdown would peg CO2_MIN). The
       // oscillation half of the risk — a sustained bounded limit cycle, which
       // would pass this range bound — is pinned separately by the settling test
       // in `invariants/carbon.test.ts`.
+      //
+      // Ceiling widened 10k → 20k for the #127-item-9 datum promotion: freeboard
+      // makes continents FLOAT at a realistic (lower) freeboard, so exposed-land
+      // silicate weathering — the CO₂ sink — is more sensitive to sea-level /
+      // tectonic events. Measured N=16 CO₂ peaks are seed 42 5.9k, seed 1337 8.3k,
+      // seed 1 ~13k (a single late transient that recovers to ~5.9k), all with
+      // mean T held to 272–278 K (the log greenhouse absorbs the swing — no
+      // thermal runaway). 20k keeps ~50% headroom over the worst measured peak
+      // while staying 2% of the 1e6 clamp, so a true weathering-thermostat failure
+      // (which pegs toward 1e6) is still caught; the temperature bounds above and
+      // the CO₂ floor below remain the primary divergence guards.
       expect(co2Min, `seed ${seed}: CO₂ never pegged the floor`).toBeGreaterThan(CO2_MIN_PPM * 2);
-      expect(co2Max, `seed ${seed}: CO₂ stayed regulated (no runaway)`).toBeLessThan(10_000);
+      expect(co2Max, `seed ${seed}: CO₂ stayed regulated (no runaway)`).toBeLessThan(20_000);
       expect(worstMonopolyYears, `seed ${seed}: longest >85%-of-sphere plate monopoly`).toBeLessThan(400e6);
       // The plate count bound (#18) over deep time.
       const live = end.plates.filter((p) => p.alive).length;
@@ -295,8 +327,19 @@ describe('phase 1 invariant detectors catch planted bugs (#20)', () => {
         return { ...state, fields: { ...state.fields, elevation } };
       },
     };
+    // Datum trio pinned off (promoted default-on in #127 item 9): with freeboard
+    // on the orogeny ceiling becomes sea-level-relative, so even an unbounded
+    // uplift maxes at seaLevelM + OROGENY_MAX (~8 km, sea below 0), masking the
+    // planted bug. This detector validates the ABSOLUTE-cap pipeline, so it runs
+    // on the datum-off substrate where the 9 km bound (line ~173) is absolute.
     const end = runPipeline(
-      createPlanetParams({ seed: 42, gridN: 16 }),
+      createPlanetParams({
+        seed: 42,
+        gridN: 16,
+        seaLevelDatums: false,
+        freeboard: false,
+        bathymetryDatum: false,
+      }),
       400,
       undefined,
       [...SYSTEMS, runaway],

@@ -274,8 +274,27 @@
  *     plateId width (256) is adequate under the V2 rift regime — measured worst
  *     case 176/256 slots at N=128 seed 42 over 4.5 Gyr (31% headroom); dead-slot
  *     reclamation is deferred as a future change, unneeded for the shipped grids.
+ * 18 — Sea-level datum trio promotion (#127 item 9, the review's recommended
+ *     config in TECTONICS_V2_REVIEW_FINDINGS §4): `seaLevelDatums`, `freeboard`
+ *     and `bathymetryDatum` promoted to default-on (onsets stay 0 — active from
+ *     formation), on top of the v17 V2 defaults. The three re-key the platform/
+ *     arc/land datums, the continental freeboard regulator, and the oceanic
+ *     age-depth reference to the DYNAMIC sea level instead of the fixed 0 m crust
+ *     datum, so the ~3 km deep-time sea-level fall no longer strands drowned
+ *     platforms as dry islands, flattens the alpine continental mean back to a
+ *     realistic freeboard, and keeps mid-ocean ridge crests submerged instead of
+ *     crossing the late-time oceans as emergent island chains. Measured
+ *     best-in-class world shape on seeds {1,42,1337} (dispersal 95–97%, land
+ *     25–31%, fewest/largest land components, monopoly 0; findings §4). Main
+ *     goldens regenerated deliberately for the new defaults; the datum-off code
+ *     path is pinned unchanged by the legacy all-mechanisms-off goldens AND a new
+ *     pre-datum-promotion default spine (the three datum flags explicitly off,
+ *     the V2 stack at its v17 defaults). `compactArcs` (#89) and `emergentArcTaper`
+ *     (#91) stay default-off and are now documented as INCOMPATIBLE with the
+ *     promoted defaults: each starves continental crust to 4–9% of the sphere
+ *     under the V2 engine (findings §3), the opposite of their #89/#91 intent.
  */
-export const KERNEL_BEHAVIOR_VERSION = 17;
+export const KERNEL_BEHAVIOR_VERSION = 18;
 
 /** IUGG mean Earth radius, m. */
 export const EARTH_RADIUS_M = 6.371e6;
@@ -467,9 +486,10 @@ export const DRAG_TENSOR_REGULARIZATION = 1e-3;
  * Under `tensionRift` the flat Bernoulli hazard × the #61 size ramp is
  * replaced by a hazard proportional to (boundary tension)² × a supercontinent
  * thermal-blanket factor: a plate rifts *because it is being pulled apart*
- * (high gross / low net driving force), a continuous physical scalar with no
- * knee — replacing the #66-measured-bimodal size ramp. Only the rift *timing*
- * changes; the carve machinery is byte-identical (proposal §7).
+ * (high opposed slab pull — gross ≫ |net| over the pull-class forces), a
+ * continuous physical scalar with no knee — replacing the #66-measured-bimodal
+ * size ramp. Only the rift *timing* changes; the carve machinery is
+ * byte-identical (proposal §7).
  */
 
 /**
@@ -479,6 +499,19 @@ export const DRAG_TENSOR_REGULARIZATION = 1e-3;
  * hazard's tension factor is min(4, (tensionN/this)²) — quadratic in the
  * fraction of the driving force that does not cancel, capped at 4× the
  * reference rate so a runaway-tension plate cannot rift every step.
+ *
+ * #127 item 2.1 restricted `tensionN` to the pull-class forces — slab pull on
+ * the subducting side and slab suction on the overriding side (ridge push and
+ * continental collision damping, both compression-side, no longer leak in).
+ * This reference was already DERIVED from opposed slab pull, so it needed no
+ * retune: the corrected scalar reproduces a healthy deep-time world with no
+ * monopoly lock at N=16 (the phase-1 invariant) AND N=64 across seeds
+ * {1,42,1337} — reorg 5.0–5.4/100 Myr, dispersal 96–100 %, land 25–37 %,
+ * continental crust 0.30–0.32 of sphere — measurably cleaner dispersal than the
+ * pre-change V2 default (89 %). Slab suction is the term that prevents coarse-
+ * grid monopoly: a large overriding continent girdled by subduction accrues
+ * radially-opposed suction tension and rifts — the physical supercontinent-
+ * breakup driver the old sign-blind collision-damping tension was faking.
  */
 export const RIFT_TENSION_REF_N = 3e19;
 
@@ -1079,6 +1112,28 @@ export const SUTURE_STALL_SPEED_M_PER_YR = 0.002;
  * YEARS` (≈40 km of net shortening per window); no independent tuned constant.
  */
 export const SUTURE_STALL_AFTER_YEARS = 2e7;
+
+/**
+ * `emergentSuture` stall gross-motion gate, m/yr (#127 item 2.2,
+ * TECTONICS_V2_REVIEW_FINDINGS §2.2). The net-closing stall test above is
+ * SIGN-BLIND to how the ≈0 net arose: a shearing continental transform (normal
+ * motion ≈0, large tangential slip) and a mixed convergent/divergent contact
+ * (a boundary rotating about a nearby pole, whose signed segments cancel) both
+ * read net≈0 and used to weld as "stalled" after only 20 Myr — a merge class
+ * impossible on the pre-V2 kernel. A genuinely stalled head-on collision is
+ * near-COMOVING: its mean gross relative speed |v_own − v_other| → 0 (collision
+ * damping kills the normal closing; a head-on pair has no tangential slip). A
+ * transform or a rotating contact keeps a relative speed at plate scale
+ * (cm/yr). Gate the stall on the mean gross speed staying below this — a genuine
+ * lock passes, the two false classes do not. |v_rel| is a pure Euler-pole
+ * function (no advection jitter), so this reads instantaneously without the
+ * windowing the net-closing test needs. The loud SUTURE_TIMEOUT_YEARS backstop
+ * is deliberately NOT gated: a contact that persists 150 Myr merges regardless,
+ * so a long-lived head-on grind still sutures (tagged). Set an order below plate
+ * speeds and just above the ACTIVE_MARGIN_STRESS 5 mm/yr active gate, so only
+ * clearly-moving (shearing / rotating) contacts are refused.
+ */
+export const SUTURE_SHEAR_MAX_M_PER_YR = 0.008;
 
 /**
  * `emergentSuture` loud backstop (margin-ledger graft, #112, proposal §2.3):

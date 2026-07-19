@@ -199,14 +199,14 @@ describe('tensionRift safety gates and fragment kinematics', () => {
     const state = singlePlate({
       eulerPole: parentPole,
       angularVelRadPerYr: parentOmega,
-      omegaVec: [1e-9, 2e-9, 3e-9],
     });
     const riftSeed = 12345;
     const flagOn = riftPlate(state, 0, riftSeed, true);
     const fragment = flagOn.plates[flagOn.plates.length - 1]!;
+    // The fragment's kinematics (pole + speed) are the parent's — that pair is
+    // the sole source of truth (#127 item 8 dropped the redundant omegaVec).
     expect(fragment.eulerPole).toEqual(parentPole);
     expect(fragment.angularVelRadPerYr).toBe(parentOmega);
-    expect(fragment.omegaVec).toEqual(state.plates[0]!.omegaVec);
 
     // The legacy path draws a different (azimuth/omega-hash) pole — confirms the
     // flag genuinely changes the fragment kinematics, not just a coincidence.

@@ -101,6 +101,7 @@ import {
   RIFT_SUTURE_COOLDOWN_YEARS,
   SUTURE_AFTER_YEARS,
   SUTURE_MIN_CONTACT_CELLS,
+  SUTURE_SHEAR_MAX_M_PER_YR,
   SUTURE_STALL_AFTER_YEARS,
   SUTURE_STALL_SPEED_M_PER_YR,
   SUTURE_TIMEOUT_YEARS,
@@ -110,7 +111,7 @@ import { EVENT_KINDS, type SimEvent } from '../events';
 import { cellCenterTable, cellCount, directionToIndex, neighborTable, type Vec3 } from '../grid';
 import { hash2, hash3, hashString } from '../hash';
 import { TriHeap } from '../heap';
-import type { PlateRecord } from '../plates';
+import { plateVelocityAt, type PlateRecord } from '../plates';
 import type { PlanetState } from '../state';
 import type { System } from '../step';
 import { cross3, normalize3, perpendicular3 } from '../vec';
@@ -201,6 +202,13 @@ function applyWilson(state: PlanetState, dtYears: number): PlanetState {
   const contactSince: Record<string, number> = {};
   const stallSince: Record<string, number> = {};
   const shorteningIntegral: Record<string, number> = {};
+  // emergentSuture only, NOT persisted: this step's mean gross relative speed
+  // |v_own − v_other| over each pair's contact cells (#127 item 2.2). A genuine
+  // stalled collision is near-comoving (→0); a shearing transform or a mixed
+  // convergent/divergent (rotating) contact keeps a large relative speed even
+  // though its SIGNED net normal closing cancels to ≈0. The merge gate below
+  // requires low motion so those two classes no longer weld as "stalled".
+  const stallMotion: Record<string, number> = {};
   let sortedKeys: string[];
 
   if (!emergentSuture) {
@@ -241,8 +249,11 @@ function applyWilson(state: PlanetState, dtYears: number): PlanetState {
     // separating rift pair has a large NEGATIVE net rate, so |net rate| stays
     // above threshold and it never registers a (convergent) stall — the pre-#59
     // re-suture pathology cannot recur (proposal §7).
+    const centers = cellCenterTable(N);
+    const R = state.params.radiusMeters;
     const pairCells = new Map<string, number>();
     const pairNetSum = new Map<string, number>();
+    const pairMotionSum = new Map<string, number>();
     for (let i = 0; i < count; i++) {
       if (crustType[i] !== 1) continue;
       for (let k = 0; k < 4; k++) {
@@ -253,7 +264,33 @@ function applyWilson(state: PlanetState, dtYears: number): PlanetState {
         const b = Math.max(plateId[i]!, q);
         const key = `${a}-${b}`;
         pairCells.set(key, (pairCells.get(key) ?? 0) + 1);
+        // NOTE (#127 item 8d): boundaryStress[i] is the cell's net normal closing
+        // signed against its DOMINANT other plate, but here it is attributed to
+        // the pair formed with the FIRST differing continental neighbor. At a
+        // cont-cont-cont triple junction those can differ, so the cell's stress
+        // is borrowed for the wrong pair. It is bounded — such triple junctions
+        // are rare (continental crust is a minority on 4-6 plates), the value is
+        // averaged over the pair's ≥ SUTURE_MIN_CONTACT_CELLS cells below, and
+        // the merge is additionally gated by the per-pair gross-motion test
+        // (which IS computed for the exact neighbor q). The correct fix (a
+        // per-pair signed-normal closing recomputed from plateVelocityAt, like
+        // pairMotionSum) is deferred rather than risk destabilizing the
+        // freshly-calibrated stall detector (review §2, findings §7).
         pairNetSum.set(key, (pairNetSum.get(key) ?? 0) + boundaryStress[i]!);
+        // Gross relative speed |v_own − v_other| at this cell — the SMOOTH,
+        // tangent-inclusive motion (a pure Euler-pole function, so free of the
+        // advection-quantum jitter that forced the net-closing test to use a
+        // windowed SIGNED sum). Summed here, averaged per pair below.
+        const pos: Vec3 = [centers[i * 3]!, centers[i * 3 + 1]!, centers[i * 3 + 2]!];
+        const vOwn = plateVelocityAt(state.plates[plateId[i]!]!, pos, R);
+        const vOther = plateVelocityAt(state.plates[q]!, pos, R);
+        const dvx = vOwn[0] - vOther[0];
+        const dvy = vOwn[1] - vOther[1];
+        const dvz = vOwn[2] - vOther[2];
+        pairMotionSum.set(
+          key,
+          (pairMotionSum.get(key) ?? 0) + Math.sqrt(dvx * dvx + dvy * dvy + dvz * dvz),
+        );
         break; // count each cell once
       }
     }
@@ -264,6 +301,7 @@ function applyWilson(state: PlanetState, dtYears: number): PlanetState {
       const [a, b] = key.split('-').map(Number) as [number, number];
       if (locked(a) || locked(b)) continue;
       contactSince[key] = state.wilson.contactSince[key] ?? state.timeYears;
+      stallMotion[key] = pairMotionSum.get(key)! / cells;
 
       // Tumbling-window shortening integral. On the step that opens a window the
       // pair's net closing is the window's left endpoint, not shortening *within*
@@ -323,10 +361,16 @@ function applyWilson(state: PlanetState, dtYears: number): PlanetState {
         // here so the merge decision is self-contained.)
         const anchor = stallSince[key];
         const elapsed = anchor === undefined ? 0 : state.timeYears - anchor;
-        const stalled =
+        const netStalled =
           anchor !== undefined &&
           elapsed >= SUTURE_STALL_AFTER_YEARS &&
           Math.abs(shorteningIntegral[key]!) / elapsed < SUTURE_STALL_SPEED_M_PER_YR;
+        // Gross-motion gate (#127 item 2.2): a low-net-closing window is only a
+        // genuine stalled collision if the pair is also near-comoving. A shearing
+        // transform or a rotating (mixed-sign) contact reads net≈0 yet keeps a
+        // large relative speed, and must NOT weld as "stalled".
+        const motion = stallMotion[key] ?? Infinity;
+        const stalled = netStalled && motion < SUTURE_SHEAR_MAX_M_PER_YR;
         // Loud backstop: a contact that never stalls long enough still merges
         // after SUTURE_TIMEOUT_YEARS, tagged sutureTimeout so the miss is
         // visible in the event log instead of a silent full-speed grind.
@@ -480,10 +524,10 @@ export function blanketFactor(blanketYears: number): number {
  * #113, proposal §2.4). Hazard λ = `RIFT_HAZARD_AT_REF_PER_MYR` ×
  * min(4, (tensionN/`RIFT_TENSION_REF_N`)²) × blanketFactor(blanketYears), and
  * the probability the step's Bernoulli draw must clear is 1 − exp(−λ·dtMyr).
- * `tensionN` (gross − |net| boundary driving force, ≥ 0) is the physical scalar
- * the old size ramp was faking: a supercontinent ringed by opposed subduction
- * carries high gross / low net force and rifts *because it is being pulled
- * apart*. The tension factor is quadratic (a plate at twice the reference
+ * `tensionN` (gross − |net| over slab-pull forces only, ≥ 0; #127 item 2.1) is
+ * the physical scalar the old size ramp was faking: a supercontinent ringed by
+ * opposed subduction carries high gross / low net slab pull and rifts *because
+ * it is being pulled apart*. The tension factor is quadratic (a plate at twice the reference
  * tension rifts ~4× as readily), capped at 4× the reference rate so a
  * runaway-tension plate cannot rift every step. Exported for the contract test.
  */
@@ -589,13 +633,10 @@ function suture(
         ...p,
         eulerPole,
         angularVelRadPerYr,
-        // emergentSuture keeps ω⃗ and the winner's pending sub-cell motion
-        // (up to ~2.5 cells) that the legacy merge silently dropped; off, both
-        // omegaVec (unread when forceKinematics is off) and accumulatedRadians
-        // reset exactly as before.
-        omegaVec: opts.blend
-          ? ([eulerPole[0] * angularVelRadPerYr, eulerPole[1] * angularVelRadPerYr, eulerPole[2] * angularVelRadPerYr] as Vec3)
-          : p.omegaVec,
+        // emergentSuture keeps ω⃗ (the drag-weighted blend, in eulerPole/
+        // angularVelRadPerYr above) and the winner's pending sub-cell motion (up
+        // to ~2.5 cells) that the legacy merge silently dropped; off,
+        // accumulatedRadians resets exactly as before.
         accumulatedRadians: opts.blend ? p.accumulatedRadians : 0,
         continentalFraction:
           (stats[winner]!.continental + stats[loser]!.continental) / (aw + al),
@@ -754,9 +795,9 @@ export function riftPlate(
   if (tensionRiftActive) {
     // Tectonics V2 stage 3 (#113, proposal §2.4): the fragment inherits the
     // parent's kinematics. Under `forceKinematics` the parent's
-    // eulerPole/angularVelRadPerYr are the derived form of its ω⃗ (also copied
-    // into the fragment's `omegaVec` below), so the fragment rotates with the
-    // parent at creation and the halves separate next step because ridge push
+    // eulerPole/angularVelRadPerYr are the derived form of its ω⃗, so the
+    // fragment rotates with the parent at creation and the halves separate next
+    // step because ridge push
     // registers on their new divergent margin — forces separate them, not a
     // prescribed translating pole. The perpendicular-pole construction and the
     // ocean-seeking azimuth fan go dead, along with their salt-5 and salt-3
@@ -856,10 +897,10 @@ export function riftPlate(
     sutureLockUntilYears: state.timeYears + cooldown,
     continentalFraction: contB / cellsB,
     alive: true,
-    // Force-balance kinematics state (#111): the fragment inherits the
-    // parent's ω⃗ (a copy, not the shared reference; §2.4 — ridge push at the
-    // new divergent margin separates the halves next step). Zero flag-off.
-    omegaVec: [...state.plates[p]!.omegaVec],
+    // Force-balance diagnostics (#111): recomputed next step from the fragment's
+    // own margins. The fragment's kinematics live in eulerPole/angularVelRadPerYr
+    // above (the parent's, inherited); ridge push at the new divergent margin
+    // separates the halves next step (§2.4).
     tensionN: 0,
     // Not inherited: recomputed next step from the fragment's own margins.
     slabPullN: 0,

@@ -83,3 +83,110 @@ seed 1) is recorded as an owned baseline property.
   legacy ~1150) — the #111-flagged outgassing risk, confirmed and documented,
   not hidden. The V2 world's own climate health (CO₂ regulated, sane land over
   4.5 Gyr) is covered by the phase-1 invariant suite.
+
+## Post-promotion re-verification — #127 items 4(a) & 5
+
+The #127 follow-ups changed two default-on behaviors: item 4(a) made `tensionN`
+a true pull-class scalar (slab pull + slab suction on the overrider; ridge push
+and collision damping excluded), and item 5 gated the `emergentSuture` stall on
+the pair's gross relative motion (mean |v_own − v_other| < `SUTURE_SHEAR_MAX_M_PER_YR`
+= 8 mm/yr), so shearing / rotating contacts no longer weld as "stalled".
+`riftSutureCooldownYears` (120 Myr) was left untouched. Re-scored against the
+authoritative seed-42 N=128 column above (4.5 Gyr, `--plate-census --metrics
+--suture-analysis`):
+
+| §3 claim | scoreboard s42 N=128 | #127 s42 N=128 | verdict |
+|---|---|---|---|
+| Speed census median (2–6 cm/yr) | 6.10 | 6.14 | = owned overshoot, unchanged |
+| speed–slab-attach corr (owned miss) | 0.070 | 0.016 | still washes out deep-time (owned) |
+| Seafloor age median (< 200 Myr) | 56 | 49 | ✓ |
+| Pole mean cos (< 1 ⇒ migrating) | 0.986 | 0.982 | ✓ |
+| Dispersal, min Gyr-bucket (≥ 0.7) | 0.91 | 0.93 | ✓ |
+| Land min % (≥ 10 hard floor) | 22.3 | 22.2 | ✓ |
+| > 85% monopoly window (< 400 Myr) | 0 | 0 | ✓ |
+| Re-suture min interval (> 100 Myr) | 140 | **270** (median 320) | ✓ **improved** |
+| Boundary churn (context) | 8876 | 9599 | — still the more-active engine |
+
+Every must-not-regress floor holds; both owned misses are unchanged. The
+re-suture interval rose 140 → 270 Myr — removing the shearing/mixed false
+sutures (and their compensating re-rifts) reduces rift↔re-weld flicker, the
+intended direction. Companion N=64 grid (seeds 1/42/1337): dispersal 94.5–99.8 %,
+land min 25–28 %, zero monopoly, same-plate reorg interval 168–194 Myr (inside
+the 100–300 band), slot peak ~130–145. Goldens are byte-identical (the 10-step
+spine hashes fields, not the plate records `tensionN` lives in, and no rift/
+suture decision differs that early); the deep-time change is carried by the
+phase-1 4.5 Gyr invariant, which passes.
+
+## Post-promotion re-verification — #127 item 9 (datum-trio promotion)
+
+Item 9 flips `seaLevelDatums` + `freeboard` + `bathymetryDatum` to default-on
+(`KERNEL_BEHAVIOR_VERSION` 18) — the review's recommended best-in-class config
+(`TECTONICS_V2_REVIEW_FINDINGS.md` §4), now the shipped default. Because the
+promoted config IS the review's recommended config, the acceptance grid
+re-measures it and reconciles against BOTH findings §4 (should reproduce) and
+the stage-5 scoreboard (tectonic floors must not regress). Grid: seeds 1/42/1337
+N=64 + seed-42 N=128, 4.5 Gyr, `--plate-census --metrics --suture-analysis`.
+
+### Acceptance grid (promoted default = V2 + datum trio + #127 items 4a/5/8)
+
+| run | speed med (2–6) | slab-corr | dispersal | land min–max % | monopoly | cont crust /sphere | edge/area | re-suture min | reorg/100Myr |
+|---|---|---|---|---|---|---|---|---|---|
+| s1 N=64 | 4.51 | 0.054 | 98.7% | 12.2–32.3 | 0 | 0.375 | 0.712 | 270 | 4.42 |
+| s42 N=64 | 4.80 | 0.043 | 96.5% | 11.1–33.3 | 0 | 0.411 | 0.639 | 304 | 3.91 |
+| s1337 N=64 | 4.38 | 0.122 | 99.3% | 9.0–31.5 | 0 | 0.390 | 0.645 | 271 | 4.29 |
+| **s42 N=128** | **5.27** | **0.088** | **98.4%** | **7.1–30.0** | **0** | **0.330** | **0.656** | **270** | **4.02** |
+
+### Reconciliation vs findings §4 (the recommended config — should reproduce)
+
+| seed (N=64) | metric | findings §4 | this grid | verdict |
+|---|---|---|---|---|
+| 42 | dispersal / land min / land comps (largest) / edge-area | 94.7% / 11.2 / 154 (0.41) / 0.68 | 96.5% / 11.1 / 154 (0.44) / 0.64 | ✓ reproduces |
+| 1 | dispersal / land min / land comps (largest) / edge-area | 94.9% / 13.2 / 180 (0.38) / 0.71 | 98.7% / 12.2 / 156 (0.40) / 0.71 | ✓ reproduces |
+| 1337 | dispersal / land min / land comps (largest) / edge-area | 97.1% / 9.9 / 152 (0.41) / 0.60 | 99.3% / 9.0 / 153 (0.43) / 0.65 | ✓ reproduces |
+
+Land-component counts land almost exactly (154 / 156 / 153 vs 154 / 180 / 152),
+edge/area within scatter (seed-1 0.71 exact), dispersal a touch higher, monopoly
+0 everywhere. The promotion delivers the review's measured best-in-class world.
+Final frames inspected (elevation, s1 N=64 and s42 N=128): coherent dispersed
+continents with margin mountain belts, flooded shelf fringes, spreading-ridge
+arcs, and — the datum stack's headline fix — **no emergent mid-ocean-ridge island
+chains** crossing the deep-time oceans.
+
+### Reconciliation vs stage-5 scoreboard (tectonic floors must not regress)
+
+| §3 claim | scoreboard s42 N=128 (datum-off) | #127-item-9 s42 N=128 | verdict |
+|---|---|---|---|
+| Speed census median (2–6 cm/yr) | 6.10–6.14 (owned overshoot) | **5.27** | ✓ **improved — back IN BAND** |
+| speed–slab-attach corr (owned miss) | 0.016–0.070 | 0.088 | same character (washes out deep-time; owned) |
+| Dispersal, min Gyr-bucket (≥ 0.7) | 0.91–0.93 | 0.93 | ✓ |
+| > 85% monopoly window (< 400 Myr) | 0 | 0 | ✓ |
+| Re-suture min interval (> 100 Myr) | 270 (median 320) | 270 (median 325) | ✓ maintained (the item-4a/5 gain holds) |
+| Continental crust /sphere (~Earth 0.29) | 0.33 | 0.33 | ✓ Earth-like |
+
+No tectonic-health floor regresses; the promotion actually pulls the census
+speed median back inside the 2–6 band (the stage-5 owned overshoot), and the
+freeboard regulator brings continental mean elevation to ~2.7–3.7 km (a realistic
+freeboard) vs the ~6.4 km alpine V2-defaults. The Forsyth–Uyeda slab correlation
+remains an isolation-only property that washes out in the busy deep-time stack —
+the pre-existing owned miss, unchanged.
+
+### Honest notes on the promoted regime
+
+- **Land is not comparable to the datum-off scoreboard, by design.** Freeboard
+  floods continental shelves, so "land above the dynamic sea" runs lower than the
+  0 m-datum world (findings §4 land minima 9.9–13.2% at N=64). At N=128 the
+  transient land minimum dips to **7.1%** (finer grids resolve smaller plates and
+  larger transient land variance); the world recovers (max 30%, final 14.6%),
+  dispersal stays 98.4%, monopoly is 0 and continental crust holds 0.33 of the
+  sphere — a coherent dispersed world, not a waterworld. The phase-1 N=16 10%
+  land floor (default world) still passes.
+- **Compressed hypsometry.** The stack re-keys continents (freeboard) and ridge
+  crests (bathymetryDatum) to the falling dynamic sea while the abyssal floor
+  stays absolute (#102 volume anchor), so the promoted hypsometry is compressed
+  relative to the falling sea. The strict abyssal+platform bimodality invariant is
+  pinned to the datum-off substrate (phase1.test.ts); the shipped world's
+  two-level shape is guarded by the 4.5 Gyr land/elevation bounds and this grid.
+- **CO₂ transients are larger but bounded.** Floating continents make silicate
+  weathering event-sensitive; N=16 deep-time CO₂ peaks at 5.9k/8.3k/13k ppm
+  (seeds 42/1337/1) with mean T held 272–278 K (no thermal runaway, recovers) —
+  the phase-1 CO₂ ceiling was widened 10k→20k ppm (still 2% of the 1e6 clamp).
