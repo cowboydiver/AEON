@@ -44,11 +44,19 @@ function climateState(
       oxygen: 0,
       oxygenReductant: 0,
       abiogenesisYear: -1,
+      plateSpeedMedianMPerYr: 0,
+      plateSpeedMinMPerYr: 0,
+      plateSpeedMaxMPerYr: 0,
+      oceanicContinentalSpeedRatio: 0,
+      speedContinentalityCorr: 0,
+      speedSlabAttachmentCorr: 0,
+      poleStability: 0,
+      marginConsolidationFlipsTotal: 0,
     },
     fields,
     plates: [],
     events: [],
-    wilson: { contactSince: {} },
+    wilson: { contactSince: {}, stallSince: {}, shorteningIntegral: {} },
   };
 }
 

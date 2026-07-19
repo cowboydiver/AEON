@@ -32,12 +32,23 @@ function wholeSpherePlate(): PlanetState {
   fields.elevation.fill(300);
   return {
     timeYears: 2e9,
-    params: createPlanetParams({ seed: 7, gridN: N, numPlates: 1 }),
-    globals: { landFraction: 0, co2: 280, meanTemperatureK: 0, seaLevelM: 0, waterInventoryM: 0, oxygen: 0, oxygenReductant: 0, abiogenesisYear: -1 },
+    // This file tests the LEGACY wilson pass (fixed-countdown suture #18, size-
+    // ramp rift #61, #57 cooldown, #60 suture memory) that the Tectonics V2
+    // mechanisms replace when on. The #115 promotion flipped those three flags
+    // default-ON, so the legacy world is pinned explicitly off here.
+    params: createPlanetParams({
+      seed: 7,
+      gridN: N,
+      numPlates: 1,
+      forceKinematics: false,
+      emergentSuture: false,
+      tensionRift: false,
+    }),
+    globals: { landFraction: 0, co2: 280, meanTemperatureK: 0, seaLevelM: 0, waterInventoryM: 0, oxygen: 0, oxygenReductant: 0, abiogenesisYear: -1, plateSpeedMedianMPerYr: 0, plateSpeedMinMPerYr: 0, plateSpeedMaxMPerYr: 0, oceanicContinentalSpeedRatio: 0, speedContinentalityCorr: 0, speedSlabAttachmentCorr: 0, poleStability: 0, marginConsolidationFlipsTotal: 0 },
     fields,
     plates: [makePlate({ pole: [1, 0, 0], omega: 4e-9 })],
     events: [],
-    wilson: { contactSince: {} },
+    wilson: { contactSince: {}, stallSince: {}, shorteningIntegral: {} },
   };
 }
 
@@ -55,7 +66,10 @@ function collisionWorld(fillerPlates: number): PlanetState {
   for (let k = 0; k < fillerPlates; k++) {
     plates.push(makePlate({ pole: [0, 1, 0], omega: 0 }));
   }
-  return { ...s, plates, fields: { ...s.fields, elevation } };
+  // Legacy wilson-pass world: pin the three V2 flags off (they default-ON since
+  // the #115 promotion; this file tests the pre-V2 suture/rift/cooldown path).
+  const params = { ...s.params, forceKinematics: false, emergentSuture: false, tensionRift: false };
+  return { ...s, params, plates, fields: { ...s.fields, elevation } };
 }
 
 /** collisionWorld plus a small static south-polar cap owned by plate 2, so
@@ -92,7 +106,7 @@ function primeForSuture(state: PlanetState, a: number, b: number): PlanetState {
     ...state,
     timeYears: PRIME_T0,
     plates: state.plates.map((p) => ({ ...p, createdAtYears: PRIME_T0 })),
-    wilson: { contactSince: { [`${a}-${b}`]: PRIME_T0 - SUTURE_AFTER_YEARS } },
+    wilson: { contactSince: { [`${a}-${b}`]: PRIME_T0 - SUTURE_AFTER_YEARS }, stallSince: {}, shorteningIntegral: {} },
   };
 }
 
@@ -438,7 +452,7 @@ describe('post-rift suture cooldown (#57 follow-up)', () => {
       ...rifted,
       timeYears: t,
       plates: rifted.plates.map((p) => ({ ...p, createdAtYears: t })),
-      wilson: { contactSince: { [pairKey]: t - SUTURE_AFTER_YEARS } },
+      wilson: { contactSince: { [pairKey]: t - SUTURE_AFTER_YEARS }, stallSince: {}, shorteningIntegral: {} },
     });
 
     // Deep inside the lock: no suture, live count unchanged, and the pair's
@@ -458,6 +472,56 @@ describe('post-rift suture cooldown (#57 follow-up)', () => {
     const { absorbed, into } = sutures[0]!.data!;
     expect([0, fragment]).toContain(absorbed);
     expect([0, fragment]).toContain(into);
+  });
+});
+
+describe('stage 4 — measurable post-rift cooldown under tensionRift (#114)', () => {
+  const riftSeed = hash2(7, hashString('wilsonRift'), 0);
+  // A nonzero clock so `timeYears + cooldown` differs from a bare cooldown and
+  // the "no lock" case (cooldown 0 ⇒ lock == now) is unambiguous.
+  const T0 = 500e6;
+  const atTime = (s: PlanetState, params: Partial<PlanetState['params']>): PlanetState => ({
+    ...s,
+    timeYears: T0,
+    params: { ...s.params, ...params },
+  });
+
+  it('defaults riftSutureCooldownYears to the legacy 120 Myr constant', () => {
+    expect(createPlanetParams({ seed: 1 }).riftSutureCooldownYears).toBe(RIFT_SUTURE_COOLDOWN_YEARS);
+  });
+
+  it('with the default param, flag-on stamps the same 120 Myr lock as flag-off (byte-neutral)', () => {
+    // Default riftSutureCooldownYears == RIFT_SUTURE_COOLDOWN_YEARS, so turning
+    // tensionRift on without overriding the param changes nothing about the lock.
+    const state = atTime(collisionWorld(0), { tensionRift: true });
+    const rifted = riftPlate(state, 0, riftSeed, true);
+    const lockUntil = T0 + RIFT_SUTURE_COOLDOWN_YEARS;
+    expect(rifted.plates[0]!.sutureLockUntilYears).toBe(lockUntil);
+    expect(rifted.plates.at(-1)!.sutureLockUntilYears).toBe(lockUntil);
+  });
+
+  it('under tensionRift the cooldown is riftSutureCooldownYears, not the constant', () => {
+    // The retirement target: V2 = 0 ⇒ fresh halves carry no post-rift lock, so
+    // ridge push (not a timer) is what keeps them apart.
+    const zero = riftPlate(atTime(collisionWorld(0), { tensionRift: true, riftSutureCooldownYears: 0 }), 0, riftSeed, true);
+    expect(zero.plates[0]!.sutureLockUntilYears).toBe(T0);
+    expect(zero.plates.at(-1)!.sutureLockUntilYears).toBe(T0);
+
+    // An intermediate measurement step (30 Myr) lands where expected.
+    const mid = riftPlate(atTime(collisionWorld(0), { tensionRift: true, riftSutureCooldownYears: 30e6 }), 0, riftSeed, true);
+    expect(mid.plates[0]!.sutureLockUntilYears).toBe(T0 + 30e6);
+    expect(mid.plates.at(-1)!.sutureLockUntilYears).toBe(T0 + 30e6);
+  });
+
+  it('flag-off ignores riftSutureCooldownYears entirely (legacy spine preserved)', () => {
+    // Even with the param zeroed, the flag-off path (tensionRiftActive=false)
+    // stamps the legacy 120 Myr constant — the main/comparison baseline can
+    // never be perturbed by this knob.
+    const state = atTime(collisionWorld(0), { riftSutureCooldownYears: 0 });
+    const rifted = riftPlate(state, 0, riftSeed, false);
+    const lockUntil = T0 + RIFT_SUTURE_COOLDOWN_YEARS;
+    expect(rifted.plates[0]!.sutureLockUntilYears).toBe(lockUntil);
+    expect(rifted.plates.at(-1)!.sutureLockUntilYears).toBe(lockUntil);
   });
 });
 

@@ -13,6 +13,8 @@ import { iceSystem } from './systems/ice';
 import { marineLifeSystem } from './systems/marineLife';
 import { moistureSystem } from './systems/moisture';
 import { oxygenSystem } from './systems/oxygen';
+import { plateCensusSystem } from './systems/plateCensus';
+import { plateDynamicsSystem } from './systems/plateDynamics';
 import { seaLevelSystem } from './systems/seaLevel';
 import { tectonicsSystem } from './systems/tectonics';
 import { wilsonSystem } from './systems/wilson';
@@ -66,6 +68,14 @@ export const identitySystem: System = {
  */
 export const SYSTEMS: readonly System[] = [
   tectonicsSystem,
+  // Force-driven plate kinematics (Tectonics V2 stage 1, #111): the per-step
+  // rigid-plate torque balance that makes ω⃗ derived state. Runs BETWEEN
+  // tectonics and wilson (proposal §2.4): it must read the post-advection
+  // partition and the `boundaryStress` tectonics just computed (from the
+  // previous step's kinematics — the one-step lag), then recompute stress
+  // against the updated kinematics so wilson sees a consistent stress/pole
+  // pair. Exact identity when `params.forceKinematics` is off; zero RNG draws.
+  plateDynamicsSystem,
   wilsonSystem,
   // Crust fates + terrane docking (#88, default-off prototype): after wilson
   // so it consolidates the post-reorg crust map (and never hands wilson a
@@ -96,6 +106,12 @@ export const SYSTEMS: readonly System[] = [
   marineLifeSystem,
   oxygenSystem,
   biomeSystem,
+  // Plate-census diagnostic (Tectonics V2 stage 0, #110): strictly LAST so it
+  // reads the fully-solved plateId/crustType and the current plate table, and
+  // writes only `globals` census scalars (+ each plate's diagnostic
+  // `prevEulerPole`). Exact identity when `params.plateCensus` is off, so the
+  // goldens and every default run are byte-identical.
+  plateCensusSystem,
 ];
 
 /** Advance the state by dtYears through the ordered system pipeline. */

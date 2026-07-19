@@ -10,6 +10,7 @@ import {
   INITIAL_CO2_PPM,
   INITIAL_OXYGEN_PAL,
   REDUCTANT_BUFFER_PAL,
+  RIFT_SUTURE_COOLDOWN_YEARS,
   SOLAR_LUMINOSITY_W,
 } from './constants';
 import type { SimEvent } from './events';
@@ -192,6 +193,74 @@ export interface PlanetParams {
    *  Default 0. */
   bathymetryDatumOnsetYears: number;
   /**
+   * Enable force-balance plate kinematics (Tectonics V2 stage 1, #111,
+   * proposal §2). When on, the `plateDynamics` system makes each plate's
+   * angular velocity ω⃗ *derived state*: every step it relaxes toward the
+   * terminal velocity of a boundary-integrated rigid-plate torque balance
+   * (slab pull, slab suction, ridge push, collision damping, closed by basal
+   * drag with a continental-keel multiplier), replacing the immutable random
+   * Euler vector drawn once at creation. Zero new RNG draws. Default **OFF** —
+   * a default-off mechanism prototype in the standard onset pattern; the
+   * physics pass lands in stage-1 chunk 2 and the main goldens stay
+   * byte-identical while off.
+   */
+  forceKinematics: boolean;
+  /** Sim year before which forceKinematics is inert even when enabled — the
+   *  #111 branched-A/B onset, same contract as blockIsostasyOnsetYears.
+   *  Default 0. */
+  forceKinematicsOnsetYears: number;
+  /**
+   * Tectonics V2 stage 2 (#112, proposal §2.4): rewrite wilson's suture
+   * *trigger* so a continent–continent pair merges when its closing speed
+   * *stalls* (mean |normal speed| < `SUTURE_STALL_SPEED_M_PER_YR` for
+   * `SUTURE_STALL_AFTER_YEARS`), with a loud `SUTURE_TIMEOUT_YEARS` backstop —
+   * instead of the fixed `SUTURE_AFTER_YEARS` contact countdown. Detects the
+   * collision death `forceKinematics` produces rather than scheduling it. The
+   * merged plate's ω⃗ is the drag-tensor-weighted blend (the fixed point the
+   * combined plate relaxes to) and the winner's `accumulatedRadians` is
+   * preserved. Default **OFF**; the flag-off suture path stays byte-identical.
+   * Zero new RNG draws. Meaningful only with `forceKinematics` on (it supplies
+   * the closing-speed collapse the stall criterion reads).
+   */
+  emergentSuture: boolean;
+  /** Sim year before which emergentSuture is inert even when enabled — the
+   *  #112 branched-A/B onset, same contract as blockIsostasyOnsetYears.
+   *  Default 0. */
+  emergentSutureOnsetYears: number;
+  /**
+   * Enable tension-driven rift timing (Tectonics V2 stage 3, #113, proposal
+   * §2.4). When on, the `wilson` rift hazard is λ = `RIFT_HAZARD_AT_REF_PER_MYR`
+   * × min(4, (tensionN/`RIFT_TENSION_REF_N`)²) × a supercontinent thermal-blanket
+   * factor, drawn at the same hash site as the legacy scheme — a plate rifts
+   * because its opposed subducting perimeter is pulling it apart, continuously
+   * and with no knee, replacing the flat Bernoulli hazard × the #66-bimodal size
+   * ramp. The age gate and size ramp are deleted under the flag; the plate-slot
+   * safety gates stay. The fragment inherits the parent's ω⃗ and separates
+   * because ridge push registers on the new divergent margin (the perpendicular
+   * pole + azimuth fan go dead flag-on). Requires `forceKinematics` for a
+   * non-zero `tensionN`; zero new RNG draws. Default **OFF** — a default-off
+   * mechanism prototype in the standard onset pattern; the main goldens stay
+   * byte-identical while off.
+   */
+  tensionRift: boolean;
+  /** Sim year before which tensionRift is inert even when enabled — the #113
+   *  branched-A/B onset, same contract as forceKinematicsOnsetYears. Default 0. */
+  tensionRiftOnsetYears: number;
+  /**
+   * Post-rift suture cooldown (years) stamped onto freshly rifted halves
+   * (their `sutureLockUntilYears`) **only when `tensionRift` is active**
+   * (Tectonics V2 stage 4, #114, proposal §5). When `tensionRift` is off the
+   * legacy constant `RIFT_SUTURE_COOLDOWN_YEARS` (120 Myr) is used unchanged,
+   * so the flag-off / `main` spine stays byte-identical regardless of this
+   * value. Default `RIFT_SUTURE_COOLDOWN_YEARS`: this parameterization is
+   * behavior-neutral. Stage 4 sweeps it 120→30→0 Myr against the historic
+   * cooldown-vs-land-min table and flips the default to 0 once the gates pass
+   * — under `forceKinematics`+`tensionRift`, ridge push at the fresh divergent
+   * margin separates the halves, so the timer's job (keeping rifted halves
+   * from re-welding) is done by physics rather than a schedule.
+   */
+  riftSutureCooldownYears: number;
+  /**
    * Enable the biosphere (#37, Phase 4): ocean life, oxygenation, and — from
    * #39 — land vegetation. The ablation switch, **default `true`** (the
    * biosphere is a shipped feature, not a prototype). When `false` the life
@@ -257,6 +326,21 @@ export interface PlanetParams {
    * the kernel trusts the value (a non-positive scale is a caller bug).
    */
   waterInventoryScale: number;
+  /**
+   * Enable the plate-census diagnostic (Tectonics V2 stage 0, #110). A pure,
+   * RNG-free per-step pass (`plateCensusSystem`, runs last in the pipeline)
+   * that reads the current plates + `plateId`/`crustType` fields and writes a
+   * fixed set of scalar aggregates into `globals` (`plateSpeed*`,
+   * `oceanicContinentalSpeedRatio`, `speedContinentalityCorr`, `poleStability`)
+   * so the sim-cli `--plate-census` report can measure the force-balance gates
+   * of §3/§5 without keyframes carrying plate records (they carry
+   * `fields`/`globals`/`events` only — step.ts). Default **false**: when off
+   * the pass is identity and every field, event, and plate record is
+   * byte-identical to the pre-#110 kernel (the census scalars simply hold their
+   * 0 init value), so the main goldens are untouched. Not a mechanism (no
+   * onset/`--ab`): a measurement toggle like a `--dump`, kept out of
+   * `MECHANISMS`. */
+  plateCensus: boolean;
 }
 
 /** Scalar whole-planet quantities, updated by systems as they run. */
@@ -310,6 +394,53 @@ export interface Globals {
    *  `abiogenesis` event) and thereafter read-only — the gate that switches
    *  `marineLife` on and a marker for the report/HUD/narration. */
   abiogenesisYear: number;
+  /**
+   * Plate-census diagnostics (Tectonics V2 stage 0, #110) — written each step
+   * by `plateCensusSystem` ONLY when `params.plateCensus` is set, else they
+   * hold their 0 init value (the pass is identity). Diagnostic-only: nothing in
+   * the kernel reads them back, they never cross the codec, and they are not in
+   * the golden field hashes, so toggling the census is byte-identical to the
+   * pre-#110 kernel. The sim-cli `--plate-census` report reads them off each
+   * keyframe's `globals`. Speeds are a plate's characteristic surface speed
+   * |ω|·R (rad/yr × radiusMeters = m/yr), aggregated over ALIVE plates that own
+   * ≥1 cell; all six are 0 at t=0 (the pipeline is not run at init) and 0 on any
+   * step with no such plates.
+   */
+  /** Median plate characteristic speed |ω|·R, m/yr (§3 target 2–6 cm/yr). */
+  plateSpeedMedianMPerYr: number;
+  /** Slowest plate's characteristic speed |ω|·R, m/yr. */
+  plateSpeedMinMPerYr: number;
+  /** Fastest plate's characteristic speed |ω|·R, m/yr. */
+  plateSpeedMaxMPerYr: number;
+  /** Mean speed of ocean-dominated plates (current continental fraction < 0.5)
+   *  ÷ mean speed of continent-dominated plates (≥ 0.5) — the Forsyth & Uyeda
+   *  ratio (§3 target 1.5–4). 0 when either partition is empty. */
+  oceanicContinentalSpeedRatio: number;
+  /** Pearson correlation of per-plate speed vs current continental fraction
+   *  over alive owning plates (the Forsyth & Uyeda sign test — expected
+   *  negative once the balance runs). 0 when < 2 plates or zero variance. */
+  speedContinentalityCorr: number;
+  /** Pearson correlation of per-plate speed vs attached-slab driving stress
+   *  (`slabPullN`/plate area) over alive owning plates — the Forsyth & Uyeda
+   *  slab-attachment test the stage-1 gate is written against (#111; want ≥
+   *  +0.3). Positive ⇒ plates with more attached down-going slab move faster;
+   *  unlike the continentality proxy it stays discriminating in the deep-time
+   *  mixed-plate steady state. 0 when < 2 plates or zero variance (flag-off). */
+  speedSlabAttachmentCorr: number;
+  /** Count-mean over alive owning plates of the cosine between this step's
+   *  Euler pole and the previous census step's (`prevEulerPole`) — the
+   *  pole-stability seed for the stage-1 autocorrelation diagnostic (§8 risk 1).
+   *  Exactly 1.0 on the immutable-pole baseline (poles never move); < 1 once
+   *  `forceKinematics` steers them. 1.0 on the first census step (no prior). */
+  poleStability: number;
+  /** Cumulative count of #67 margin-consolidation pair-flips (stray continental
+   *  island ⇄ enclosed oceanic hole) since t=0 — the boundary-churn proxy
+   *  (margin-ledger graft, §5). Accumulated by the tectonics consolidation pass
+   *  ONLY when `params.plateCensus` is set (else it holds 0, so the default path
+   *  is untouched); the `--plate-census` report differences it between keyframes
+   *  into a flips-per-100-Myr churn rate. High = margins flickering — the
+   *  flicker the force balance is meant to quiet. */
+  marginConsolidationFlipsTotal: number;
 }
 
 export interface PlanetState {
@@ -328,12 +459,38 @@ export interface PlanetState {
    */
   events: readonly SimEvent[];
   /**
-   * Wilson-cycle bookkeeping (#18): when each continent-continent plate
-   * pair ("a-b" with a < b) entered sustained convergent contact. Rebuilt
-   * every step from the current contact scan (never iterated by key order);
-   * pairs suture once contact has lasted SUTURE_AFTER_YEARS.
+   * Wilson-cycle bookkeeping (#18, #112): when each continent-continent plate
+   * pair ("a-b" with a < b) entered sustained contact. Both maps are rebuilt
+   * every step from the current contact scan (never iterated by key order).
+   *
+   * - `contactSince`: start of the current continuous cont–cont contact. In the
+   *   flag-off (`emergentSuture` off) path a pair sutures once this has lasted
+   *   `SUTURE_AFTER_YEARS`; under `emergentSuture` it drives the loud
+   *   `SUTURE_TIMEOUT_YEARS` backstop instead.
+   * - `stallSince`: `emergentSuture` only — anchor time of the current tumbling
+   *   stall window. A pair sutures once a full `SUTURE_STALL_AFTER_YEARS` window
+   *   has elapsed whose *net* closing rate (below) stayed sub-threshold. Evaluated
+   *   only at window boundaries (not per step): once `now − stallSince` reaches
+   *   `SUTURE_STALL_AFTER_YEARS`, if the window's average |net closing rate| is at
+   *   or above `SUTURE_STALL_SPEED_M_PER_YR` the window failed and the anchor
+   *   re-arms to now (starting a fresh window); otherwise the pair is stalled and
+   *   the suture fires. Boundary-only evaluation is what makes the detector robust
+   *   to per-step advection jitter — a lone noisy step cannot veto a window,
+   *   because the net closing is summed across the whole window first. Always
+   *   empty on the flag-off path.
+   * - `shorteningIntegral`: `emergentSuture` only — net signed continent–continent
+   *   shortening (metres, + = convergent) accumulated since `stallSince[key]`.
+   *   Taking the *net signed* sum (not the per-cell magnitude) is what lets a
+   *   genuinely stopped collision read ≈0 even while per-cell speeds jitter with
+   *   large magnitude — the signs cancel over the contact. Divided by the elapsed
+   *   window it gives the average net closing rate the boundary test uses. Reset
+   *   to 0 with the anchor. Always empty on the flag-off path.
    */
-  wilson: { readonly contactSince: Readonly<Record<string, number>> };
+  wilson: {
+    readonly contactSince: Readonly<Record<string, number>>;
+    readonly stallSince: Readonly<Record<string, number>>;
+    readonly shorteningIntegral: Readonly<Record<string, number>>;
+  };
 }
 
 export function createPlanetParams(partial: Partial<PlanetParams> & { seed: number }): PlanetParams {
@@ -363,11 +520,19 @@ export function createPlanetParams(partial: Partial<PlanetParams> & { seed: numb
     freeboardOnsetYears: 0,
     bathymetryDatum: false,
     bathymetryDatumOnsetYears: 0,
+    forceKinematics: true,
+    forceKinematicsOnsetYears: 0,
+    emergentSuture: true,
+    emergentSutureOnsetYears: 0,
+    tensionRift: true,
+    tensionRiftOnsetYears: 0,
+    riftSutureCooldownYears: RIFT_SUTURE_COOLDOWN_YEARS,
     biosphereEnabled: true,
     abiogenesisRatePerYear: ABIOGENESIS_RATE_PER_YR,
     initialOxygenPAL: INITIAL_OXYGEN_PAL,
     initialLandFraction: DEFAULT_INITIAL_LAND_FRACTION,
     waterInventoryScale: 1,
+    plateCensus: false,
     ...partial,
   };
 }
@@ -394,11 +559,21 @@ export function createInitialState(params: PlanetParams): PlanetState {
       oxygen: params.initialOxygenPAL,
       oxygenReductant: REDUCTANT_BUFFER_PAL,
       abiogenesisYear: -1,
+      // Plate-census diagnostics (#110): 0 until plateCensusSystem writes them
+      // on step 1 (and only when params.plateCensus is set). Not run at init.
+      plateSpeedMedianMPerYr: 0,
+      plateSpeedMinMPerYr: 0,
+      plateSpeedMaxMPerYr: 0,
+      oceanicContinentalSpeedRatio: 0,
+      speedContinentalityCorr: 0,
+      speedSlabAttachmentCorr: 0,
+      poleStability: 0,
+      marginConsolidationFlipsTotal: 0,
     },
     fields,
     plates: [],
     events: [],
-    wilson: { contactSince: {} },
+    wilson: { contactSince: {}, stallSince: {}, shorteningIntegral: {} },
   };
   // Terrain and plates first (they set the elevation/land mask the climate
   // block reads).

@@ -22,6 +22,11 @@ export function makePlate(spec: TestPlateSpec): PlateRecord {
     sutureLockUntilYears: 0,
     continentalFraction: 0,
     alive: true,
+    omegaVec: [0, 0, 0],
+    tensionN: 0,
+    slabPullN: 0,
+    stallSinceYears: 0,
+    blanketYears: 0,
   };
 }
 
@@ -59,11 +64,19 @@ export function twoPlateState(
       oxygen: 0,
       oxygenReductant: 0,
       abiogenesisYear: -1,
+      plateSpeedMedianMPerYr: 0,
+      plateSpeedMinMPerYr: 0,
+      plateSpeedMaxMPerYr: 0,
+      oceanicContinentalSpeedRatio: 0,
+      speedContinentalityCorr: 0,
+      speedSlabAttachmentCorr: 0,
+      poleStability: 0,
+      marginConsolidationFlipsTotal: 0,
     },
     fields,
     plates: [makePlate(plate0), makePlate(plate1)],
     events: [],
-    wilson: { contactSince: {} },
+    wilson: { contactSince: {}, stallSince: {}, shorteningIntegral: {} },
   };
 }
 

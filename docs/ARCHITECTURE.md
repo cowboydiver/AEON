@@ -123,13 +123,26 @@ PlateRecord = { eulerPole (unit Vec3), angularVelRadPerYr,
                 advectionCount,            // events so far, drives quantum dither
                 createdAtYears,
                 sutureLockUntilYears,      // rift children can't suture before this (#57 follow-up)
-                continentalFraction, alive }
+                continentalFraction, alive,
+                // Tectonics V2 (default-off mechanisms; all 0 flag-off):
+                omegaVec,                  // ω⃗, derived kinematic state under forceKinematics (#111 stage 1)
+                tensionN, slabPullN,       // gross−|net| driving force / attached slab pull, N — diagnostics + tensionRift input
+                stallSinceYears,           // emergentSuture stall clock (#112 stage 2)
+                blanketYears }             // tensionRift supercontinent thermal-blanket age (#113 stage 3)
 ```
 
-Kinematics are assigned at creation from `rng.fork('plateKinematics')`:
+Initial kinematics are seeded at creation from `rng.fork('plateKinematics')`:
 uniform pole on the sphere, speed uniform in 1.5–8 × 10⁻⁹ rad/yr
-(≈ 1–5 cm/yr on an Earth-radius sphere). Dead plates (sutured away, #18)
-keep their slot so `plateId` values stay stable forever.
+(≈ 1–5 cm/yr on an Earth-radius sphere). **Under the promoted default
+(`forceKinematics`, Tectonics V2 stage 1, #111, default-on since
+`KERNEL_BEHAVIOR_VERSION` 17) this seed is only the t=0 state: from the first
+step each live plate's ω⃗ (`omegaVec`) is re-derived every step by a rigid-plate
+torque balance (`plateDynamics.ts`) — ridge push, slab pull and basal drag —
+so speeds and poles are dynamic state, not frozen constants** (see the Wilson
+section and #111 for the balance). Flag-off (the legacy spine, still exercised
+by the pinned `--no-force-kinematics` tests) the assigned pole/speed persist
+unchanged. Dead plates (sutured away, #18) keep their slot so `plateId` values
+stay stable forever.
 
 `crustType` is initialized as the top `CONTINENTAL_CRUST_FRACTION` (40%,
 Earth's ~41% incl. shelves) of initial elevation — the threshold sits below
@@ -264,12 +277,31 @@ Oceanic cells on active convergent margins (stress > 0.005 m/yr) are exempt
 from subsidence relaxation; when a margin deactivates they rejoin it and
 decay to the age-depth curve over a few Myr (#59 arc memory — a half-built
 arc survives the margin flickering off it, which is what keeps arc creation
-effective at fine grids). Plate speeds do not slow in collisions in Phase 1
-(documented simplification); the 9 km cap plus #19's erosion bound the
-consequences. Old mountain belts advect with their plates and persist until
-erosion (#19) ages them.
+effective at fine grids). Under the promoted default (`forceKinematics`,
+#111) plate speeds **do** slow in collisions: the torque balance loses the
+colliding plate's driving force to basal drag, so a stalling contact
+decelerates — the very signal the stall-detected suture (`emergentSuture`,
+below) keys on. (On the legacy flag-off spine, speeds were fixed and did not
+slow — a documented Phase 1 simplification; the 9 km cap plus #19's erosion
+bounded the consequences.) Old mountain belts advect with their plates and
+persist until erosion (#19) ages them.
 
 ### Wilson cycles (#18)
+
+> **Tectonics V2 promotion (stage 5, #115, `KERNEL_BEHAVIOR_VERSION` 17).**
+> As of the stage-5 promotion the three V2 mechanisms are **default-on**:
+> `forceKinematics` (torque-balance ω⃗, #111), `emergentSuture` (stall-detected
+> merge, #112), and `tensionRift` (tension²-hazard rift timing, #113), with the
+> post-rift cooldown kept at 120 Myr (`riftSutureCooldownYears`; stage 4 #114
+> measured its retirement and declined it — see `TECTONICS_V2_STAGE4_FINDINGS.md`).
+> The prose below describes both paths; where it names a "legacy"/"flag-off"
+> scheme (the fixed 60 Myr suture countdown, the `riftSizeRamp`/`RIFT_MIN_AGE`
+> size-ramp rift trigger, the perpendicular translating-pole + ocean-seeking
+> azimuth fan) that is now the **`--no-*` flag-off spine**, exercised only by
+> the pinned legacy tests; the promoted default runs the V2 mechanisms. The
+> promoted world's measured Earth-scoreboard (with its honest misses — the
+> deep-time speed–slab-attachment correlation washes out in the busier stack;
+> census speed runs ~6 cm/yr) is in `TECTONICS_V2_STAGE5_SCOREBOARD.md`.
 
 The `wilson` system (after tectonics in the pipeline) reorganizes plates so
 deep time tells a story. The whole trigger clock was retuned 4× slower in
@@ -328,11 +360,64 @@ three golden seeds with every Gyr bucket alive — the deep-time metric is
 chaotically sensitive to the oversize rate (between 12× and 16× it is bimodal:
 seed 42 collapses to ~49% at 12×), which is why the oversize safety net is the
 one knob the #66 clock scaling did not slow proportionally.
+**Tension-driven rift timing (`tensionRift`, Tectonics V2 stage 3, #113,
+default off):** under the flag the flat-hazard × bimodal-size-ramp scheme is
+replaced by a physical hazard drawn at the *same* hash site — only the
+acceptance threshold changes. λ = `RIFT_HAZARD_AT_REF_PER_MYR` (0.0075/Myr) ×
+min(4, (`tensionN`/`RIFT_TENSION_REF_N`)²) × a supercontinent thermal-blanket
+factor, and the per-step draw must clear 1 − exp(−λ·dtMyr) (`riftTensionHazardProbability`).
+`tensionN` (gross − |net| boundary driving force, written by `plateDynamics`
+under `forceKinematics`) is the physical scalar the size ramp was faking: a
+supercontinent ringed by opposed subduction carries high gross / low net force
+and rifts *because it is being pulled apart* — continuous, no knee. The blanket
+is the one deliberately *pseudo-mantle* term: `blanketYears` accrues while a
+plate holds ≥ `BLANKET_CONTINENT_FRACTION` (25%) of the sphere as continent and
+multiplies the hazard by 1 + (`BLANKET_MAX_FACTOR`−1)(1 − e^(−blanketYears/`BLANKET_EFOLD_YEARS`))
+(`blanketFactor`), a quiet-interior slow fuse superseded by `mantleAnchors` later.
+Under the flag the age gate and size ramp are deleted; the plate-slot safety
+gates (area ≥ 8%, continental ≥ 2% of the sphere, `MAX_PLATES`) stay. The
+**carve machinery is byte-identical** (fragment seed, jittered Dijkstra, size
+draw — proposal §7 says change *when*, never *where*); only the fragment
+*kinematics* change: it inherits the parent's ω⃗/pole and the halves separate
+because ridge push registers on the new divergent margin next step, retiring the
+perpendicular translating-pole construction and the ocean-seeking azimuth fan
+(their stateless position-hash draws go dead flag-on; flag-off they still
+evaluate, so goldens are byte-identical). Requires `forceKinematics` for a
+non-zero `tensionN`; zero new RNG.
 **Post-rift suture lock:** a fresh rift margin is
 passive: a rift stamps both halves with `sutureLockUntilYears = now +
 RIFT_SUTURE_COOLDOWN_YEARS` (120 Myr) and a locked plate's contact is not
 recorded, so it can't re-suture until the lock lifts (then needs a fresh
-60 Myr). Both directions emit events (`plateSuture`/`plateRift`), and
+60 Myr). **Stall-triggered suture (`emergentSuture`, #112, Tectonics V2
+stage 2, default-off):** when the flag is on (after its branched-A/B
+`emergentSutureOnsetYears`), wilson replaces the fixed `SUTURE_AFTER_YEARS`
+countdown with *detection* of the collision death `forceKinematics` produces.
+The contact scan drops its stress gate and instead counts continent–continent
+*adjacency* cells per pair and their summed *signed* normal stress (+ convergent);
+a pair merges (`plateSuture`) once a full `SUTURE_STALL_AFTER_YEARS` (20 Myr)
+tumbling window elapses whose average |net closing rate| stayed below
+`SUTURE_STALL_SPEED_M_PER_YR` (2 mm/yr). The criterion is a **net-signed
+shortening integral** (issue #112 pre-registered fallback, proposal §2.4), not the
+per-cell |closing speed| mean the first cut used: that magnitude mean has an
+advection-quantum noise floor that never falls below 2 mm/yr, so it measured dead
+(0 stalls across the acceptance grid, every suture via the timeout). Summing the
+*signed* net closing lets jitter cancel over the contact, and evaluating the rate
+only at the window boundary (net summed across the whole 20 Myr first) makes a
+lone jittering step unable to reset the clock; a window that reaches threshold
+re-arms the anchor. The derived reset tolerance is 2 mm/yr × 20 Myr (≈40 km net
+shortening/window) — no independent tuned constant. A loud backstop
+merges any contact that persists `SUTURE_TIMEOUT_YEARS` (150 Myr) without ever
+stalling and emits a distinct **`sutureTimeout`** event, so the stall-never-fires
+failure mode (a plate driven by a remote slab) is visible in the log rather than
+a silent grind. A separating rift pair loses its cont–cont adjacency as ocean
+opens between the halves, so it drops out of the scan rather than ever
+registering a convergent stall — the pre-#59 re-suture pathology cannot recur.
+Merged kinematics under the flag are the drag-tensor-weighted blend
+ω⃗ = (K_a+K_b)⁻¹(K_a·ω⃗_a + K_b·ω⃗_b) (the fixed point the combined plate relaxes
+to; `kWeightedOmega`/`plateDragTensor` in `plateDynamics.ts`), and the winner's
+`accumulatedRadians` is preserved; flag-off keeps the legacy area-weighted mean
+and the `accumulatedRadians` reset byte-for-byte. Both directions emit events
+(`plateSuture`/`plateRift`), and
 plates whose last cell is consumed by advection are retired each step with
 a `plateConsumed` event, so the live count the bounds gate on stays honest
 (zombie cell-less plates used to hold the suture floor "satisfied"
@@ -363,7 +448,13 @@ mechanisms and follow-up direction are in `PHASE_2_STAGE0_FINDINGS.md`
 ("#60"). Because nothing reads the field, every pre-existing field's bytes
 are bit-identical to the pre-#60 kernel in every run.
 Contact bookkeeping lives in `PlanetState.wilson.contactSince` (pair-keyed
-start times, rebuilt each step — never iterated by key order). The rift
+start times, rebuilt each step — never iterated by key order); alongside it two
+`emergentSuture`-only maps (always empty on the flag-off path): `stallSince`,
+the anchor time of each pair's current tumbling stall window, and
+`shorteningIntegral`, the net signed shortening (m) accumulated since that
+anchor. Their quotient over the elapsed window is the average net closing rate
+the boundary test uses; the anchor re-arms (and the integral resets) when a
+completed window's rate reaches `SUTURE_STALL_SPEED_M_PER_YR`. The rift
 decision draw is `hash3(seed', plate, timeQuantum)` rather than the issue's
 `rng.fork('wilson')` sketch: a fork taken inside a pure system would restart
 its stream every step, so a position/time hash is the deterministic
@@ -845,25 +936,59 @@ deterministic by construction.
 ```
 PlanetState = { timeYears, params: PlanetParams, globals: Globals, fields,
                 plates: PlateRecord[], events: SimEvent[],
-                wilson: { contactSince } }
+                wilson: { contactSince, stallSince, shorteningIntegral } }  // stallSince/shorteningIntegral: #112, emergentSuture only
 PlanetParams = { seed, radiusMeters, gridN, stepYears, keyframeIntervalYears,
                  numPlates,
                  starLuminosity, dayLengthHours, obliquityDeg,
                  initialCo2Ppm,
-                 // mechanism toggles (#84/#88-#91 + datum re-keys + freeboard):
+                 // mechanism toggles (#84/#88-#91 + datum re-keys + freeboard +
+                 //   Tectonics V2 #111/#112):
                  //   blockIsostasy, crustFates, compactArcs, marinePlanation,
                  //   emergentArcTaper, seaLevelDatums, freeboard,
-                 //   bathymetryDatum + *OnsetYears
+                 //   bathymetryDatum, forceKinematics, emergentSuture + *OnsetYears
                  // biosphere (#37): biosphereEnabled (default true — the ablation
                  //   switch), abiogenesisRatePerYear, initialOxygenPAL
                  // planet knobs: initialLandFraction (#106, default 0.3 — t=0
                  //   coastline: the sea quantile), waterInventoryScale (#105,
                  //   default 1.0 — dimensionless multiplier on the derived water
                  //   inventory). They compose as base(landFraction) × scale.
+                 // diagnostics: plateCensus (#110, default false — the Tectonics
+                 //   V2 stage-0 force-balance census; not a mechanism, no onset)
                }   // immutable per run
 Globals     = { landFraction, co2, meanTemperatureK, seaLevelM, waterInventoryM,
-                oxygen, oxygenReductant, abiogenesisYear }
+                oxygen, oxygenReductant, abiogenesisYear,
+                // Plate-census diagnostics (#110), written each step by
+                // plateCensusSystem ONLY when params.plateCensus (else 0):
+                //   plateSpeed{Median,Min,Max}MPerYr, oceanicContinentalSpeedRatio,
+                //   speedContinentalityCorr, poleStability. Diagnostic-only —
+                //   never read back, never cross the codec, NOT in the golden
+                //   field hashes, so toggling the census is byte-identical.
+                plateSpeedMedianMPerYr, plateSpeedMinMPerYr, plateSpeedMaxMPerYr,
+                oceanicContinentalSpeedRatio, speedContinentalityCorr,
+                poleStability,
+                // #67 boundary-churn proxy: cumulative margin-consolidation
+                // pair-flips, accumulated by the tectonics pass under
+                // params.plateCensus (0 otherwise):
+                marginConsolidationFlipsTotal }
 ```
+
+The **plate census** (Tectonics V2 stage 0, #110) is a pure, RNG-free
+`plateCensusSystem` that runs LAST in the pipeline and is exact identity unless
+`params.plateCensus` is set. When on it reads the current plate table +
+`plateId`/`crustType` and writes the six `Globals` scalars above (per-plate
+characteristic speed |ω|·R distribution, the Forsyth & Uyeda ocean/continent
+speed ratio and speed–continentality correlation, and Euler-pole stability — the
+count-mean cosine between a plate's current pole and the previous census step's,
+recorded on the diagnostic-only `PlateRecord.prevEulerPole`, exactly 1.0 on the
+immutable-pole baseline). The field-derivable half of the census (seafloor age
+over oceanic crust + age–area histogram, plateness = top-decile boundary-stress
+share) lives in sim-cli's `--plate-census` report. The one census scalar the
+kernel accumulates OUTSIDE `plateCensusSystem` is `marginConsolidationFlipsTotal`
+— the tectonics consolidation pass adds its per-step #67 pair-flip count (a
+boundary-churn proxy) to it, but only under `params.plateCensus`, so the default
+path is untouched; the report differences it into a flips-per-100-Myr churn rate.
+Diagnostics route through `globals` because keyframes carry
+`fields`/`globals`/`events` only — never plate records.
 
 `starLuminosity` (insolation) and `obliquityDeg` (annual-mean insolation
 profile) are activated by the #30 energy balance; `dayLengthHours` is activated

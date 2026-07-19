@@ -19,7 +19,10 @@ export type MechanismKey =
   | 'emergentArcTaper'
   | 'seaLevelDatums'
   | 'freeboard'
-  | 'bathymetryDatum';
+  | 'bathymetryDatum'
+  | 'forceKinematics'
+  | 'emergentSuture'
+  | 'tensionRift';
 
 export interface MechanismInfo {
   key: MechanismKey;
@@ -86,6 +89,27 @@ export const MECHANISMS: readonly MechanismInfo[] = [
     issue: 102,
     summary:
       'The oceanic age-depth reference (ridge crest, trench pinning, gap fill, shelf room) keys off the dynamic sea level instead of the fixed 0 m datum, so mid-ocean ridge crests stay submerged instead of crossing the late-time oceans as emergent island chains. Designed to run on top of seaLevelDatums + freeboard.',
+  },
+  {
+    key: 'forceKinematics',
+    label: 'Force-balance kinematics',
+    issue: 111,
+    summary:
+      'A per-step rigid-plate torque balance (slab pull, ridge push, collision damping, closed by basal drag) makes each plate’s angular velocity derived state that responds to what the plate touches, instead of a fixed random draw made once at creation.',
+  },
+  {
+    key: 'emergentSuture',
+    label: 'Stall-triggered suture',
+    issue: 112,
+    summary:
+      'Continent–continent pairs suture when force-balance collision damping stalls their closing speed (detected), with a loud timeout backstop, instead of on a fixed contact countdown (scheduled); the merged plate keeps the drag-tensor-weighted blend of the two angular velocities.',
+  },
+  {
+    key: 'tensionRift',
+    label: 'Tension-driven rifting',
+    issue: 113,
+    summary:
+      'Rift timing follows a physical hazard ∝ (boundary tension)² × a supercontinent thermal-blanket factor: a plate rifts because its opposed subducting perimeter is pulling it apart, replacing the flat Bernoulli hazard × the hand-tuned size ramp. Requires force-balance kinematics for a non-zero tension.',
   },
 ] satisfies readonly MechanismInfo[];
 

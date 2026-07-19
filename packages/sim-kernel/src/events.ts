@@ -13,6 +13,11 @@
 export const EVENT_KINDS = {
   plateRift: 'plateRift',
   plateSuture: 'plateSuture',
+  /** `emergentSuture` (#112) loud backstop: a cont–cont contact that persisted
+   *  `SUTURE_TIMEOUT_YEARS` without ever stalling long enough was merged anyway.
+   *  Distinct from `plateSuture` so the stall-never-fires failure mode is visible
+   *  in the event log; each one is a documented stall-criterion miss. */
+  sutureTimeout: 'sutureTimeout',
   /** A plate whose last cell was consumed by advection (fully subducted / overridden). */
   plateConsumed: 'plateConsumed',
   /** Ocean life originates (sets `globals.abiogenesisYear`), #37. */

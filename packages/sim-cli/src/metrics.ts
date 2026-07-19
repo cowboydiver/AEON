@@ -22,7 +22,14 @@
  * every candidate).
  */
 
-import { cellCount, neighborTable, type Keyframe } from 'sim-kernel';
+import {
+  ACTIVE_MARGIN_STRESS_M_PER_YR,
+  cellCount,
+  EVENT_KINDS,
+  neighborTable,
+  type Keyframe,
+  type SimEvent,
+} from 'sim-kernel';
 
 export interface KeyframeMetrics {
   timeYears: number;
@@ -420,4 +427,450 @@ export function summarizePairedMetrics(
       `; dispersed in window ${((dispersedOff / window.length) * 100).toFixed(0)}% -> ${((dispersedOn / window.length) * 100).toFixed(0)}%`,
   );
   return rows.join('\n');
+}
+
+/* ------------------------------------------------------------------------- *
+ * Plate census (Tectonics V2 stage 0, #110; proposal §3/§5).
+ *
+ * The force-balance scoreboard. The per-plate quantities that need the plate
+ * table (speed distribution, ocean/continental ratio, speed–continentality
+ * correlation, pole stability) are computed KERNEL-side by `plateCensusSystem`
+ * and ride each keyframe's `globals` (keyframes never carry plate records).
+ * The field-derivable half lives here: seafloor age over oceanic crust and the
+ * plateness (margin-organization) scalar. Enable with sim-cli `--plate-census`,
+ * which sets `params.plateCensus`; without it the globals scalars stay 0.
+ * ------------------------------------------------------------------------- */
+
+/** Seafloor-age histogram bin width (yr) and count: ten 20-Myr bins spanning
+ *  0–200 Myr plus a final ≥200 Myr overflow bin. The §3 target is a roughly
+ *  triangular age–area distribution with a ~180–200 Myr ceiling. */
+export const SEAFLOOR_AGE_BIN_WIDTH_YR = 20e6;
+export const SEAFLOOR_AGE_BIN_COUNT = 11;
+
+/** Fraction of boundary cells forming the "top decile" for the plateness scalar. */
+export const PLATENESS_TOP_DECILE = 0.1;
+
+/** Boundary cells carry |boundaryStress| above this (m/yr); interiors are
+ *  exactly 0, so any positive epsilon separates them (matches the kernel). */
+const BOUNDARY_STRESS_EPSILON = 1e-9;
+
+export interface PlateCensusRow {
+  timeYears: number;
+  /** Median plate characteristic speed |ω|·R, m/yr (globals; 0 if census off). */
+  speedMedianMPerYr: number;
+  speedMinMPerYr: number;
+  speedMaxMPerYr: number;
+  /** Ocean-dominated ÷ continent-dominated mean speed (globals). */
+  oceanicContinentalSpeedRatio: number;
+  /** Pearson speed-vs-continentality (globals; descriptive, washes to 0 deep-time). */
+  speedContinentalityCorr: number;
+  /** Pearson speed-vs-slab-attachment (globals) — the Forsyth & Uyeda stage-1
+   *  gate variable (#111): positive ⇒ more-slab-attached plates move faster. */
+  speedSlabAttachmentCorr: number;
+  /** Count-mean cosine between consecutive Euler poles (globals; 1.0 baseline). */
+  poleStability: number;
+  /** Cumulative #67 margin-consolidation pair-flips since t=0 (globals;
+   *  boundary-churn proxy). Differenced between keyframes into a rate below. */
+  marginConsolidationFlipsTotal: number;
+  /** Mean crustAge over oceanic (crustType 0) cells, yr. NOTE: the current
+   *  kernel seeds continental crust at CONTINENTAL_INITIAL_AGE_YEARS (2 Gyr)
+   *  and converts continent→ocean at some margins WITHOUT resetting age (only
+   *  the fresh-spreading path zeroes it), so a heavy ~2 Gyr tail of
+   *  former-continental "oceanic" crust drags the mean far above the genuine
+   *  young-seafloor age. The median below is the robust central tendency for
+   *  the §3 triangular-distribution target; the mean/max expose the tail. This
+   *  contamination is itself a stage-0 baseline finding. */
+  seafloorAgeMeanYr: number;
+  /** Median crustAge over oceanic cells, yr — robust to the old-continental
+   *  tail, the number to compare against the §3 target (mean 60–80 Myr). */
+  seafloorAgeMedianYr: number;
+  /** Max crustAge over oceanic cells, yr. */
+  seafloorAgeMaxYr: number;
+  /** Share of total boundary |stress| held by the top-decile stress cells —
+   *  the single "margins are organizing" scalar (litho graft). In [decile, 1];
+   *  higher = dissipation concentrated at few sharp margins. 0 with no
+   *  boundary. */
+  plateness: number;
+  /** Fractional oceanic AREA per age bin (length SEAFLOOR_AGE_BIN_COUNT; sums
+   *  to 1 when any oceanic cell exists, else all 0). */
+  ageAreaHistogram: number[];
+}
+
+/**
+ * Per-keyframe plate census. Pure over the keyframe: the speed/pole scalars are
+ * read straight off `globals` (they are 0 unless the run enabled the kernel
+ * census); seafloor age and plateness are reduced from `crustType`/`crustAge`/
+ * `boundaryStress`.
+ */
+export function computePlateCensusRow(keyframe: Keyframe): PlateCensusRow {
+  const { crustType, crustAge, boundaryStress } = keyframe.fields;
+  const count = crustType.length;
+  const g = keyframe.globals;
+
+  // Seafloor age + age–area histogram over oceanic crust.
+  const histogram = new Array<number>(SEAFLOOR_AGE_BIN_COUNT).fill(0);
+  const oceanAges: number[] = [];
+  let ageSum = 0;
+  let ageMax = 0;
+  for (let i = 0; i < count; i++) {
+    if (crustType[i] !== 0) continue;
+    const age = crustAge[i]!;
+    oceanAges.push(age);
+    ageSum += age;
+    if (age > ageMax) ageMax = age;
+    let bin = Math.floor(age / SEAFLOOR_AGE_BIN_WIDTH_YR);
+    if (bin < 0) bin = 0;
+    if (bin >= SEAFLOOR_AGE_BIN_COUNT) bin = SEAFLOOR_AGE_BIN_COUNT - 1;
+    histogram[bin]!++;
+  }
+  const oceanCells = oceanAges.length;
+  let ageMedian = 0;
+  if (oceanCells > 0) {
+    oceanAges.sort((a, b) => a - b);
+    const mid = oceanCells >> 1;
+    ageMedian = oceanCells % 2 === 1 ? oceanAges[mid]! : (oceanAges[mid - 1]! + oceanAges[mid]!) / 2;
+    for (let b = 0; b < SEAFLOOR_AGE_BIN_COUNT; b++) histogram[b]! /= oceanCells;
+  }
+
+  // Plateness: share of total boundary |stress| in the top-decile stress cells.
+  const stresses: number[] = [];
+  let totalStress = 0;
+  for (let i = 0; i < count; i++) {
+    const a = Math.abs(boundaryStress[i]!);
+    if (a > BOUNDARY_STRESS_EPSILON) {
+      stresses.push(a);
+      totalStress += a;
+    }
+  }
+  let plateness = 0;
+  if (stresses.length > 0 && totalStress > 0) {
+    stresses.sort((x, y) => y - x);
+    const topN = Math.max(1, Math.floor(stresses.length * PLATENESS_TOP_DECILE));
+    let topSum = 0;
+    for (let i = 0; i < topN; i++) topSum += stresses[i]!;
+    plateness = topSum / totalStress;
+  }
+
+  return {
+    timeYears: keyframe.timeYears,
+    speedMedianMPerYr: g.plateSpeedMedianMPerYr,
+    speedMinMPerYr: g.plateSpeedMinMPerYr,
+    speedMaxMPerYr: g.plateSpeedMaxMPerYr,
+    oceanicContinentalSpeedRatio: g.oceanicContinentalSpeedRatio,
+    speedContinentalityCorr: g.speedContinentalityCorr,
+    speedSlabAttachmentCorr: g.speedSlabAttachmentCorr,
+    poleStability: g.poleStability,
+    marginConsolidationFlipsTotal: g.marginConsolidationFlipsTotal,
+    seafloorAgeMeanYr: oceanCells > 0 ? ageSum / oceanCells : 0,
+    seafloorAgeMedianYr: ageMedian,
+    seafloorAgeMaxYr: ageMax,
+    plateness,
+    ageAreaHistogram: histogram,
+  };
+}
+
+/** m/yr → cm/yr for the human-facing table (plate speeds read naturally there). */
+const M_PER_YR_TO_CM_PER_YR = 100;
+
+/** One formatted census row (per keyframe). Speeds in cm/yr, ages in Myr.
+ *  `prevTotalFlips` is the previous keyframe's cumulative flip count, used to
+ *  show this interval's incremental #67 pair-flips (boundary churn); omit it
+ *  for the first row. */
+export function formatPlateCensusRow(row: PlateCensusRow, prevTotalFlips?: number): string {
+  const myr = (row.timeYears / 1e6).toFixed(0).padStart(5);
+  const cm = (x: number): string => (x * M_PER_YR_TO_CM_PER_YR).toFixed(2).padStart(6);
+  const age = (x: number): string => (x / 1e6).toFixed(0).padStart(4);
+  const flips =
+    prevTotalFlips === undefined ? '   -' : String(row.marginConsolidationFlipsTotal - prevTotalFlips).padStart(4);
+  return (
+    `t=${myr} Myr  ` +
+    `speed cm/yr [min ${cm(row.speedMinMPerYr)} med ${cm(row.speedMedianMPerYr)} max ${cm(row.speedMaxMPerYr)}]  ` +
+    `oc/cont ${row.oceanicContinentalSpeedRatio.toFixed(2).padStart(5)}  ` +
+    `corr ${row.speedContinentalityCorr.toFixed(2).padStart(5)}  ` +
+    `slab ${row.speedSlabAttachmentCorr.toFixed(2).padStart(5)}  ` +
+    `pole ${row.poleStability.toFixed(3)}  ` +
+    `sfage Myr [med ${age(row.seafloorAgeMedianYr)} mean ${age(row.seafloorAgeMeanYr)} max ${age(row.seafloorAgeMaxYr)}]  ` +
+    `plateness ${row.plateness.toFixed(3)}  ` +
+    `churn ${flips}`
+  );
+}
+
+/**
+ * Aggregate census summary over the series, averaged past 1 Gyr (early
+ * keyframes still remember the initial partition, as in `summarizeMetrics`).
+ * Prints the mean of each scalar and the mean age–area histogram — the baseline
+ * table stage 1 A/Bs against. This is the durable Stage 0 findings block.
+ */
+export function summarizePlateCensus(rows: readonly PlateCensusRow[]): string {
+  // The census pass is not run at init (the pipeline starts at step 1), so the
+  // t=0 keyframe carries all-zero census scalars — exclude it always so it
+  // never drags the speed/pole means. Past 1 Gyr is the shape-metrics window
+  // (early keyframes still remember the initial partition); on a <1 Gyr run
+  // fall back to every post-t=0 keyframe.
+  const posted = rows.filter((r) => r.timeYears > 0);
+  const late = posted.filter((r) => r.timeYears >= SHAPE_METRICS_AFTER_YEARS);
+  const use = late.length > 0 ? late : posted;
+  if (use.length === 0) return 'census: no keyframes';
+  const mean = (f: (r: PlateCensusRow) => number): number =>
+    use.reduce((s, r) => s + f(r), 0) / use.length;
+
+  const hist = new Array<number>(SEAFLOOR_AGE_BIN_COUNT).fill(0);
+  for (const r of use) {
+    for (let b = 0; b < SEAFLOOR_AGE_BIN_COUNT; b++) hist[b]! += r.ageAreaHistogram[b]! / use.length;
+  }
+  const cm = (x: number): string => (x * M_PER_YR_TO_CM_PER_YR).toFixed(2);
+  const histLine = hist
+    .map((frac, b) => {
+      const lo = ((b * SEAFLOOR_AGE_BIN_WIDTH_YR) / 1e6).toFixed(0);
+      const label = b === SEAFLOOR_AGE_BIN_COUNT - 1 ? `${lo}+` : `${lo}-`;
+      return `${label}:${(frac * 100).toFixed(1)}%`;
+    })
+    .join(' ');
+
+  return [
+    `census summary (mean over ${use.length} keyframes past ${
+      late.length > 0 ? '1 Gyr' : 't=0 — <1 Gyr run'
+    }):`,
+    `  speed cm/yr: min ${cm(mean((r) => r.speedMinMPerYr))} median ${cm(
+      mean((r) => r.speedMedianMPerYr),
+    )} max ${cm(mean((r) => r.speedMaxMPerYr))}`,
+    `  oceanic/continental speed ratio: ${mean((r) => r.oceanicContinentalSpeedRatio).toFixed(2)} (descriptive; degenerate under few-plate geometry)`,
+    `  speed–continentality correlation: ${mean((r) => r.speedContinentalityCorr).toFixed(3)} (descriptive; washes to 0 deep-time)`,
+    `  speed–slab-attachment correlation: ${mean((r) => r.speedSlabAttachmentCorr).toFixed(3)} (stage-1 gate, #111; want ≥ +0.3)`,
+    `  pole stability (mean cosine): ${mean((r) => r.poleStability).toFixed(4)}`,
+    `  seafloor age Myr: median ${(mean((r) => r.seafloorAgeMedianYr) / 1e6).toFixed(0)} mean ${(
+      mean((r) => r.seafloorAgeMeanYr) / 1e6
+    ).toFixed(0)} max ${(mean((r) => r.seafloorAgeMaxYr) / 1e6).toFixed(0)}`,
+    `  plateness (top-decile stress share): ${mean((r) => r.plateness).toFixed(3)}`,
+    `  boundary churn (#67 pair-flips / 100 Myr): ${churnRate(use).toFixed(2)}`,
+    `  age–area histogram (Myr bins): ${histLine}`,
+  ].join('\n');
+}
+
+/** Mean #67 margin-consolidation pair-flip rate over a keyframe window, flips
+ *  per 100 Myr — the cumulative total differenced across the window's span.
+ *  0 for a degenerate (single-keyframe or zero-span) window. */
+function churnRate(use: readonly PlateCensusRow[]): number {
+  if (use.length < 2) return 0;
+  const first = use[0]!;
+  const last = use[use.length - 1]!;
+  const spanMyr = (last.timeYears - first.timeYears) / 1e6;
+  if (spanMyr <= 0) return 0;
+  return ((last.marginConsolidationFlipsTotal - first.marginConsolidationFlipsTotal) / spanMyr) * 100;
+}
+
+/* ------------------------------------------------------------------------- *
+ * Stage-4 rift-lifecycle instrumentation (Tectonics V2, #114; proposal §5).
+ *
+ * The stage retires the 120 Myr post-rift suture cooldown under tensionRift,
+ * measured 120 → 30 → 0 Myr. Two of the stage-4 gates cannot be read off the
+ * shape/census tables and are measured here from the streamed keyframes + the
+ * cumulative event log (NO kernel change — flag-off/main goldens untouched):
+ *
+ *  - re-suture interval of rifted halves (below): the pre-#59 ~16 Myr
+ *    re-suture pathology is the tripwire — a cooldown of 0 is only acceptable
+ *    if halves that DO re-merge take > 100 Myr to, i.e. ridge push, not the
+ *    timer, kept them apart in the interim;
+ *  - fraction of a fresh rift seam still convergent 50 Myr later (the probe):
+ *    the direct measurement that ridge push separates the halves — a seam that
+ *    is still closing at +50 Myr means the mechanism failed and only the timer
+ *    was holding it open.
+ * ------------------------------------------------------------------------- */
+
+/** Re-suture floor: rifted halves that re-merge inside this window trip the
+ *  pre-#59 re-suture pathology tripwire (healthy is > 100 Myr, or no re-suture). */
+export const RE_SUTURE_FLOOR_YEARS = 100e6;
+
+export interface ReSutureIntervals {
+  /** One interval (Myr) per matched rift→re-suture of the same pair, in rift order. */
+  intervalsMyr: number[];
+  count: number;
+  /** Minimum interval (Myr); 0 when there were no re-sutures. */
+  minMyr: number;
+  /** Median interval (Myr); 0 when there were no re-sutures. */
+  medianMyr: number;
+  /** Number of intervals ≤ RE_SUTURE_FLOOR_YEARS (the pathology count). */
+  underFloorCount: number;
+}
+
+/** Unordered-pair key for two plate ids (order-independent, collision-free for
+ *  the u8/event-log id range). */
+function pairKey(a: number, b: number): string {
+  return a < b ? `${a},${b}` : `${b},${a}`;
+}
+
+/**
+ * Re-suture intervals from the event log: for each `plateRift {plate, newPlate}`
+ * at time tR, the FIRST later `plateSuture`/`sutureTimeout` whose
+ * `{absorbed, into}` is the same unordered pair, interval = tS − tR. Each suture
+ * is consumed by at most one rift (the earliest still-unmatched one), so two
+ * rifts of a pair need two re-sutures to both count. Pure over the event list.
+ *
+ * Caveat: matching keys only on the unordered id pair, so if an id is recycled
+ * after consumption a later unrelated `{a,b}` rift could match an `{a,b}` suture
+ * that is not literally its own halves re-welding. This is inherent to reading
+ * "the same pair re-merged" from the id log; it inflates the count conservatively
+ * (toward MORE apparent re-sutures), so a clean min-interval > 100 Myr is still a
+ * trustworthy pass — treat the raw count as an upper bound.
+ */
+export function computeReSutureIntervals(events: readonly SimEvent[]): ReSutureIntervals {
+  const rifts: Array<{ t: number; key: string }> = [];
+  const sutures: Array<{ t: number; key: string; used: boolean }> = [];
+  for (const e of events) {
+    if (e.kind === EVENT_KINDS.plateRift) {
+      rifts.push({ t: e.timeYears, key: pairKey(e.data!.plate!, e.data!.newPlate!) });
+    } else if (e.kind === EVENT_KINDS.plateSuture || e.kind === EVENT_KINDS.sutureTimeout) {
+      sutures.push({ t: e.timeYears, key: pairKey(e.data!.absorbed!, e.data!.into!), used: false });
+    }
+  }
+  const intervalsMyr: number[] = [];
+  let underFloorCount = 0;
+  for (const r of rifts) {
+    // Earliest unused suture of the same pair strictly after the rift. Sutures
+    // are appended in sim (time) order, so the first match in list order is the
+    // earliest in time.
+    const match = sutures.find((s) => !s.used && s.t > r.t && s.key === r.key);
+    if (!match) continue;
+    match.used = true;
+    const dtMyr = (match.t - r.t) / 1e6;
+    intervalsMyr.push(dtMyr);
+    if (match.t - r.t <= RE_SUTURE_FLOOR_YEARS) underFloorCount++;
+  }
+  const count = intervalsMyr.length;
+  if (count === 0) {
+    return { intervalsMyr, count: 0, minMyr: 0, medianMyr: 0, underFloorCount: 0 };
+  }
+  const sorted = [...intervalsMyr].sort((a, b) => a - b);
+  const mid = count >> 1;
+  const medianMyr = count % 2 === 1 ? sorted[mid]! : (sorted[mid - 1]! + sorted[mid]!) / 2;
+  return { intervalsMyr, count, minMyr: sorted[0]!, medianMyr, underFloorCount };
+}
+
+/** One-line re-suture summary; states the > 100 Myr floor and the pathology count. */
+export function summarizeReSutureIntervals(events: readonly SimEvent[]): string {
+  const r = computeReSutureIntervals(events);
+  if (r.count === 0) {
+    return (
+      `re-suture: 0 rifted pairs re-merged` +
+      ` (gate: healthy — no pair re-sutured; floor > ${RE_SUTURE_FLOOR_YEARS / 1e6} Myr)`
+    );
+  }
+  return (
+    `re-suture: ${r.count} rifted pairs re-merged; interval Myr [min ${r.minMyr.toFixed(0)}` +
+    ` median ${r.medianMyr.toFixed(0)}]; ${r.underFloorCount} ≤ ${RE_SUTURE_FLOOR_YEARS / 1e6} Myr` +
+    ` (gate: min > ${RE_SUTURE_FLOOR_YEARS / 1e6} Myr — the pre-#59 ~16 Myr re-suture is the tripwire)`
+  );
+}
+
+/** Look-ahead for the convergent-seam probe: measure the fresh rift seam this
+ *  long after it forms. Ridge push should have flipped it fully divergent. */
+export const CONVERGENCE_LOOKAHEAD_YEARS = 50e6;
+
+export interface RiftConvergenceSummary {
+  /** Probes that came due (run lasted ≥ 50 Myr past the rift) and were scored. */
+  resolved: number;
+  /** Probes still waiting at end of run (rift within 50 Myr of the finish). */
+  pendingAtEnd: number;
+  /** Rifts whose halves shared no boundary cell on the post-rift keyframe. */
+  skippedEmpty: number;
+  /** Mean over resolved probes of the seam's convergent-cell fraction; 0 when none. */
+  meanConvergentFrac: number;
+}
+
+interface PendingProbe {
+  dueTime: number;
+  seamCells: number[];
+}
+
+export interface RiftConvergenceProbe {
+  /** Feed one keyframe (in sim order): resolves any due probes, then opens
+   *  probes for rifts newly appearing in this keyframe's event list. */
+  observe(keyframe: Keyframe): void;
+  summary(): RiftConvergenceSummary;
+}
+
+/**
+ * Streaming probe for the "seam still convergent at +50 Myr" gate. Holds only
+ * small seam-cell index lists between keyframes — never a retained field array.
+ * On each keyframe it (a) scores every probe now due against THIS keyframe's
+ * `boundaryStress`, then (b) opens a probe for each new `plateRift`, building
+ * the seam from THIS keyframe's `plateId` (the first keyframe at/after the
+ * rift). A cell is "still convergent" when its stress exceeds the active-margin
+ * threshold (positive stress = closing).
+ */
+export function createRiftConvergenceProbe(gridN: number): RiftConvergenceProbe {
+  const count = cellCount(gridN);
+  const nb = neighborTable(gridN);
+  let pending: PendingProbe[] = [];
+  const fractions: number[] = [];
+  let skippedEmpty = 0;
+  let eventCursor = 0;
+
+  return {
+    observe(keyframe: Keyframe): void {
+      const t = keyframe.timeYears;
+      const stress = keyframe.fields.boundaryStress;
+      const plateId = keyframe.fields.plateId;
+
+      // (a) Resolve every probe now due against this keyframe's stress.
+      const stillPending: PendingProbe[] = [];
+      for (const p of pending) {
+        if (p.dueTime <= t) {
+          let convergent = 0;
+          for (const c of p.seamCells) {
+            if (stress[c]! > ACTIVE_MARGIN_STRESS_M_PER_YR) convergent++;
+          }
+          fractions.push(convergent / p.seamCells.length);
+        } else {
+          stillPending.push(p);
+        }
+      }
+      pending = stillPending;
+
+      // (b) Open a probe for each rift newly visible in the cumulative log.
+      for (; eventCursor < keyframe.events.length; eventCursor++) {
+        const e = keyframe.events[eventCursor]!;
+        if (e.kind !== EVENT_KINDS.plateRift) continue;
+        const a = e.data!.plate!;
+        const b = e.data!.newPlate!;
+        // Seam = cells of A adjacent to B, unioned with cells of B adjacent to
+        // A. One ascending sweep keeps the list deterministic and in index
+        // order (a cell belongs to at most one of A/B, so no dedup needed).
+        const seamCells: number[] = [];
+        for (let i = 0; i < count; i++) {
+          const pid = plateId[i]!;
+          if (pid !== a && pid !== b) continue;
+          const other = pid === a ? b : a;
+          for (let k = 0; k < 4; k++) {
+            if (plateId[nb[i * 4 + k]!]! === other) {
+              seamCells.push(i);
+              break;
+            }
+          }
+        }
+        if (seamCells.length === 0) {
+          skippedEmpty++;
+          continue;
+        }
+        pending.push({ dueTime: e.timeYears + CONVERGENCE_LOOKAHEAD_YEARS, seamCells });
+      }
+    },
+
+    summary(): RiftConvergenceSummary {
+      const resolved = fractions.length;
+      const meanConvergentFrac =
+        resolved > 0 ? fractions.reduce((s, x) => s + x, 0) / resolved : 0;
+      return { resolved, pendingAtEnd: pending.length, skippedEmpty, meanConvergentFrac };
+    },
+  };
+}
+
+/** One-line convergent-seam summary; states the ≈0 gate framing. */
+export function summarizeRiftConvergence(s: RiftConvergenceSummary): string {
+  return (
+    `rift-convergence: ${s.resolved} seams scored at +${CONVERGENCE_LOOKAHEAD_YEARS / 1e6} Myr` +
+    ` (${s.pendingAtEnd} pending at end, ${s.skippedEmpty} skipped no-seam);` +
+    ` mean still-convergent fraction ${s.meanConvergentFrac.toFixed(3)}` +
+    ` (gate: ≈ 0 — ridge push, not the timer, separates the halves)`
+  );
 }

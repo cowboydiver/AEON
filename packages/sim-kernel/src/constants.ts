@@ -245,8 +245,37 @@
  *     legacy all-mechanisms-off goldens (same hashes the old main goldens
  *     carried). `blockIsostasy` (#84) stays default-off, superseded by
  *     crustFates.
+ * 17 — Tectonics V2 promotion (#115, stage 5 of #109): `forceKinematics` (#111),
+ *     `emergentSuture` (#112) and `tensionRift` (#113) promoted to default-on
+ *     (onsets stay 0 — active from formation), with `riftSutureCooldownYears`
+ *     kept at 120 Myr (the #114 measurement retained the cooldown as a
+ *     mechanistically-understood hysteresis term). Plate angular velocity is now
+ *     derived state from a per-step rigid-plate torque balance instead of a fixed
+ *     random Euler draw; continent–continent pairs suture when force-balance
+ *     collision damping stalls their closing speed (loud sutureTimeout backstop)
+ *     instead of on a fixed contact countdown; and rift timing follows a physical
+ *     hazard ∝ (boundary tension)² × supercontinent thermal blanket instead of the
+ *     flat Bernoulli × hand-tuned size ramp. The default planet's history changes
+ *     wholesale: plates speed up and slow against what they touch (census median
+ *     ~6 cm/yr, poles migrate), the ocean floor stays young (median ≤56 Myr), and
+ *     supercontinents assemble and disperse without the frozen-pole lock. The
+ *     stack measured HEALTHIER than baseline over full 4.5 Gyr histories on seeds
+ *     {1,42,1337} (N=64 + N=128 seed-42): land min ≥22.3%, dispersal ≥0.7 every
+ *     Gyr bucket, monopoly 0, re-suture interval ≥140 Myr. Two honest misses are
+ *     recorded in docs/TECTONICS_V2_STAGE5_GATE_RECHECK.md: the census speed
+ *     median runs marginally hot (6.0–6.3 vs the 2–6 band) and the Forsyth & Uyeda
+ *     speed–slab correlation is an ISOLATION-only property of `forceKinematics`
+ *     (solo 0.30–0.50) that the full stack's boundary churn washes out in deep
+ *     time — the gate is re-verified under solo `forceKinematics` per the owner's
+ *     option-B decision on #115. Main goldens regenerated deliberately for the new
+ *     defaults; the pre-promotion kernel path is pinned unchanged by BOTH the
+ *     legacy all-mechanisms-off goldens and a new pre-V2-promotion default spine
+ *     (the three V2 flags explicitly off, others at their defaults). The u8
+ *     plateId width (256) is adequate under the V2 rift regime — measured worst
+ *     case 176/256 slots at N=128 seed 42 over 4.5 Gyr (31% headroom); dead-slot
+ *     reclamation is deferred as a future change, unneeded for the shipped grids.
  */
-export const KERNEL_BEHAVIOR_VERSION = 16;
+export const KERNEL_BEHAVIOR_VERSION = 17;
 
 /** IUGG mean Earth radius, m. */
 export const EARTH_RADIUS_M = 6.371e6;
@@ -350,6 +379,166 @@ export const PLATE_FILL_JITTER = 1.5;
  */
 export const PLATE_OMEGA_MIN_RAD_PER_YR = 1.5e-9;
 export const PLATE_OMEGA_MAX_RAD_PER_YR = 8e-9;
+
+/*
+ * Force-balance kinematics (Tectonics V2 stage 1, #111, proposal §2.3). The
+ * torque-balance driving/closure constants that make each plate's ω⃗ derived
+ * state under `forceKinematics`. Each value carries the physical anchor from
+ * the proposal table; they are inert (never read) until the `plateDynamics`
+ * system lands in stage-1 chunk 2, and unused on the default (flag-off) path.
+ */
+
+/**
+ * Net transmitted slab pull per m of trench per √(age yr). 100 Myr crust ⇒
+ * 5×10¹² N/m — Schellart 2004's net slab pull (4–6×10¹², ~10% of total slab
+ * buoyancy). The ∝√age law is half-space cooling — the same law as the
+ * bathymetry subsidence curve.
+ */
+export const SLAB_PULL_COEF_N_PER_M_PER_SQRT_YR = 5e8;
+
+/**
+ * Lithosphere younger than ~25 Myr is not reliably negatively buoyant; slab
+ * pull ramps linearly 0→full over [1×, 2×] this age. Prevents a fresh
+ * ridge-flank self-subduction feedback.
+ */
+export const SLAB_PULL_MIN_AGE_YEARS = 2.5e7;
+
+/**
+ * Fraction of a cell's slab pull applied to the *overriding* plate,
+ * trench-ward (slab suction, Conrad & Lithgow-Bertelloni 2002). Makes a
+ * subduction margin organize both plates, not just the subducting one.
+ */
+export const SLAB_SUCTION_FACTOR = 0.4;
+
+/**
+ * Ridge (GPE) push per m of divergent boundary, applied to each flank away
+ * from the ridge (~½ the net slab pull; Forsyth & Uyeda 1975).
+ */
+export const RIDGE_PUSH_N_PER_M = 2.5e12;
+
+/**
+ * Continent–continent contact resistance per m of contact per (m/yr) of
+ * closing speed. At 5 cm/yr ⇒ 1×10¹³ N/m (Gurnis & Hall 2004
+ * subduction-initiation scale). Pure damping, capped — a collision can stall
+ * the closing speed but never reverse it.
+ */
+export const COLLISION_DAMP_N_YR_PER_M2 = 2e14;
+
+/**
+ * Linear basal traction coefficient c_d in −c_d·v, N·yr/m³. The model's
+ * effective "mantle viscosity" and the primary calibration lever for the
+ * overall speed level.
+ */
+export const BASAL_DRAG_N_YR_PER_M3 = 1.2e7;
+
+/**
+ * Per-cell basal-drag multiplier on continental cells (cratonic keels drag
+ * harder). Mixed plates interpolate naturally, so plate speed anticorrelates
+ * with continental fraction as a *consequence*, not a rule.
+ */
+export const CONTINENTAL_DRAG_MULTIPLIER = 4;
+
+/**
+ * e-folding time of ω⃗ relaxing toward the torque balance's terminal velocity
+ * ω⃗*, yr. Anchors: India lost ~⅔ of its speed in ~15 Myr at collision; stable
+ * poles hold 10–100 Myr. Also the low-pass time constant against
+ * advection-quantum torque noise (proposal §8 risk 1).
+ */
+export const OMEGA_RELAX_YEARS = 1e7;
+
+/**
+ * Hard cap on a plate's characteristic surface speed |ω⃗|·R, m/yr (India's
+ * ~18–20 cm/yr burst is the observed ceiling). Rescales ω⃗ when exceeded;
+ * protects the advection cadence and the boundary-rate clamps from a runaway
+ * calibration.
+ */
+export const PLATE_SPEED_CAP_M_PER_YR = 0.2;
+
+/**
+ * Fraction of tr(K)/3 added to the drag tensor K's diagonal before the 3×3
+ * solve. A near-point plate has a singular drag tensor along its radial axis
+ * (spin-in-place is dragless); this regularizer pins that null space
+ * deterministically.
+ */
+export const DRAG_TENSOR_REGULARIZATION = 1e-3;
+
+/**
+ * Tension-driven rift hazard (Tectonics V2 stage 3, #113, proposal §2.4).
+ * Under `tensionRift` the flat Bernoulli hazard × the #61 size ramp is
+ * replaced by a hazard proportional to (boundary tension)² × a supercontinent
+ * thermal-blanket factor: a plate rifts *because it is being pulled apart*
+ * (high gross / low net driving force), a continuous physical scalar with no
+ * knee — replacing the #66-measured-bimodal size ramp. Only the rift *timing*
+ * changes; the carve machinery is byte-identical (proposal §7).
+ */
+
+/**
+ * Tension scale, N. A supercontinent-scale plate ringed by ~10⁷ m of opposed
+ * subducting perimeter at ~3×10¹² N/m carries gross − |net| ≈ 3×10¹⁹ N, so at
+ * this reference tension the hazard equals `RIFT_HAZARD_AT_REF_PER_MYR`. The
+ * hazard's tension factor is min(4, (tensionN/this)²) — quadratic in the
+ * fraction of the driving force that does not cancel, capped at 4× the
+ * reference rate so a runaway-tension plate cannot rift every step.
+ */
+export const RIFT_TENSION_REF_N = 3e19;
+
+/**
+ * Cap on the quadratic tension factor min(this, (tensionN/RIFT_TENSION_REF_N)²).
+ * A plate at twice the reference tension already rifts at 4× the reference rate;
+ * clamping there stops a runaway-tension plate from rifting every step (the
+ * hazard's own monopoly safety net, analogous to RIFT_SIZE_RATE_REF_MULTIPLE in
+ * the legacy scheme).
+ */
+export const RIFT_TENSION_MAX_FACTOR = 4;
+
+/**
+ * Rift hazard at the reference tension, per Myr. Hazard λ = this ×
+ * min(4, (tensionN/RIFT_TENSION_REF_N)²) × blanketFactor; the per-step
+ * acceptance probability is 1 − exp(−λ·dtMyr), drawn at the same hash site as
+ * the legacy scheme. Replaces `RIFT_PROBABILITY_PER_MYR` (0.0015) × size ramp.
+ * Pre-registered Plan B if tension² proves as bimodal as the ramp it replaces:
+ * a soft-yield shape ∝ max(0, T−T_ref)² (graft from the mantle-proxy design).
+ *
+ * Stage-3 rate retune (the one allowed #66/#101 companion retune, #113): the
+ * measured grid at 0.01/Myr dispersed uniformly (≥0.84 every Gyr bucket, no
+ * bimodal knee — the tension² shape is validated) but rifted ~4× the legacy
+ * rate (204/188/186 events over 4.5 Gyr vs 44/41/44), and because dead plate
+ * slots are never reclaimed the monotonic u8 plate-ID counter reached max ID
+ * 213 at seed 42 @ N=128 (83% of the 256 cap), breaching the <200 slot-budget
+ * gate. Cut 0.01 → 0.0075 (−25%) to restore u8 headroom while leaving the
+ * tension² shape and blanket dynamics — the mechanism's thesis — untouched.
+ * A −25% cut still leaves ~3× the legacy rift rate, so dispersal is expected
+ * to survive (measured, not assumed). The root cause (unreclaimed slots) is a
+ * stage-5 / dedicated-change concern, out of scope for a companion retune.
+ */
+export const RIFT_HAZARD_AT_REF_PER_MYR = 0.0075;
+
+/**
+ * Continental fraction of the whole sphere at or above which a plate is a
+ * "supercontinent" and its thermal blanket accumulates. 25% of the sphere as
+ * continent on a single plate is a supercontinent-scale mass; below it the
+ * blanket resets. Fraction of total cells (continental cells / count), not of
+ * the plate's own area.
+ */
+export const BLANKET_CONTINENT_FRACTION = 0.25;
+
+/**
+ * Supercontinent thermal-blanket e-folding time, yr. `blanketYears` accrues
+ * while a plate stays above `BLANKET_CONTINENT_FRACTION`; the hazard multiplier
+ * is 1 + (BLANKET_MAX_FACTOR−1)(1 − e^(−blanketYears/this)) — a slow fuse that
+ * approaches its ceiling over several hundred Myr. This is the one deliberately
+ * *pseudo-mantle* term of the redesign, honestly labeled: it stands in for the
+ * sub-continental warming a real mantle layer would produce, and is superseded
+ * by `mantleAnchors` (§5 Stage 6).
+ */
+export const BLANKET_EFOLD_YEARS = 3e8;
+
+/**
+ * Ceiling of the supercontinent thermal-blanket hazard multiplier (see
+ * `BLANKET_EFOLD_YEARS`). A long-lived supercontinent's interior heats until
+ * its rift hazard is at most this many times the un-blanketed rate.
+ */
+export const BLANKET_MAX_FACTOR = 3;
 
 /**
  * Depth of brand-new oceanic crust at a spreading center, m below datum.
@@ -816,10 +1005,68 @@ export const MAX_PLATES = 16;
  * continent-continent grind before each merge stays above the #20 10%
  * floor).
  */
+// LEGACY (flag-off `--no-emergent-suture` spine only since
+// KERNEL_BEHAVIOR_VERSION 17 / stage-5 promotion): the promoted default runs
+// `emergentSuture`, which *detects* the kinematic stall (net-signed shortening
+// integral) instead of scheduling the merge on this fixed countdown. Still read
+// on the flag-off path (and as the scaling anchor for the derived stall/timeout
+// windows), so kept. The post-rift RIFT_SUTURE_COOLDOWN_YEARS lock is unchanged
+// and remains active on the promoted default.
 export const SUTURE_AFTER_YEARS = 60e6;
 
 /** Minimum simultaneous cont-cont convergent boundary cells to count as contact. */
 export const SUTURE_MIN_CONTACT_CELLS = 3;
+
+/**
+ * Tectonics V2 stage 2 (`emergentSuture`, #112, proposal §2.3/§2.4). Under
+ * `forceKinematics` a continent–continent collision damps its own closing
+ * speed toward zero in ~10–20 Myr; these constants let wilson *detect* that
+ * death instead of scheduling it on the `SUTURE_AFTER_YEARS` countdown.
+ *
+ * A cont–cont contact is "stalled" when its *net* closing rate — the mean over
+ * the pair's continental-adjacency cells of the SIGNED `boundaryStress` (m/yr,
+ * + convergent), accumulated into a shortening integral and divided by the
+ * elapsed window — stays below this threshold in magnitude. The net signed sum
+ * (shortening-integral fallback, #112, proposal §2.4) replaced a first cut that
+ * used the per-cell |speed| mean: under advection-quantum jitter that magnitude
+ * mean has a noise floor that never falls below 2 mm/yr, so it measured DEAD (0
+ * stalls across the acceptance grid, every suture via the 150 Myr timeout). The
+ * signed sum lets jitter cancel over the contact, so a genuinely stopped
+ * collision reads a net rate ≈0 even while per-cell speeds are noisy; a
+ * separating pair reads a large NEGATIVE net rate and never stalls. 2 mm/yr is
+ * an order below plate speeds (cm/yr) and below the 5 mm/yr
+ * `ACTIVE_MARGIN_STRESS_M_PER_YR` active-margin gate — a boundary whose net
+ * motion is this slow is a dead collision, not a live one. Only used when
+ * `emergentSuture` is on; the flag-off path keeps the `SUTURE_AFTER_YEARS`
+ * countdown byte-for-byte.
+ */
+export const SUTURE_STALL_SPEED_M_PER_YR = 0.002;
+
+/**
+ * `emergentSuture`: the tumbling stall-window width (#112, proposal §2.3/§2.4).
+ * A cont–cont pair sutures once a full window this long has elapsed whose
+ * average |net closing rate| stayed below `SUTURE_STALL_SPEED_M_PER_YR`. The
+ * window is evaluated only at its boundary — the net closing is summed across
+ * the whole 20 Myr before the rate test, so a lone jittering step cannot reset
+ * the clock (the robustness the instantaneous criterion lacked). A window whose
+ * average rate reaches threshold re-arms the anchor and starts a fresh window.
+ * 20 Myr is bookkeeping on an already-dead boundary, not a countdown on a live
+ * one — collision damping has stopped the plates well before this fires. The
+ * derived reset tolerance is `SUTURE_STALL_SPEED_M_PER_YR × SUTURE_STALL_AFTER_
+ * YEARS` (≈40 km of net shortening per window); no independent tuned constant.
+ */
+export const SUTURE_STALL_AFTER_YEARS = 2e7;
+
+/**
+ * `emergentSuture` loud backstop (margin-ledger graft, #112, proposal §2.3):
+ * if a continental contact persists this long *without* ever stalling long
+ * enough, merge anyway and emit a distinct `sutureTimeout` event. This surfaces
+ * the stall-never-fires failure mode (a plate driven by a remote slab that
+ * keeps a collision closing indefinitely) in the event log instead of as a
+ * silent full-speed grind. Each `sutureTimeout` is a documented stall-criterion
+ * miss to investigate; the gate keeps them rare.
+ */
+export const SUTURE_TIMEOUT_YEARS = 1.5e8;
 
 /**
  * A plate must be at least this old since creation/last rift to rift, yr.
@@ -831,6 +1078,10 @@ export const SUTURE_MIN_CONTACT_CELLS = 3;
  * ordering stable (hemisphere-scale rift gate vs suture clock), which the
  * wilson test windows are derived from.
  */
+// LEGACY (flag-off `--no-tension-rift` spine only since KERNEL_BEHAVIOR_VERSION
+// 17 / stage-5 promotion): the promoted default runs `tensionRift`, which
+// deletes the maturity age gate. Kept because the pinned legacy tests still
+// exercise the size-ramp trigger path.
 export const RIFT_MIN_AGE_YEARS = 600e6;
 
 /** A plate must own at least this fraction of the sphere to rift. */
@@ -871,6 +1122,10 @@ export const RIFT_DRAW_QUANTUM_YEARS = 1e4;
  * issue targets, vs ~45 Myr before. The old 0.006 was tuned to pass the
  * #57/#59 dispersal metrics, not to match a believable tempo.
  */
+// LEGACY (flag-off `--no-tension-rift` spine only since KERNEL_BEHAVIOR_VERSION
+// 17 / stage-5 promotion): `tensionRift` replaces this flat base rate × size
+// ramp with a physical λ = RIFT_HAZARD_AT_REF_PER_MYR × tension² × blanket. Kept
+// for the pinned legacy tests.
 export const RIFT_PROBABILITY_PER_MYR = 0.0015;
 
 /**
@@ -932,6 +1187,10 @@ export const RIFT_FRAGMENT_MAX_FRACTION = 0.4;
  * all but vanish). Ordinary sub-knee plates still feel the full 4x
  * slowdown; the ramp just reaches the (halved) reference sooner.
  */
+// LEGACY (flag-off `--no-tension-rift` spine only since KERNEL_BEHAVIOR_VERSION
+// 17 / stage-5 promotion): the whole size-ramp trigger is superseded by the
+// tension²+blanket hazard on the promoted default path. The carve machinery it
+// fed is unchanged; only the *trigger* moved. Kept for the pinned legacy tests.
 export const RIFT_SIZE_RATE_KNEE = 0.3;
 export const RIFT_SIZE_RATE_REF_FRACTION = 0.55;
 export const RIFT_SIZE_RATE_REF_MULTIPLE = 16;
@@ -948,6 +1207,12 @@ export const RIFT_SIZE_RATE_EXPONENT = 2;
  * subducting oceanic crust — continent-on-continent grinding during the
  * post-rift lock was the dominant continental-area bleed (#16, #58).
  */
+// LEGACY (flag-off `--no-tension-rift` spine only since KERNEL_BEHAVIOR_VERSION
+// 17 / stage-5 promotion): under `tensionRift` a fragment inherits the parent's
+// ω⃗/pole and the halves separate on ridge push, so the perpendicular
+// translating-pole construction and this ocean-seeking azimuth fan
+// (RIFT_AZIMUTH_CANDIDATES / RIFT_OCEAN_SCAN_RAD / RIFT_OCEAN_SCAN_SAMPLES) go
+// dead on the default path. Kept for the pinned legacy tests.
 export const RIFT_AZIMUTH_CANDIDATES = 8;
 
 /**
