@@ -152,4 +152,4 @@ export {
   meanMarineProductivity,
   type OxygenSolution,
 } from './systems/oxygen';
-export { cellCenterTable, neighborTable, eastNorthTable } from './grid';
+export { cellCenterTable, neighborTable, eastNorthTable, cellSolidAngleTable } from './grid';

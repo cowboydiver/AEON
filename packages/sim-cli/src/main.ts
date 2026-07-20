@@ -528,12 +528,19 @@ function reportCrustStats(keyframe: Keyframe): void {
         'oceanOnCont%'.padStart(13),
         'shallow%'.padStart(9),
         'land%'.padStart(7),
+        // Crustal-columns C0 instruments: area-weighted dynamic-sea land (the
+        // §3 gate number), (0,800m] band share of land area (the hypsometry
+        // gate), and the frozen 0 m instrument side by side (never join the
+        // two land definitions silently again — phase-0 lesson).
+        'landA%'.padStart(8),
+        'band%'.padStart(7),
+        'land0m%'.padStart(8),
         'min elev'.padStart(10),
       ].join('  '),
     );
     printedCrustStatsHeader = true;
   }
-  const s = computeCrustStats(keyframe);
+  const s = computeCrustStats(keyframe, params.gridN);
   const pct = (x: number): string => `${(x * 100).toFixed(1)}%`;
   console.log(
     [
@@ -545,6 +552,9 @@ function reportCrustStats(keyframe: Keyframe): void {
       pct(s.oceanOnContFrac).padStart(13),
       pct(s.shallowOceanFrac).padStart(9),
       pct(s.landFrac).padStart(7),
+      pct(s.landFracArea).padStart(8),
+      pct(s.bandOccupancyFrac).padStart(7),
+      pct(s.landFrac0m).padStart(8),
       s.minElevationM.toFixed(0).padStart(10),
     ].join('  '),
   );

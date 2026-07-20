@@ -25,6 +25,7 @@
 import {
   ACTIVE_MARGIN_STRESS_M_PER_YR,
   cellCount,
+  cellSolidAngleTable,
   EVENT_KINDS,
   neighborTable,
   type Keyframe,
@@ -80,24 +81,58 @@ export interface CrustStats {
   /** Minimum elevation — the buoyancy-floor ratchet tripwire (#101): healthy
    *  is trench order (−6..−9 km), not the pre-floor −17 km runaway. */
   minElevationM: number;
+  /**
+   * Emergent share of the sphere, AREA-WEIGHTED (true solid angles, not cell
+   * count — the warp's ±35% per-cell area distortion is real; crustal-columns
+   * C0, phase-0 recommendation). This is the number the §3 land gates read
+   * (25–35%; floor ≥ 20%); `landFrac` above keeps the cell-count convention
+   * for continuity with the historical tables.
+   */
+  landFracArea: number;
+  /**
+   * Share of LAND AREA (area-weighted, dynamic-sea land) with freeboard in
+   * (0, 800 m] — the §3 hypsometry gate (≥ 0.40; Earth concentrates most land
+   * within 1 km of the sea, the servo world holds none there). 0 when there
+   * is no land.
+   */
+  bandOccupancyFrac: number;
+  /**
+   * Emergent share of the sphere against the FROZEN 0 m datum (cell count) —
+   * the historical instrument `KeyframeMetrics.landFrac` uses. Printed side
+   * by side with the dynamic-sea instruments during the crustal-columns
+   * transition (C0) so the two can never be silently joined again; nothing
+   * gates on it.
+   */
+  landFrac0m: number;
 }
 
 /** Ocean shallower than this counts as shelf sea in CrustStats. */
 export const SHALLOW_OCEAN_DEPTH_M = 500;
 
-export function computeCrustStats(keyframe: Keyframe): CrustStats {
+/** Freeboard band upper edge for `bandOccupancyFrac` (§3 hypsometry gate). */
+export const LAND_BAND_CEILING_M = 800;
+
+export function computeCrustStats(keyframe: Keyframe, gridN: number): CrustStats {
   const { crustType, elevation } = keyframe.fields;
   const count = elevation.length;
   const seaLevelM = keyframe.globals.seaLevelM;
+  const solidAngle = cellSolidAngleTable(gridN);
   let cont = 0;
   let contSum = 0;
   let submergedCont = 0;
   let ocean = 0;
   let shallow = 0;
   let minElevation = Infinity;
+  let land0m = 0;
+  let landArea = 0;
+  let bandArea = 0;
+  let totalArea = 0;
   for (let i = 0; i < count; i++) {
     const e = elevation[i]!;
+    const a = solidAngle[i]!;
+    totalArea += a;
     if (e < minElevation) minElevation = e;
+    if (e >= 0) land0m++;
     const isCont = crustType[i] === 1;
     if (isCont) {
       cont++;
@@ -107,6 +142,10 @@ export function computeCrustStats(keyframe: Keyframe): CrustStats {
       ocean++;
       if (isCont) submergedCont++;
       if (seaLevelM - e < SHALLOW_OCEAN_DEPTH_M) shallow++;
+    } else {
+      landArea += a;
+      const freeboard = e - seaLevelM;
+      if (freeboard > 0 && freeboard <= LAND_BAND_CEILING_M) bandArea += a;
     }
   }
   return {
@@ -119,6 +158,9 @@ export function computeCrustStats(keyframe: Keyframe): CrustStats {
     shallowOceanFrac: shallow / count,
     landFrac: (count - ocean) / count,
     minElevationM: minElevation,
+    landFracArea: landArea / totalArea,
+    bandOccupancyFrac: landArea > 0 ? bandArea / landArea : 0,
+    landFrac0m: land0m / count,
   };
 }
 

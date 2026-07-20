@@ -678,7 +678,16 @@ thickness stats (raw + clamped), ledger closure, both-instrument land
 print. The N=128 replication and the r9-both-vs-columns scoreboard table
 are C7 deliverables for the promotion decision.
 
-## 11. Open questions for the owner (phase-1 gate)
+## 11. Open questions for the owner (phase-1 gate) — RESOLVED
+
+**Owner decisions (2026-07-20, phase-1 sign-off):** all four questions
+answered with the recommended option — (1) hydro-isostasy excluded from
+v1; (2) freeboard partial-win band at water scale 1.0 accepted, full win
+judged across the water sweep; (3) v1 arc scope accepted (growth stays
+oceanic-elevation, thickness enters at maturation via inversion);
+(4) KBV cadence confirmed: bumps at C1 and C7 only. This document is
+signed off; phase 2 (stages C0–C1) is authorized. The original questions
+are preserved below for the record.
 
 1. **Hydro-isostasy exclusion (v1):** accept the dry continental branch
    with the ≤ ~150 m shelf-depth error and the pre-analyzed upgrade path

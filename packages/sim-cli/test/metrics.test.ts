@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   ACTIVE_MARGIN_STRESS_M_PER_YR,
   cellCount,
+  cellSolidAngleTable,
   EVENT_KINDS,
   faceRCToIndex,
   FIELD_NAMES,
@@ -153,7 +154,7 @@ describe('computeCrustStats (#101 calibration harness)', () => {
     // One emergent oceanic ridge crest above the fallen sea: land, not ocean.
     kf.fields.elevation[10] = -2500;
 
-    const s = computeCrustStats(kf);
+    const s = computeCrustStats(kf, N);
     expect(s.timeYears).toBe(2e9);
     expect(s.seaLevelM).toBe(-3000);
     expect(s.contFrac).toBeCloseTo(5 / count, 10);
@@ -168,17 +169,47 @@ describe('computeCrustStats (#101 calibration harness)', () => {
     expect(s.shallowOceanFrac).toBeCloseTo(1 / count, 10);
     expect(s.landFrac).toBeCloseTo(4 / count, 10);
     expect(s.minElevationM).toBe(-6000);
+    // C0 instruments. Area-weighted land: TRUE solid angles of the 4 emergent
+    // cells over the sphere total — not 4/count (the warp's per-cell area
+    // spread is the point of the instrument).
+    const sa = cellSolidAngleTable(N);
+    let total = 0;
+    for (let i = 0; i < count; i++) total += sa[i]!;
+    const landArea = sa[0]! + sa[1]! + sa[2]! + sa[10]!;
+    expect(s.landFracArea).toBeCloseTo(landArea / total, 12);
+    // Band (0, 800 m] of freeboard: the three cont cells stand 1000 m over
+    // the −3000 m sea (outside); only the ridge crest (freeboard 500 m) is in.
+    expect(s.bandOccupancyFrac).toBeCloseTo(sa[10]! / landArea, 12);
+    // Frozen 0 m instrument: nothing in this world reaches the 0 m datum.
+    expect(s.landFrac0m).toBe(0);
+  });
+
+  it('band occupancy excludes freeboard exactly 0 and counts exactly 800 m (half-open (0, 800])', () => {
+    const kf = emptyKeyframe(0);
+    kf.globals.seaLevelM = -1000;
+    kf.fields.elevation.fill(-5000);
+    kf.fields.elevation[0] = -1000; // freeboard 0: land, but NOT in the band
+    kf.fields.elevation[1] = -200; // freeboard 800: in the band (inclusive top)
+    kf.fields.elevation[2] = 0; // freeboard 1000: outside; also the only 0 m-datum land
+    const s = computeCrustStats(kf, N);
+    const sa = cellSolidAngleTable(N);
+    const landArea = sa[0]! + sa[1]! + sa[2]!;
+    expect(s.bandOccupancyFrac).toBeCloseTo(sa[1]! / landArea, 12);
+    expect(s.landFrac0m).toBeCloseTo(1 / cellCount(N), 10);
   });
 
   it('a waterworld reports zero freeboard and zero flooding shares, not NaN', () => {
     const kf = emptyKeyframe(0);
     kf.globals.seaLevelM = -3000;
-    const s = computeCrustStats(kf);
+    const s = computeCrustStats(kf, N);
     expect(s.contFrac).toBe(0);
     expect(s.meanFreeboardM).toBe(0);
     expect(s.submergedContFrac).toBe(0);
     expect(s.oceanOnContFrac).toBeCloseTo(0, 10);
     expect(s.landFrac).toBe(0);
+    expect(s.landFracArea).toBe(0);
+    expect(s.bandOccupancyFrac).toBe(0); // no land: 0, not NaN
+    expect(s.landFrac0m).toBe(0);
   });
 
   it('an all-land world reports zero ocean shares, not NaN', () => {
@@ -186,12 +217,16 @@ describe('computeCrustStats (#101 calibration harness)', () => {
     kf.globals.seaLevelM = -3000;
     kf.fields.crustType.fill(1);
     kf.fields.elevation.fill(0);
-    const s = computeCrustStats(kf);
+    const s = computeCrustStats(kf, N);
     expect(s.landFrac).toBe(1);
     expect(s.submergedContFrac).toBe(0);
     expect(s.oceanOnContFrac).toBe(0);
     expect(s.shallowOceanFrac).toBe(0);
     expect(s.meanFreeboardM).toBeCloseTo(3000, 6);
+    expect(s.landFracArea).toBeCloseTo(1, 12);
+    // Freeboard 3000 m everywhere: land, but far above the (0, 800 m] band.
+    expect(s.bandOccupancyFrac).toBe(0);
+    expect(s.landFrac0m).toBe(1);
   });
 });
 
