@@ -292,3 +292,54 @@ lifts interiors UP to +150 — they meet at the coastline from opposite sides).
 | `r6-water07-s42-4500Myr.png` | water ×0.7 — "less water" falsified: connected but spidery |
 | `r6-craton100-s42-4500Myr.png` | + craton emergence — 76% of dry land in one mass |
 | `r6-craton100-s42-3600Myr.png` | + craton emergence, mid-run continent |
+
+## 11. Round 7 — blob continents: speck removal + mountains halved
+
+Owner follow-up on the craton prototype: still scattered specks in the oceans,
+continents not blob-like, "a LOT of very high mountain chains". Round 7 (4
+runs) composed three ingredients on the craton-100 base:
+
+1. **`--block-isostasy` (#84, default-off)** — the purpose-built speck killer:
+   blocks under 300k km² founder to −200 m (Zealandia-style), full elevation
+   only above 2 Mkm². Its 1e-3 m/yr relax outruns the 1e-4 craton lift 10:1,
+   so it acts as the area gate for emergence with no extra code.
+2. **Orogeny 5e-4/8000 → 4e-4/6000.** Previously untenable — weak orogeny
+   starved the land supply (round 1–2 low-orogeny arms) — but craton emergence
+   now owns land breadth, DECOUPLING land fraction from belt height.
+3. Craton emergence 100 m/Myr (round 6) unchanged.
+
+| arm (s42 unless noted, final frame) | land comps | largest | peak above sea | mean freeboard |
+|---|---|---|---|---|
+| candidate baseline | 91 | 0.385 | 7933 m | 4047 m |
+| craton100 (round 6) | 143 | 0.762 | 7968 m | 3649 m |
+| craton100 + blockIso | 111 | 0.467 | 7942 m | 3351 m |
+| "earth": craton + blockIso + oro 4e-4/6000 | 163 | 0.242* | **5964 m** | **2027 m** |
+| "earth" s1337 | 162 | 0.371 | 5972 m | 2427 m |
+
+\* final frame lands in a dispersal phase; the 3.0 Gyr frame (evidence PNG)
+shows the assembled look: a compact continent with green interior plains and a
+single cordillera spine. Health floors hold on all arms: land min 8–10.7%,
+monopoly ≤ 30 Myr, engine alive to ≥ 4393 Myr, dispersal 91.6–97.6%.
+
+**What moved:** peaks above sea 7.9 → 6.0 km, mean continental freeboard
+4.0 → 2.0 km (Earth ≈ 0.8 km — still ~2.5×, but halved), specks foundered by
+blockIso (visibly cleaner oceans; residual arc chains remain), and interiors
+are plains instead of sea. **Known residuals:** (a) mean elevation still well
+above Earth; (b) at N=64 a 1-cell belt is ~300 km wide, so chains read thick
+by construction; (c) the dump palette saturates at 6 km, so a cap-6000 belt
+still renders max dark brown — the relief cut is real but partly invisible;
+consider lowering `OROGENY_MAX_ELEVATION_M` further or re-anchoring
+`LAND_VIZ_REF_M` if the visual weight of belts still reads wrong; (d)
+`--no-emergent-arc-taper`/compactArcs interactions unexplored.
+
+Round-7 evidence: `r7-earth-s42-3000Myr.png` (assembled blob continent),
+`r7-earth-s42-4500Myr.png` (dispersal phase, honest), `r7-earth-s1337-4500Myr.png`
+(seed replication, busier), `r7-blockiso-s42-4500Myr.png` (speck killer alone).
+
+**If promoted, the full "earth-look" package on top of the candidate would be:**
+craton emergence (new mechanism: ~1e-4 m/yr toward sea+150), blockIsostasy ON
+(existing flag, currently default-off/"superseded" — un-supersede it),
+`OROGENY_RATE_M_PER_YR` 4e-4, `OROGENY_MAX_ELEVATION_M` 6000, plus the round-3
+candidate knobs (hazard 0.005, gap 4). One KBV bump, one golden regen, a
+largest-land-component metric gate, and a rate/target A/B for the new
+mechanism.
