@@ -134,7 +134,61 @@ property gets a real gate instead of being read off per-Gyr dispersal
 buckets — and so the §3 assembly→breakup 400–700 Myr target from the
 proposal finally gets scored.
 
-## 7. Evidence index (`default-settings-sweep-evidence/`)
+## 7. Round 5 — erosion, cliff probing, docking radius, N=128 (2026-07-20, second session)
+
+Run under the absolute-palette dump fix (sim-cli `render.ts`): land now scales
+against a fixed 6 km reference (dark rust-brown top, white reserved for the ice
+dump) instead of stretching to each frame's own max — the old near-white peaks
+read as snow/clouds and made arms visually incomparable.
+
+| run | dispersal (epis.) | monopoly | land min–final % | comps | contElev @1.5/3/4.5 | verdict |
+|---|---|---|---|---|---|---|
+| erosion-3x on candidate, s42 | 90.9% (0.95/0.89/**0.75**) | 70 Myr ✓ | 9.8–23.6 | 212 (0.22) | 1871/−743/1417 | erosion ≠ elevation lever, but strengthens episodes |
+| hazard-0.004 (+gap4+oro5), s42 | 95.6% (0.87/0.93) | 20 Myr ✓ | 10.8–26.1 | 142 (0.22) | 1145/−388/2480 | ✓ alive — the hazard cliff is below 0.004 |
+| gap-3 (+0.005+oro5), s42 | 94.0% (0.87/0.88/0.96) | 0 | 10.7–26.2 | 146 (0.38) | 1070/−159/2130 | ✓ healthy; gap4 still better on s42 (91) |
+| **candidate @ N=128**, s42 | 96.7% (0.95/0.98/0.84) | 0 | **6.4**–12.8 final | 602 (0.25) | −77/−309/−819 (vs 0 datum) | health floors hold; land-min and comps need owning — see below |
+
+- **Erosion verdict (question closed):** 3× `EROSION_RATE_PER_YR` left the
+  continental mean essentially unchanged (1.4–1.9 km vs candidate's 1.4–2.1) —
+  influx-dominance now verified under the candidate config, matching the code
+  reading (orogeny out-injects root decay ~20× on active margins; interior
+  belts already die via the 300 Myr root-decay tau). Side effect worth a look:
+  stronger erosion strengthened Wilson cycling (a 0.75 Gyr-bucket + 70 Myr
+  monopoly) — plausibly sediment export → freeboard → tension coupling.
+- **N=128 caveats, stated plainly:** transient land min 6.4% (the shipped
+  default's owner-accepted N=128 transient is 7.1% — ours is slightly worse and
+  must be owned explicitly); final land 12.8% with 602 land components. No
+  comparable base-default N=128 component count exists in any findings doc, and
+  finer grids resolve more small islands by construction, so the fragmentation
+  number is NOT interpretable until a base N=128 rerun is measured side-by-side.
+  Tempo (161 Myr), monopoly (0), engine liveness (4497 Myr) all in-band.
+- Dense-dump reruns (30 Myr cadence) of pair s42 and candidate s1337 harvested
+  the supercontinent gallery below; deterministic replays of the round-3/4
+  worlds, new palette.
+
+## 8. Open kernel gaps surfaced by owner review (not knob-fixable)
+
+- **Isolated seas never desiccate.** `seaLevel.ts` solves ONE global scalar;
+  `oceanVolumeMean` floods every cell below the level with no
+  connected-to-ocean test, so a landlocked basin below global sea level stays
+  sea forever — no Messinian-style evaporative drawdown/refill. Needs a
+  connectivity mask in the sea-level solve + an endorheic basin water balance
+  (evaporation vs runoff); kernel mechanism, own golden regen.
+
+## 9. Evidence index (`default-settings-sweep-evidence/`)
+
+Supercontinent gallery (absolute palette):
+
+| file | shows |
+|---|---|
+| `supercontinent-pair-s42-3540Myr.png` | pair, s42: assembly phase |
+| `supercontinent-pair-s42-3600Myr.png` | pair, s42: peak supercontinent (the Gyr-3 0.76 bucket) |
+| `breakup-pair-s42-3840Myr.png` | pair, s42: breakup in progress |
+| `supercontinent-candidate-s1337-1200Myr.png` | candidate, s1337: assembly phase |
+| `supercontinent-candidate-s1337-1350Myr.png` | candidate, s1337: peak assembly (Gyr-1 0.78 bucket) |
+
+Round 1–4 frames (legacy per-frame-stretch palette — peak-white is elevation,
+not snow):
 
 | file | shows |
 |---|---|
