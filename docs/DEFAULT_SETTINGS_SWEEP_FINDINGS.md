@@ -257,22 +257,22 @@ m/Myr** it outruns the regulator and the look transforms:
 
 | run (final frame) | land % | land comps | largest land comp | cont mean freeboard |
 |---|---|---|---|---|
-| candidate s42 | 25.9 | 91 | 0.385 | (see note) |
+| candidate s42 | 25.9 | 91 | 0.385 | 4047 m |
 | + craton 100 m/Myr, s42 | 25.2 | 143 | **0.762** | 3649 m |
 | + craton 100 m/Myr, s1337 | 24.2 | 188 | 0.421 | 3519 m |
 
-(Baseline numbers are the fresh deterministic replay `log-r6-base-s42.txt` —
+(Baseline numbers are fresh deterministic replays of the candidate at s42 —
 an earlier draft of this table mistakenly quoted the hazmid-gap4 arm, 26.9/122/
-0.366/4993 m; corrected. The stock-orogeny freeboard mean 4993 m gives the
-scale of the belt-height regime the regulator sits in.)
+0.366/4993 m; corrected. Note the candidate itself already trimmed belt height
+vs stock orogeny: 4993 → 4047 m mean freeboard.)
 
 Broad platform interiors (green plains) fuse the belt lattice into compact
 continents; at s42's final assembly 76% of all dry land is one landmass while
 dispersal (96.5%) and monopoly (0 Myr) stay healthy on both seeds — the Wilson
 cycle is untouched, land breadth no longer depends on catching an assembly
-moment. Mean freeboard drops ~1.3 km vs the stock-orogeny regime (the
-regulator pulls belts down as platforms rise) — directly against the
-"too-high mountains" complaint. Honest cost: total land component count goes
+moment. Mean freeboard drops a further ~400 m vs the candidate (the regulator
+pulls belts down as platforms rise) — in the same direction as the "too-high
+mountains" complaint, on top of the candidate's own 4993 → 4047 m trim. Honest cost: total land component count goes
 UP (91 → 143 at s42) — emergence also exposes small platforms as new islets;
 the win is compactness (largest mass doubles), not fewer islands.
 
