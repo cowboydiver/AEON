@@ -57,6 +57,11 @@ export const FIELDS = {
     description:
       'Marine photosynthetic productivity, 0-1, over ocean cells (0 on land). Zero everywhere until the gated-stochastic abiogenesis onset (#37); then a FAST diagnostic of local conditions (light × temperature window × shelf-nutrient proxy), recomputed every step with no memory — the O₂ reservoir (globals.oxygen) holds the history. Drives the O₂ source term and the render ocean tint (#38). Appended last (codec wire-id constraint)',
   },
+  crustalThicknessM: {
+    unit: 'm',
+    description:
+      'Crustal column thickness (crustal-column model, docs/CRUSTAL_COLUMN_PROPOSAL.md). Continental ~20–70 km, oceanic 7.1 km. Crust property: advects with plate motion (ADVECTED_FIELDS). Populated at init by pure inversion of the t=0 terrain regardless of the flag; under crustalColumns (post-onset) it is the PRIMARY vertical state — continental elevation is derived from it by Airy isostasy (isostasy.ts). Sim-only (not in the codec stored set). Appended last (codec wire-id constraint)',
+  },
 } as const;
 
 export type FieldName = keyof typeof FIELDS;

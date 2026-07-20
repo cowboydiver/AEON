@@ -32,14 +32,22 @@ import { seaKeyedOceanicDepthForAge } from '../bathymetry';
 import {
   ACTIVE_MARGIN_STRESS_M_PER_YR,
   COLLISION_THICKENING_FACTOR,
+  CONTINENTAL_BUOYANCY_FACTOR,
   MARGIN_CONSOLIDATION_HOLE_MIN_NEIGHBORS,
   MICROCONTINENT_FOUNDER_ELEVATION_M,
   OCEAN_RELIEF_RELAX_M_PER_YR,
+  OCEANIC_CRUST_THICKNESS_M,
   OROGENY_MAX_ELEVATION_M,
 } from '../constants';
 import { bathymetryDatumOffsetM, landDatumOffsetM, platformDatumOffsetM } from '../datums';
 import { cellCenterTable, cellCount, directionToIndex, neighborTable, type Vec3 } from '../grid';
 import { hash2, hashString } from '../hash';
+import {
+  continentalElevationForThicknessM,
+  crustalColumnsActive,
+  crustalColumnsOnsetReinversion,
+  foundColumnFromElevation,
+} from '../isostasy';
 import type { PlanetState } from '../state';
 import type { System } from '../step';
 import { rotateAroundAxis } from '../vec';
@@ -61,8 +69,19 @@ function advectionQuantum(seed: number, plate: number, eventCount: number, theta
   return thetaMin * (1 + QUANTUM_DITHER_RANGE * h01);
 }
 
-/** Crust fields transported with plate motion (see ARCHITECTURE.md). */
-const ADVECTED_FIELDS = ['elevation', 'crustAge', 'crustType', 'sutureYears', 'sedimentM'] as const;
+/** Crust fields transported with plate motion (see ARCHITECTURE.md).
+ *  `crustalThicknessM` advects UNCONDITIONALLY (crustal-columns C1) —
+ *  transport of a field nothing reads flag-off is byte-neutral to every
+ *  other field; its non-advective maintenance (mirrors, branch-flip
+ *  founding) is gated on `crustalColumnsActive`. */
+const ADVECTED_FIELDS = [
+  'elevation',
+  'crustAge',
+  'crustType',
+  'sutureYears',
+  'sedimentM',
+  'crustalThicknessM',
+] as const;
 
 export const tectonicsSystem: System = {
   name: 'tectonics',
@@ -72,6 +91,14 @@ export const tectonicsSystem: System = {
 function applyTectonics(state: PlanetState, dtYears: number): PlanetState {
   const N = state.params.gridN;
   const thetaMin = Math.PI / 2 / N;
+
+  // Crustal-columns onset re-inversion (isostasy.ts, the zero-snap rule):
+  // identity except on the single onset step, where thickness re-founds over
+  // the current elevation and continental cells snap onto the derived
+  // manifold (≤ 1 f32 ULP). Runs FIRST — before any advection or writer —
+  // so the onset step's own writers already see coherent columns.
+  state = crustalColumnsOnsetReinversion(state, dtYears);
+  const columns = crustalColumnsActive(state);
 
   // Crust ages everywhere, every step (#15). Ticked before advection so
   // transported crust carries its aged value; gap fill afterwards writes 0.
@@ -119,6 +146,10 @@ function applyTectonics(state: PlanetState, dtYears: number): PlanetState {
   const elevation = next.fields.elevation.slice();
   const crustType = next.fields.crustType.slice();
   const sedimentM = next.fields.sedimentM.slice();
+  // Crustal columns (C1): the working thickness copy every continental
+  // shim below writes through. Copied only when the mechanism is active —
+  // flag-off the field passes through advection untouched.
+  const crustalThicknessM = columns ? next.fields.crustalThicknessM.slice() : null;
   const age = next.fields.crustAge;
   const relax = OCEAN_RELIEF_RELAX_M_PER_YR * dtYears;
   // Sea-level-keyed bathymetry (#102, datums.ts + bathymetry.ts): under the
@@ -135,8 +166,9 @@ function applyTectonics(state: PlanetState, dtYears: number): PlanetState {
 
   // Convergent topography (#16): trench + arc + orogenic uplift, driven by
   // this step's stress; mature arcs become continental crust. Mutates only
-  // the local elevation/crustType copies.
-  applyConvergentTopography(next, boundaryStress, elevation, crustType, dtYears);
+  // the local elevation/crustType (and, under crustalColumns, thickness)
+  // copies.
+  applyConvergentTopography(next, boundaryStress, elevation, crustType, dtYears, crustalThicknessM);
 
   // Isolated continental slivers founder (#59): a continental cell with no
   // continental 4-neighbor is pinned below sea level (it stays continental
@@ -163,7 +195,19 @@ function applyTectonics(state: PlanetState, dtYears: number): PlanetState {
       crustType[nbTable[i * 4 + 2]!] !== 1 &&
       crustType[nbTable[i * 4 + 3]!] !== 1
     ) {
-      elevation[i] = Math.min(elevation[i]!, founderLevel);
+      if (crustalThicknessM !== null) {
+        // C1 shim (site 4): the clamp's Δe routes through thickness
+        // (ΔT = Δe/k) and elevation re-derives from the stored column —
+        // same value as the flag-off Math.min to within 1 f32 ULP.
+        const e = elevation[i]!;
+        if (e > founderLevel) {
+          crustalThicknessM[i] =
+            crustalThicknessM[i]! + (founderLevel - e) / CONTINENTAL_BUOYANCY_FACTOR;
+          elevation[i] = continentalElevationForThicknessM(crustalThicknessM[i]!);
+        }
+      } else {
+        elevation[i] = Math.min(elevation[i]!, founderLevel);
+      }
     }
   }
 
@@ -242,6 +286,13 @@ function applyTectonics(state: PlanetState, dtYears: number): PlanetState {
         elevation[hole.cell] = hole.elev;
         crustAgeOut[hole.cell] = hole.age;
         sutureYearsOut[hole.cell] = hole.suture;
+        // C1 branch-flip rules (site 5): the flipped island re-founds a
+        // 7.1 km oceanic column; the filled hole founds its thickness by
+        // inversion of the inherited elevation (continuous by construction).
+        if (crustalThicknessM !== null) {
+          crustalThicknessM[isl] = OCEANIC_CRUST_THICKNESS_M;
+          foundColumnFromElevation(elevation, crustalThicknessM, hole.cell);
+        }
       }
     }
   }
@@ -281,6 +332,7 @@ function applyTectonics(state: PlanetState, dtYears: number): PlanetState {
       sedimentM,
       crustAge: crustAgeOut,
       sutureYears: sutureYearsOut,
+      ...(crustalThicknessM !== null ? { crustalThicknessM } : {}),
     },
   };
 }
@@ -306,6 +358,7 @@ function advect(
     crustType: new Float32Array(count),
     sutureYears: new Float32Array(count),
     sedimentM: new Float32Array(count),
+    crustalThicknessM: new Float32Array(count),
   };
   const old = {
     elevation: state.fields.elevation,
@@ -313,7 +366,11 @@ function advect(
     crustType: state.fields.crustType,
     sutureYears: state.fields.sutureYears,
     sedimentM: state.fields.sedimentM,
+    crustalThicknessM: state.fields.crustalThicknessM,
   };
+  // Crustal columns (C1): thickness ADVECTS unconditionally (the copy loop
+  // below); its Δe mirrors and branch-flip founding are gated here.
+  const columns = crustalColumnsActive(state);
 
   // Claims + resolution. Overlaps (multiple claimants) are convergence: the
   // overriding side keeps the surface, the subducting side's OCEANIC crust
@@ -336,6 +393,9 @@ function advect(
     elevation: number;
     crustAge: number;
     sutureYears: number;
+    /** Displaced column thickness — travels with the bulldozed content
+     *  (crustal-columns C1, site 8: value + area exact on re-root). */
+    crustalThicknessM: number;
   }
   const pushes: Push[] = [];
   // Source cells whose content survived at some target this event. The
@@ -425,6 +485,7 @@ function advect(
         elevation: old.elevation[i]!,
         crustAge: old.crustAge[i]!,
         sutureYears: old.sutureYears[i]!,
+        crustalThicknessM: old.crustalThicknessM[i]!,
       });
     }
   }
@@ -459,6 +520,7 @@ function advect(
         elevation: old.elevation[src]!,
         crustAge: old.crustAge[src]!,
         sutureYears: old.sutureYears[src]!,
+        crustalThicknessM: old.crustalThicknessM[src]!,
       });
     }
   }
@@ -546,10 +608,22 @@ function advect(
       // datum that rides the dynamic sea level under the freeboard
       // mechanism (landDatumOffsetM, datums.ts) and is exactly the absolute
       // constant when it is off.
-      newFields.elevation[t] = Math.min(
+      const thickened = Math.min(
         landDatumOffsetM(state) + OROGENY_MAX_ELEVATION_M,
         newFields.elevation[t]! + COLLISION_THICKENING_FACTOR * Math.max(0, push.elevation),
       );
+      if (columns) {
+        // C1 shim (site 7): today's Δe path kept, mirrored as ΔT = Δe/k —
+        // the physical column transaction is stage C3's replacement.
+        newFields.crustalThicknessM[t] =
+          newFields.crustalThicknessM[t]! +
+          (thickened - newFields.elevation[t]!) / CONTINENTAL_BUOYANCY_FACTOR;
+        newFields.elevation[t] = continentalElevationForThicknessM(
+          newFields.crustalThicknessM[t]!,
+        );
+      } else {
+        newFields.elevation[t] = thickened;
+      }
       newFields.crustAge[t] = Math.max(newFields.crustAge[t]!, push.crustAge);
       // Weld memory survives shortening: the newer of the two suture stamps
       // wins (0 = never sutured, so max is also the presence-preserving pick).
@@ -560,6 +634,9 @@ function advect(
       newFields.elevation[t] = push.elevation;
       newFields.crustAge[t] = push.crustAge;
       newFields.sutureYears[t] = push.sutureYears;
+      // C1 (site 8): the displaced column re-roots with its content —
+      // value + area exact, coherent because (e, T) travel as a pair.
+      if (columns) newFields.crustalThicknessM[t] = push.crustalThicknessM;
     }
   }
 
@@ -607,6 +684,8 @@ function advect(
       newFields.crustType[i] = 0;
       newFields.sutureYears[i] = 0; // fresh ocean carries no weld memory
       newFields.sedimentM[i] = 0; // ...and no sediment cover
+      // C1 (site 9): honest oceanic creation — a fresh 7.1 km column.
+      if (columns) newFields.crustalThicknessM[i] = OCEANIC_CRUST_THICKNESS_M;
     }
   }
 

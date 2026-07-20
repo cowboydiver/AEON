@@ -26,6 +26,8 @@ import {
   ACTIVE_MARGIN_STRESS_M_PER_YR,
   cellCount,
   cellSolidAngleTable,
+  computeCrustalMassLedger,
+  EARTH_RADIUS_M,
   EVENT_KINDS,
   neighborTable,
   type Keyframe,
@@ -104,6 +106,24 @@ export interface CrustStats {
    * gates on it.
    */
   landFrac0m: number;
+  /**
+   * Continental `crustalThicknessM` stats, m (crustal-columns C1). RAW values
+   * — during the shim era (C1–C4) pump-flooded cells can carry unphysically
+   * thin, even negative, inversion thickness (the declared validity domain,
+   * proposal §6); the min going deeply negative is that lobe made visible,
+   * not a bug. 0 when there is no continental crust. Flag-off runs show the
+   * stale init inversion advected around — only flag-on runs maintain these.
+   */
+  contThicknessMeanM: number;
+  contThicknessMinM: number;
+  contThicknessMaxM: number;
+  /**
+   * The crustal mass-ledger total, kg (kernel `computeCrustalMassLedger`):
+   * continental + oceanic crust + oceanic sediment over true cell areas. At
+   * C1 a reported tripwire (the shims mirror today's non-conservative
+   * mechanisms); per-term closure gates activate at C2.
+   */
+  crustalMassKg: number;
 }
 
 /** Ocean shallower than this counts as shelf sea in CrustStats. */
@@ -112,8 +132,12 @@ export const SHALLOW_OCEAN_DEPTH_M = 500;
 /** Freeboard band upper edge for `bandOccupancyFrac` (§3 hypsometry gate). */
 export const LAND_BAND_CEILING_M = 800;
 
-export function computeCrustStats(keyframe: Keyframe, gridN: number): CrustStats {
-  const { crustType, elevation } = keyframe.fields;
+export function computeCrustStats(
+  keyframe: Keyframe,
+  gridN: number,
+  radiusMeters: number = EARTH_RADIUS_M,
+): CrustStats {
+  const { crustType, elevation, crustalThicknessM } = keyframe.fields;
   const count = elevation.length;
   const seaLevelM = keyframe.globals.seaLevelM;
   const solidAngle = cellSolidAngleTable(gridN);
@@ -127,6 +151,9 @@ export function computeCrustStats(keyframe: Keyframe, gridN: number): CrustStats
   let landArea = 0;
   let bandArea = 0;
   let totalArea = 0;
+  let thickSum = 0;
+  let thickMin = Infinity;
+  let thickMax = -Infinity;
   for (let i = 0; i < count; i++) {
     const e = elevation[i]!;
     const a = solidAngle[i]!;
@@ -137,6 +164,10 @@ export function computeCrustStats(keyframe: Keyframe, gridN: number): CrustStats
     if (isCont) {
       cont++;
       contSum += e;
+      const t = crustalThicknessM[i]!;
+      thickSum += t;
+      if (t < thickMin) thickMin = t;
+      if (t > thickMax) thickMax = t;
     }
     if (e < seaLevelM) {
       ocean++;
@@ -148,6 +179,7 @@ export function computeCrustStats(keyframe: Keyframe, gridN: number): CrustStats
       if (freeboard > 0 && freeboard <= LAND_BAND_CEILING_M) bandArea += a;
     }
   }
+  const ledger = computeCrustalMassLedger(keyframe.fields, gridN, radiusMeters);
   return {
     timeYears: keyframe.timeYears,
     seaLevelM,
@@ -161,6 +193,10 @@ export function computeCrustStats(keyframe: Keyframe, gridN: number): CrustStats
     landFracArea: landArea / totalArea,
     bandOccupancyFrac: landArea > 0 ? bandArea / landArea : 0,
     landFrac0m: land0m / count,
+    contThicknessMeanM: cont > 0 ? thickSum / cont : 0,
+    contThicknessMinM: cont > 0 ? thickMin : 0,
+    contThicknessMaxM: cont > 0 ? thickMax : 0,
+    crustalMassKg: ledger.continentalMassKg + ledger.oceanicMassKg + ledger.sedimentMassKg,
   };
 }
 

@@ -46,13 +46,20 @@
 
 import { labelContinentalComponents } from '../components';
 import {
+  CONTINENTAL_BUOYANCY_FACTOR,
   CRUST_FATE_MERGE_GAP_CELLS,
   CRUST_FATE_SMALL_AREA_M2,
   CRUST_FATE_SUBSIDENCE_M_PER_YR,
   MICROCONTINENT_FOUNDER_ELEVATION_M,
+  OCEANIC_CRUST_THICKNESS_M,
 } from '../constants';
 import { platformDatumOffsetM } from '../datums';
 import { cellCount, neighborTable } from '../grid';
+import {
+  continentalElevationForThicknessM,
+  crustalColumnsActive,
+  foundColumnFromElevation,
+} from '../isostasy';
 import type { PlanetState } from '../state';
 import type { System } from '../step';
 import { computeBoundaryStress } from './boundaries';
@@ -129,12 +136,18 @@ export const crustFatesSystem: System = {
     // possible when two terranes dock across the same strait, are last-wins
     // in that order and therefore deterministic).
     const pre = state.fields;
+    // Crustal columns (C1, sites 18–19): dock welds found their columns by
+    // inversion, founder subsidence mirrors ΔT = Δe/k, and retirement
+    // re-founds 7.1 km oceanic columns (the ledger debit — the retirement
+    // TRIGGER itself re-keys to thickness at stage C5).
+    const columns = crustalColumnsActive(state);
     let elevation: Float32Array | null = null;
     let crustType: Float32Array | null = null;
     let crustAge: Float32Array | null = null;
     let sutureYears: Float32Array | null = null;
     let sedimentM: Float32Array | null = null;
     let plateId: Float32Array | null = null;
+    let crustalThicknessM: Float32Array | null = null;
 
     for (let comp = 0; comp < nComps; comp++) {
       if (!isSmall[comp]) continue;
@@ -185,6 +198,13 @@ export const crustFatesSystem: System = {
           sutureYears[b] = state.timeYears;
           sedimentM[b] = 0;
           plateId[b] = targetPlate;
+          // C1 branch flip (site 18): the accreted weld cell founds its
+          // column by inversion of the weld elevation — continuous, and the
+          // ledger's docking credit.
+          if (columns) {
+            crustalThicknessM ??= pre.crustalThicknessM.slice();
+            foundColumnFromElevation(elevation, crustalThicknessM, b);
+          }
         }
         // The whole terrane transfers to the large component's plate so the
         // weld is durable under subsequent advection.
@@ -206,6 +226,13 @@ export const crustFatesSystem: System = {
           // elevation/crustAge stay: the drowned platform re-enters the
           // oceanic ledger where the age-depth relaxation (tectonics.ts)
           // takes it down at its bounded rate — no cliff.
+          // C1 branch flip (site 19): the retired column's mass leaves the
+          // continental ledger (the one deliberate debit); the cell re-founds
+          // a 7.1 km oceanic column. Elevation semantics above unchanged.
+          if (columns) {
+            crustalThicknessM ??= pre.crustalThicknessM.slice();
+            crustalThicknessM[m] = OCEANIC_CRUST_THICKNESS_M;
+          }
         }
       } else {
         const relax = CRUST_FATE_SUBSIDENCE_M_PER_YR * dtYears;
@@ -213,7 +240,17 @@ export const crustFatesSystem: System = {
           const e = (elevation ?? pre.elevation)[m]!;
           if (e <= founderLevel) continue;
           elevation ??= pre.elevation.slice();
-          elevation[m] = Math.max(founderLevel, e - relax);
+          if (columns) {
+            // C1 shim (site 19): the founder subsidence Δe routes through
+            // thickness — same value to within 1 f32 ULP.
+            crustalThicknessM ??= pre.crustalThicknessM.slice();
+            const eNew = Math.max(founderLevel, e - relax);
+            crustalThicknessM[m] =
+              crustalThicknessM[m]! + (eNew - e) / CONTINENTAL_BUOYANCY_FACTOR;
+            elevation[m] = continentalElevationForThicknessM(crustalThicknessM[m]!);
+          } else {
+            elevation[m] = Math.max(founderLevel, e - relax);
+          }
         }
       }
     }
@@ -224,7 +261,8 @@ export const crustFatesSystem: System = {
       crustAge === null &&
       sutureYears === null &&
       sedimentM === null &&
-      plateId === null
+      plateId === null &&
+      crustalThicknessM === null
     ) {
       return state;
     }
@@ -239,6 +277,7 @@ export const crustFatesSystem: System = {
         ...(sutureYears !== null ? { sutureYears } : {}),
         ...(sedimentM !== null ? { sedimentM } : {}),
         ...(plateId !== null ? { plateId } : {}),
+        ...(crustalThicknessM !== null ? { crustalThicknessM } : {}),
       },
     };
     // A dock moved plate ownership: refresh the stress field so no keyframe

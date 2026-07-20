@@ -135,6 +135,7 @@ describe('resolveMechanismDependencies (#127 item 6)', () => {
     forceKinematics: true,
     emergentSuture: true,
     tensionRift: true,
+    crustalColumns: false,
   });
 
   it('cascades tensionRift + emergentSuture off when forceKinematics is off', () => {

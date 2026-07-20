@@ -135,6 +135,13 @@ Options:
                               120e6→30e6→0 for the cooldown-retirement measurement.
                               No effect without --tension-rift (flag-off always
                               uses the legacy 120 Myr constant)
+  --crustal-columns           enable the crustal-column model, stage C1
+                              (docs/CRUSTAL_COLUMN_PROPOSAL.md): crustal
+                              thickness becomes the primary vertical state and
+                              continental elevation its Airy-derived cache,
+                              through mechanical shims that reproduce today's
+                              behavior distributionally (default off; measure
+                              with --ab crustal-columns)
   --suture-analysis           print the stage-4 rift-lifecycle harness (#114):
                               re-suture interval of rifted halves from the event
                               log (the pre-#59 ~16 Myr re-suture pathology is the
@@ -175,7 +182,8 @@ Options:
                               hundred Myr after the branch most. Mechanisms:
                               block-isostasy, crust-fates, compact-arcs,
                               marine-planation, emergent-arc-taper,
-                              sea-level-datums, freeboard, bathymetry-datum.
+                              sea-level-datums, freeboard, bathymetry-datum,
+                              crustal-columns.
                               Mutually exclusive with the single-arm mechanism
                               flags and --dump. Since the #88-#91 promotion
                               BOTH arms inherit the promoted defaults for the
@@ -233,6 +241,8 @@ const { values } = parseArgs({
     'no-force-kinematics': { type: 'boolean', default: false },
     'no-emergent-suture': { type: 'boolean', default: false },
     'no-tension-rift': { type: 'boolean', default: false },
+    'crustal-columns': { type: 'boolean', default: false },
+    'no-crustal-columns': { type: 'boolean', default: false },
     'rift-suture-cooldown': { type: 'string' },
     'suture-analysis': { type: 'boolean', default: false },
     ab: { type: 'string' },
@@ -312,6 +322,7 @@ const MECHANISMS: Record<string, (on: boolean, onsetYears: number) => Partial<Pl
   'force-kinematics': (on, onset) => ({ forceKinematics: on, forceKinematicsOnsetYears: onset }),
   'emergent-suture': (on, onset) => ({ emergentSuture: on, emergentSutureOnsetYears: onset }),
   'tension-rift': (on, onset) => ({ tensionRift: on, tensionRiftOnsetYears: onset }),
+  'crustal-columns': (on, onset) => ({ crustalColumns: on, crustalColumnsOnsetYears: onset }),
 };
 const MECHANISM_FLAGS = Object.keys(MECHANISMS) as ReadonlyArray<
   | 'block-isostasy'
@@ -325,6 +336,7 @@ const MECHANISM_FLAGS = Object.keys(MECHANISMS) as ReadonlyArray<
   | 'force-kinematics'
   | 'emergent-suture'
   | 'tension-rift'
+  | 'crustal-columns'
 >;
 
 // --ab-block-isostasy <years> predates --ab and is kept as its alias.
@@ -536,12 +548,21 @@ function reportCrustStats(keyframe: Keyframe): void {
         'band%'.padStart(7),
         'land0m%'.padStart(8),
         'min elev'.padStart(10),
+        // Crustal-columns C1 instruments: continental thickness stats (km,
+        // RAW — the shim-era negative lobe is deliberately visible) and the
+        // total crustal mass ledger (1e21 kg; a reported tripwire until the
+        // C2 closure gates).
+        'Tmean'.padStart(7),
+        'Tmin'.padStart(7),
+        'Tmax'.padStart(6),
+        'mass'.padStart(7),
       ].join('  '),
     );
     printedCrustStatsHeader = true;
   }
-  const s = computeCrustStats(keyframe, params.gridN);
+  const s = computeCrustStats(keyframe, params.gridN, params.radiusMeters);
   const pct = (x: number): string => `${(x * 100).toFixed(1)}%`;
+  const km = (x: number): string => (x / 1000).toFixed(1);
   console.log(
     [
       formatYears(s.timeYears),
@@ -556,6 +577,10 @@ function reportCrustStats(keyframe: Keyframe): void {
       pct(s.bandOccupancyFrac).padStart(7),
       pct(s.landFrac0m).padStart(8),
       s.minElevationM.toFixed(0).padStart(10),
+      km(s.contThicknessMeanM).padStart(7),
+      km(s.contThicknessMinM).padStart(7),
+      km(s.contThicknessMaxM).padStart(6),
+      (s.crustalMassKg / 1e21).toFixed(1).padStart(7),
     ].join('  '),
   );
 }

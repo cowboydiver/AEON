@@ -71,6 +71,7 @@ import {
 } from '../constants';
 import { bathymetryDatumOffsetM, landDatumOffsetM, platformDatumOffsetM } from '../datums';
 import { cellCount, neighborTable } from '../grid';
+import { crustalColumnsActive, reconcileContinentalColumns } from '../isostasy';
 import type { System } from '../step';
 
 export const erosionSystem: System = {
@@ -211,6 +212,17 @@ export const erosionSystem: System = {
       if (e > rootReference) {
         elevation[i] = rootReference + (e - rootReference) * keep;
       }
+    }
+
+    // Crustal columns (C1, sites 13–16): reconcile this system's continental
+    // Δe into thickness space at exit — every flux above ran bit-identically
+    // to the flag-off path; only the stored result snaps onto the derived
+    // manifold (isostasy.ts). Thickness diffusion with emergent rebound is
+    // stage C2's replacement.
+    if (crustalColumnsActive(state)) {
+      const crustalThicknessM = state.fields.crustalThicknessM.slice();
+      reconcileContinentalColumns(crustType, old, elevation, crustalThicknessM);
+      return { ...state, fields: { ...state.fields, elevation, sedimentM, crustalThicknessM } };
     }
 
     return { ...state, fields: { ...state.fields, elevation, sedimentM } };

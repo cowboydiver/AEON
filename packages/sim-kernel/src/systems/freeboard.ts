@@ -86,6 +86,7 @@ import {
   PASSIVE_MARGIN_WIDTH_CELLS,
 } from '../constants';
 import { cellCount, neighborTable } from '../grid';
+import { crustalColumnsActive, reconcileContinentalColumns } from '../isostasy';
 import type { System } from '../step';
 
 export const freeboardSystem: System = {
@@ -169,6 +170,18 @@ export const freeboardSystem: System = {
       // a cell and never digs the shelf past its target.
       if (depth[i] !== -1 && e > shelfLevel) e = Math.max(shelfLevel, e - subside);
       elevation[i] = e;
+    }
+
+    // Crustal columns (C1, sites 20–21): the epeirogenic shift and margin
+    // subsidence above ran bit-identically to the flag-off path; reconcile
+    // their continental Δe into thickness space at exit (uniform Δe ⇒
+    // uniform ΔT = Δe/k — the servo's mechanical shim). Stage C5 RETIRES
+    // term (1) outright and C6 replaces term (2) with the finite-budget
+    // rift-margin thinning (proposal §6).
+    if (crustalColumnsActive(state)) {
+      const crustalThicknessM = state.fields.crustalThicknessM.slice();
+      reconcileContinentalColumns(crustType, old, elevation, crustalThicknessM);
+      return { ...state, fields: { ...state.fields, elevation, crustalThicknessM } };
     }
 
     return { ...state, fields: { ...state.fields, elevation } };

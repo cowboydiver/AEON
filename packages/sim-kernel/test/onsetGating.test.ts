@@ -38,6 +38,10 @@ const MECHANISMS: ReadonlyArray<Partial<PlanetParams>> = [
   { freeboard: true, freeboardOnsetYears: 20e6 },
   { bathymetryDatum: true, bathymetryDatumOnsetYears: 20e6 },
   { emergentSuture: true, emergentSutureOnsetYears: 20e6 },
+  // Crustal columns (C1): pre-onset the field is init-founded + advected in
+  // BOTH arms (unconditional, gated writers inert), so every field — the new
+  // one included — must hash identically until the onset year.
+  { crustalColumns: true, crustalColumnsOnsetYears: 20e6 },
 ];
 
 describe('onset gating (#88/#89/#90/#91 branched A/B)', () => {

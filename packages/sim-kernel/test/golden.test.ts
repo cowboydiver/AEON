@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { CONTINENTAL_BUOYANCY_FACTOR, CONTINENTAL_ISOSTASY_DATUM_M } from '../src/constants';
 import { FIELD_NAMES } from '../src/fields';
 import { hashFloat32Array } from '../src/hash';
 import { createRng } from '../src/rng';
@@ -32,6 +33,7 @@ const ALL_MECHANISMS_OFF = {
   forceKinematics: false,
   emergentSuture: false,
   tensionRift: false,
+  crustalColumns: false,
 } as const;
 
 function fieldHashes(state: PlanetState): Record<string, string> {
@@ -277,6 +279,55 @@ describe('golden field hashes: bathymetryDatum engaged (#102)', () => {
     expect(stepped.globals.seaLevelM).toBeLessThan(-2000);
     expect({
       after100Steps: { timeYears: stepped.timeYears, ...fieldHashes(stepped) },
+    }).toMatchSnapshot();
+  });
+});
+
+/**
+ * Crustal-columns stage C1 spines (docs/CRUSTAL_COLUMN_PROPOSAL.md §6). Two
+ * arms: the ISOLATED arm pins the shim path under ALL_MECHANISMS_OFF (the
+ * cleanest exercise of the tectonics/boundaries/erosion shims alone); the
+ * ENGAGED arm pins the shims riding the shipped DEFAULT stack, with the
+ * bit-exact coherence assertion guarding engagement — a flag-off world fails
+ * it (elevation evolves rawly), so this spine can never silently pin an
+ * inert path (the #102 engaged-golden precedent). Both use onset 0. Initial
+ * states are field-identical to flag-off (the founding synthesis is
+ * unconditional), so only stepped hashes are pinned.
+ */
+describe('golden field hashes: crustalColumns C1 (isolated + engaged)', () => {
+  it('seed 42: after 10 steps, isolated under ALL_MECHANISMS_OFF', () => {
+    const params = createPlanetParams({ seed: 42, ...ALL_MECHANISMS_OFF, crustalColumns: true });
+    const ctx: SimContext = { rng: createRng(params.seed).fork('sim') };
+    let stepped = createInitialState(params);
+    for (let i = 0; i < 10; i++) {
+      stepped = step(stepped, params.stepYears, ctx);
+    }
+    expect({
+      after10Steps: { timeYears: stepped.timeYears, ...fieldHashes(stepped) },
+    }).toMatchSnapshot();
+  });
+
+  it('seed 42, N=32: after 30 steps on the DEFAULT world, derivation engaged', () => {
+    const params = createPlanetParams({ seed: 42, gridN: 32, crustalColumns: true });
+    const ctx: SimContext = { rng: createRng(params.seed).fork('sim') };
+    let stepped = createInitialState(params);
+    for (let i = 0; i < 30; i++) {
+      stepped = step(stepped, params.stepYears, ctx);
+    }
+    // Engagement guard: every continental cell's elevation IS the derivation
+    // (bit-exact) — provably not the flag-off path.
+    const { elevation, crustType, crustalThicknessM } = stepped.fields;
+    let incoherent = 0;
+    for (let i = 0; i < elevation.length; i++) {
+      if (crustType[i] !== 1) continue;
+      const derived = Math.fround(
+        CONTINENTAL_ISOSTASY_DATUM_M + CONTINENTAL_BUOYANCY_FACTOR * crustalThicknessM[i]!,
+      );
+      if (elevation[i] !== derived) incoherent++;
+    }
+    expect(incoherent).toBe(0);
+    expect({
+      after30Steps: { timeYears: stepped.timeYears, ...fieldHashes(stepped) },
     }).toMatchSnapshot();
   });
 });

@@ -293,8 +293,24 @@
  *     (#91) stay default-off and are now documented as INCOMPATIBLE with the
  *     promoted defaults: each starves continental crust to 4–9% of the sphere
  *     under the V2 engine (findings §3), the opposite of their #89/#91 intent.
+ * 19 — Crustal-column stage C1 (docs/CRUSTAL_COLUMN_PROPOSAL.md §6): the
+ *     `crustalThicknessM` field lands, appended last and populated at init by
+ *     pure inversion of the t=0 terrain (continental T = (e − C)/k, oceanic
+ *     7.1 km — zero RNG), joining ADVECTED_FIELDS unconditionally. The
+ *     `crustalColumns` mechanism (default OFF) + `crustalColumnsOnsetYears`
+ *     carry the standard branched-A/B contract; flag-on, every continental
+ *     elevation write routes through thickness via the C1 mechanical shims
+ *     (ΔT = Δe/k, elevation re-derived as C + k·T — behavior distributionally
+ *     today's, trajectories float-divergent) with an onset re-inversion making
+ *     the onset snap exactly zero. Flag-off, every PRE-EXISTING field is
+ *     byte-identical to v18 — the golden diff is purely the new field's hash
+ *     lines (verified against the v18 snapshots at regeneration). Deliberate
+ *     regeneration owing this bump: a new advected field is schema growth,
+ *     the bump-5 `sutureYears` precedent (owner-confirmed cadence: C1 and the
+ *     C7 promotion bump; stages C2–C6 regenerate only the flag-arm spines).
+ *     Sim-only field — no codec/HISTORY_FORMAT_VERSION change.
  */
-export const KERNEL_BEHAVIOR_VERSION = 18;
+export const KERNEL_BEHAVIOR_VERSION = 19;
 
 /** IUGG mean Earth radius, m. */
 export const EARTH_RADIUS_M = 6.371e6;
@@ -2097,3 +2113,97 @@ export const DEFAULT_STEP_YEARS = 1e6;
 
 /** Default keyframe interval, years (SCAFFOLD_SPEC 2.4). */
 export const DEFAULT_KEYFRAME_INTERVAL_YEARS = 10e6;
+
+/* ------------------------------------------------------------------------- *
+ * Crustal-column model (docs/CRUSTAL_COLUMN_PROPOSAL.md, the `crustalColumns`
+ * mechanism): the kernel's first densities. `crustalThicknessM` is the primary
+ * vertical state for continental crust; surface elevation is derived by Airy
+ * isostasy over a fixed datum (isostasy.ts). The oceanic branch keeps the
+ * empirical age-depth machinery — these constants never re-derive it (trap T1).
+ * ------------------------------------------------------------------------- */
+
+/** Mean continental crustal density, kg/m³. Christensen & Mooney 1995 (JGR
+ *  100): velocity-derived global average ≈2835 at mean thickness 39.2 km. */
+export const CRUST_DENSITY_CONTINENTAL_KG_M3 = 2830;
+
+/** Mature oceanic crust bulk density, kg/m³. Carlson & Raskin 1984 (Nature
+ *  311): 2890 ± 40. v1 use: mass-ledger accounting only — oceanic ELEVATION
+ *  stays the empirical age-depth curve (proposal §2.4). */
+export const CRUST_DENSITY_OCEANIC_KG_M3 = 2900;
+
+/** Uppermost lithospheric mantle density, kg/m³ (Turcotte & Schubert,
+ *  Geodynamics — standard value). */
+export const MANTLE_DENSITY_KG_M3 = 3300;
+
+/** Standard seawater density, kg/m³. v1 use: documents the hydro-isostasy
+ *  error bound (proposal §2.4 — the dry continental branch is deliberate);
+ *  no v1 consumer in the derivation itself. */
+export const SEAWATER_DENSITY_KG_M3 = 1030;
+
+/** Compacted shelf sediment bulk density, kg/m³ (Hamilton 1976: 2200–2500
+ *  typical) — the sediment↔crust mass conversion in the ledger. */
+export const SEDIMENT_DENSITY_KG_M3 = 2400;
+
+/** Normal oceanic crust thickness, m: 7.1 ± 0.8 km (White, McKenzie &
+ *  O'Nions 1992, JGR 97). Every oceanic cell's `crustalThicknessM`. */
+export const OCEANIC_CRUST_THICKNESS_M = 7100;
+
+/** Global mean continental crustal thickness, m: 39.2 km (Christensen &
+ *  Mooney 1995). One of the two anchors pinning the continental datum. */
+export const CONTINENTAL_REFERENCE_THICKNESS_M = 39000;
+
+/** The t=0 construction's mean continental elevation, m (measured 380–450
+ *  across the golden seeds — the same anchor FREEBOARD_TARGET_M used). The
+ *  second datum anchor: the reference column stands at this elevation. */
+export const CONTINENTAL_REFERENCE_ELEVATION_M = 400;
+
+/** Gravitational-collapse thickness ceiling, m: Tibet ~70–75 km is Earth's
+ *  sustained maximum (England & Houseman 1989; Rey, Teyssier & Whitney 2001).
+ *  Replaces the elevation caps at stage C3 (proposal §6); unused by the C1
+ *  shims, declared here with the model it belongs to. */
+export const CONTINENTAL_THICKNESS_MAX_M = 70000;
+
+/** Root-decay equilibrium thickness, m — deliberately the reference thickness
+ *  (one anchor, two roles; proposal §2.3). Stage C3's relaxation target. */
+export const CONTINENTAL_THICKNESS_EQUILIBRIUM_M = 39000;
+
+/** Process floor for thinning/foundering, m: below ~20 km real crust is
+ *  hyperextended-margin domain transitioning to oceanic (Reston 2009 measures
+ *  <10 km at breakup; deliberately conservative — proposal §8 T2). Activates
+ *  as a structural floor at stage C5. */
+export const CONTINENTAL_THICKNESS_MIN_M = 20000;
+
+/** Island-arc → continental maturation thickness, m: arc crust develops
+ *  continental-type middle crust from ~20 km (Suyehiro et al. 1996, Izu-Bonin;
+ *  Calvert 2011). DELIBERATELY equal to CONTINENTAL_THICKNESS_MIN_M — the
+ *  identity floor and the creation gate are one number (proposal §2.3).
+ *  Re-keys the maturation gate at stage C4. */
+export const ARC_MATURATION_THICKNESS_M = 20000;
+
+/** v1 rift-margin stretch budget β (McKenzie 1978: typical passive margins
+ *  β ≈ 1.2–2). Margins thin toward CONTINENTAL_REFERENCE_THICKNESS_M / β
+ *  = 30 km — a finite stop, never the identity floor (the T2 unbounded-grind
+ *  shape; proposal §5 site 21). Activates at stage C6. */
+export const MARGIN_STRETCH_FACTOR = 1.3;
+
+/**
+ * Continental buoyancy per metre of crustal thickness (dimensionless):
+ * k = 1 − ρ_crust/ρ_mantle ≈ 0.1424. Airy isostasy: adding 1 km of column
+ * lifts the surface k·1000 ≈ 142 m (erode 1 km, the surface drops the same —
+ * the 1:7 erosion-rebound factor, proposal §2.3 closure check 1). Derived
+ * expression, not a literal, so the derivation stays legible.
+ */
+export const CONTINENTAL_BUOYANCY_FACTOR =
+  1 - CRUST_DENSITY_CONTINENTAL_KG_M3 / MANTLE_DENSITY_KG_M3;
+
+/**
+ * The continental isostasy datum, m: the elevation of a zero-thickness column
+ * in kernel coordinates — the model's ONE fitted constant, pinned by the two
+ * cited anchors (Earth's mean 39 km column ↦ the t=0 construction's +400 m):
+ * C = 400 − k·39000 ≈ −5154.5 m. A FIXED constant, never dynamic — it does
+ * not read sea level, which is what keeps the derivation T1-safe by
+ * construction (proposal §2.3/§8).
+ */
+export const CONTINENTAL_ISOSTASY_DATUM_M =
+  CONTINENTAL_REFERENCE_ELEVATION_M -
+  CONTINENTAL_BUOYANCY_FACTOR * CONTINENTAL_REFERENCE_THICKNESS_M;

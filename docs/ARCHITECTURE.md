@@ -103,6 +103,7 @@ from it. All fields are `Float32Array` per cell.
 | `windU`         | m/s        | ≈ ±30 (bound ±60) | Prevailing zonal (east–west) surface wind, signed (+ eastward), from the #31 band model. Fast diagnostic: recomputed every step from rotation + temperature gradient, carries no memory. Appended last (codec wire-id constraint) |
 | `windV`         | m/s        | ≈ ±12 (bound ±60) | Prevailing meridional (north–south) surface wind, signed (+ northward), from the #31 band model. Fast diagnostic: recomputed every step, carries no memory. Appended last (codec wire-id constraint) |
 | `marineLife`    | 0–1        | 0 … 1 (0 on land) | Marine photosynthetic productivity over ocean cells (#37): 0 everywhere until the gated-stochastic abiogenesis onset, then `light × temperatureWindow × shelf-nutrient`. Fast diagnostic, re-solved each step, no memory (the O₂ *reservoir* holds the history); drives the O₂ source term and the render ocean tint (#38). Appended last (codec wire-id constraint) |
+| `crustalThicknessM` | m      | cont ~20–70 km, oceanic 7.1 km | Crustal column thickness (`crustalColumns`, docs/CRUSTAL_COLUMN_PROPOSAL.md). Crust property: advects with plate motion. Founded at init by pure inversion of the t=0 terrain regardless of the flag (so A/B arms carry comparable bytes); flag-on post-onset it is the PRIMARY vertical state — continental elevation is its Airy-derived cache, `e = C + k·T` (isostasy.ts), maintained bit-exactly by every continental elevation writer. Shim era (C1–C4): pump-flooded cells may carry unphysically thin (even negative) inversion values — the declared validity domain, regularized at C5. **Sim-only: not in the codec stored set.** Appended last (codec wire-id constraint) |
 
 ### Plates (Phase 1)
 
@@ -166,9 +167,9 @@ walk (accepted spike-#10 limitation).
 At an advection event, each cell gathers claims: a moved plate p claims cell
 i iff p owned i's backward-rotated source cell (interiors are exact by
 construction); an unmoved plate claims exactly its current cells. Crust
-properties — `elevation`, `crustAge`, `crustType`, `sutureYears`, `sedimentM`
-(`ADVECTED_FIELDS`) — travel from the winning claim's source cell; values
-are copied, never interpolated. Overlap resolution is provisional until #16 (moved beats
+properties — `elevation`, `crustAge`, `crustType`, `sutureYears`, `sedimentM`,
+`crustalThicknessM` (`ADVECTED_FIELDS`) — travel from the winning claim's
+source cell; values are copied, never interpolated. Overlap resolution is provisional until #16 (moved beats
 static, then lower plate index). Unclaimed cells are divergent gaps,
 repaired by deterministic majority-of-assigned-neighbors passes and filled
 as provisional young ocean (crustAge 0, oceanic, ridge depth −2500 m) — #15
@@ -731,6 +732,38 @@ key:
   > event-sensitive, so deep-time CO₂ shows larger (bounded, temperature-safe,
   > recovering) transients — the phase-1 CO₂ ceiling was widened 10k→20k ppm
   > accordingly (still 2% of the 1e6 clamp).
+
+- **`crustalColumns` (docs/CRUSTAL_COLUMN_PROPOSAL.md; `isostasy.ts` +
+  shims in tectonics/boundaries/erosion/crustFates/blockIsostasy/freeboard;
+  default OFF, stage C1 of the staged landing plan):** `crustalThicknessM`
+  becomes the primary vertical state for continental crust and elevation
+  its derived cache — dry Airy isostasy over a FIXED datum,
+  `e = CONTINENTAL_ISOSTASY_DATUM_M + CONTINENTAL_BUOYANCY_FACTOR·T`
+  (≈ −5154.5 + 0.1424·T; e(20 km) = −2306 m, e(39 km) = +400 m, e(70 km) =
+  +4815 m — the kernel's first densities, all cited in constants.ts). The
+  datum never reads sea level (T1-safe by construction); the OCEANIC branch
+  keeps the empirical age-depth machinery verbatim, with oceanic thickness
+  pinned at 7.1 km as ledger bookkeeping. At C1 every continental elevation
+  writer routes its Δe through thickness (ΔT = Δe/k — mechanical shims that
+  reproduce today's behavior distributionally; trajectories diverge at f32
+  ULP level only) and re-derives elevation from the STORED thickness, so
+  `e === fround(C + k·T)` holds bit-exactly after every post-onset step
+  (the derivation-coherence fixture). Branch flips: ocean→continent
+  (arc maturation, weld bridges, consolidation hole fills) found T by
+  inversion of the inherited elevation — elevation-continuous by
+  construction; continent→ocean (retirement, consolidation island flips)
+  re-found a 7.1 km oceanic column, the ledger debit. Founding: t=0
+  inversion at init (unconditional — flag-off/A/B arms carry identical
+  bytes) + an onset re-inversion over the current elevation (zero-snap:
+  ≤ 1 f32 ULP), so the branched A/B is clean at any onset year. Shim-era
+  validity domain (C1–C4): legacy-pump-flooded cells invert to unphysically
+  thin, even negative, columns — declared Δ-space bookkeeping, regularized
+  at stage C5. Zero RNG anywhere in the model. Stages C2–C6 replace the
+  shims with mass-budget physics one mechanism at a time (erosion →
+  orogeny/collision → maturation/sediment accretion → servo retirement →
+  margins), each gated in the proposal's acceptance grid; the mass ledger
+  (`computeCrustalMassLedger`, true solid angles × R²) is a reported
+  tripwire until the C2 closure gates activate.
 
 `energyBalance` (#30): the Phase 3 climate hub. A Budyko–Sellers **zonal
 energy-balance model** solved on `ENERGY_BALANCE_BANDS` (90) equal-area

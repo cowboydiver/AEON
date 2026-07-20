@@ -22,7 +22,8 @@ export type MechanismKey =
   | 'bathymetryDatum'
   | 'forceKinematics'
   | 'emergentSuture'
-  | 'tensionRift';
+  | 'tensionRift'
+  | 'crustalColumns';
 
 export interface MechanismInfo {
   key: MechanismKey;
@@ -110,6 +111,12 @@ export const MECHANISMS: readonly MechanismInfo[] = [
     issue: 113,
     summary:
       'Rift timing follows a physical hazard ∝ (boundary tension)² × a supercontinent thermal-blanket factor: a plate rifts because its opposed subducting perimeter is pulling it apart, replacing the flat Bernoulli hazard × the hand-tuned size ramp. Requires force-balance kinematics for a non-zero tension.',
+  },
+  {
+    key: 'crustalColumns',
+    label: 'Crustal columns',
+    summary:
+      'Crustal thickness becomes the primary vertical state: continental elevation is derived by Airy isostasy over a fixed datum (docs/CRUSTAL_COLUMN_PROPOSAL.md), so freeboard, cratonic platforms and foundering become consequences of a mass budget instead of servo targets. Stage C1: mechanical shims reproduce today’s behavior distributionally while the migration replaces them with physics one mechanism at a time.',
   },
 ] satisfies readonly MechanismInfo[];
 

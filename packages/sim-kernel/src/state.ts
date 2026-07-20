@@ -16,6 +16,7 @@ import {
 import type { SimEvent } from './events';
 import { FIELD_NAMES, type Fields } from './fields';
 import { DEFAULT_GRID_N, cellCount } from './grid';
+import { foundCrustalThickness } from './isostasy';
 import { applyInitialPlates, type PlateRecord } from './plates';
 import { applyBiome } from './systems/biome';
 import { applyEnergyBalance } from './systems/energyBalance';
@@ -340,6 +341,29 @@ export interface PlanetParams {
    */
   waterInventoryScale: number;
   /**
+   * Enable the crustal-column model, stage C1 (docs/CRUSTAL_COLUMN_PROPOSAL.md
+   * §6): `crustalThicknessM` becomes the PRIMARY vertical state for
+   * continental crust and elevation its derived cache — every continental
+   * elevation writer routes its Δe through thickness (ΔT = Δe/k, the C1
+   * mechanical shims) and re-derives elevation as C + k·T (isostasy.ts), with
+   * branch-flip rules founding thickness by inversion at ocean→continent
+   * flips and re-founding 7.1 km oceanic columns at continent→ocean flips.
+   * At C1 behavior is distributionally today's (the shims are mechanical
+   * equivalents; trajectories diverge at float level only); stages C2–C6
+   * replace shims with mass-budget physics one mechanism at a time. Default
+   * OFF: flag-off, every pre-existing field is byte-identical (the field
+   * itself is founded at init and advected regardless of the flag, so both
+   * A/B arms carry comparable bytes). Zero RNG anywhere in the model — the
+   * branched-A/B contract holds by construction.
+   */
+  crustalColumns: boolean;
+  /** Sim year before which crustalColumns is inert even when enabled — the
+   *  branched-A/B onset, same contract as blockIsostasyOnsetYears. The onset
+   *  step re-founds thickness by inversion over the CURRENT elevation
+   *  (isostasy.ts, the zero-snap rule), so the A/B is clean at any onset
+   *  year. Default 0. */
+  crustalColumnsOnsetYears: number;
+  /**
    * Enable the plate-census diagnostic (Tectonics V2 stage 0, #110). A pure,
    * RNG-free per-step pass (`plateCensusSystem`, runs last in the pipeline)
    * that reads the current plates + `plateId`/`crustType` fields and writes a
@@ -585,6 +609,8 @@ export function createPlanetParams(partial: Partial<PlanetParams> & { seed: numb
     initialOxygenPAL: INITIAL_OXYGEN_PAL,
     initialLandFraction: DEFAULT_INITIAL_LAND_FRACTION,
     waterInventoryScale: 1,
+    crustalColumns: false,
+    crustalColumnsOnsetYears: 0,
     plateCensus: false,
     ...partial,
   };
@@ -635,7 +661,22 @@ export function createInitialState(params: PlanetParams): PlanetState {
   };
   // Terrain and plates first (they set the elevation/land mask the climate
   // block reads).
-  const shaped = applyInitialPlates(applyInitialTerrain(state));
+  const plated = applyInitialPlates(applyInitialTerrain(state));
+
+  // Crustal-column founding synthesis (CRUSTAL_COLUMN_PROPOSAL.md §2.5):
+  // invert the derivation over the shaped t=0 terrain — continental
+  // T = (e − C)/k, oceanic 7.1 km. Unconditional (not flag-gated) so both
+  // branched-A/B arms carry comparable field bytes; zero RNG; writes ONLY the
+  // new field, so every pre-existing field stays byte-identical at t=0. The
+  // t=0 thickness DISTRIBUTION is realistic without new noise design (shelf
+  // bottoms ↦ ~33 km, noise peaks ↦ ~68 km — proposal closure check 2).
+  const shaped: PlanetState = {
+    ...plated,
+    fields: {
+      ...plated.fields,
+      crustalThicknessM: foundCrustalThickness(plated.fields.elevation, plated.fields.crustType),
+    },
+  };
 
   // Calibrate the conserved water inventory (#33) from the initial coastline:
   // the ocean volume at the 0 m datum, as a global-equivalent layer thickness

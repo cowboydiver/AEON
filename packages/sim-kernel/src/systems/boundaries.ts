@@ -21,6 +21,7 @@ import {
   ARC_MAX_ELEVATION_M,
   COLLISION_WIDTH_CELLS,
   COMPACT_ARC_MIN_CONT_NEIGHBORS,
+  CONTINENTAL_BUOYANCY_FACTOR,
   OROGENY_MAX_ELEVATION_M,
   OROGENY_RATE_M_PER_YR,
   OROGENY_STRESS_REF_M_PER_YR,
@@ -29,6 +30,7 @@ import {
 } from '../constants';
 import { bathymetryDatumOffsetM, landDatumOffsetM, platformDatumOffsetM } from '../datums';
 import { cellCenterTable, neighborTable, type Vec3 } from '../grid';
+import { continentalElevationForThicknessM, foundColumnFromElevation } from '../isostasy';
 import { plateVelocityAt } from '../plates';
 import type { PlanetState } from '../state';
 
@@ -202,6 +204,13 @@ export function applyConvergentTopography(
   elevation: Float32Array,
   crustType: Float32Array,
   dtYears: number,
+  // Crustal columns (C1): the caller's working thickness copy, or null when
+  // the mechanism is inactive. Continental writes (orogeny/collision BFS)
+  // mirror ΔT = Δe/k and re-derive elevation; maturation flips found the new
+  // column by inversion. Oceanic writes (arc growth, trench pinning) are
+  // untouched — the oceanic branch keeps today's machinery verbatim
+  // (proposal §2.4, trap T1).
+  crustalThicknessM: Float32Array | null = null,
 ): void {
   const N = state.params.gridN;
   const nbTable = neighborTable(N);
@@ -366,6 +375,14 @@ export function applyConvergentTopography(
         if (contNb < COMPACT_ARC_MIN_CONT_NEIGHBORS) continue;
       }
       crustType[i] = 1;
+      // C1 branch flip (oceanic → continental, proposal §2.4): the matured
+      // cell founds its column by inversion of its current elevation — the
+      // assigned mass IS the ledger's arc-accretion credit, and elevation is
+      // continuous through the flip by construction. The maturation GATE
+      // itself is untouched until stage C4.
+      if (crustalThicknessM !== null) {
+        foundColumnFromElevation(elevation, crustalThicknessM, i);
+      }
     }
   }
 
@@ -383,7 +400,17 @@ export function applyConvergentTopography(
       const c = queue[q]!;
       const d = dist[c]!;
       const falloff = (seed.width + 1 - d) / (seed.width + 1);
-      elevation[c] = Math.min(orogenyCeiling, elevation[c]! + seed.amount * falloff);
+      const uplifted = Math.min(orogenyCeiling, elevation[c]! + seed.amount * falloff);
+      if (crustalThicknessM !== null) {
+        // C1 shim (site 12): orogenic uplift routes through thickness
+        // (ΔT = Δe/k) — crustal shortening as a real thickness addition is
+        // stage C3's replacement.
+        crustalThicknessM[c] =
+          crustalThicknessM[c]! + (uplifted - elevation[c]!) / CONTINENTAL_BUOYANCY_FACTOR;
+        elevation[c] = continentalElevationForThicknessM(crustalThicknessM[c]!);
+      } else {
+        elevation[c] = uplifted;
+      }
       if (d >= seed.width) continue;
       for (let k = 0; k < 4; k++) {
         const nb = nbTable[c * 4 + k]!;

@@ -69,6 +69,17 @@ export {
   type MechanismToggles,
 } from './mechanisms';
 export { platformDatumOffsetM, landDatumOffsetM } from './datums';
+export {
+  continentalElevationForThicknessM,
+  continentalThicknessForElevationM,
+  crustalColumnsActive,
+  crustalColumnsOnsetReinversion,
+  foundCrustalThickness,
+  foundColumnFromElevation,
+  reconcileContinentalColumns,
+  computeCrustalMassLedger,
+  type CrustalMassLedger,
+} from './isostasy';
 export { freeboardSystem } from './systems/freeboard';
 export { labelContinentalComponents, type ContinentalComponents } from './components';
 export { erosionSystem } from './systems/erosion';

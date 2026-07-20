@@ -48,6 +48,7 @@ import {
 } from '../constants';
 import { platformDatumOffsetM } from '../datums';
 import { cellCount } from '../grid';
+import { crustalColumnsActive, reconcileContinentalColumns } from '../isostasy';
 import type { System } from '../step';
 
 /**
@@ -121,6 +122,21 @@ export const blockIsostasySystem: System = {
       elevation[i] = Math.max(cap, e - relax);
     }
     if (elevation === null) return state;
+
+    // Crustal columns (C1, site 17): reconcile the cap's continental Δe into
+    // thickness space at exit (this prototype is default-off; the combined
+    // world still keeps the derived-cache invariant). Stage C5 measures
+    // whether thin-column foundering makes this cap redundant.
+    if (crustalColumnsActive(state)) {
+      const crustalThicknessM = state.fields.crustalThicknessM.slice();
+      reconcileContinentalColumns(
+        state.fields.crustType,
+        state.fields.elevation,
+        elevation,
+        crustalThicknessM,
+      );
+      return { ...state, fields: { ...state.fields, elevation, crustalThicknessM } };
+    }
 
     return { ...state, fields: { ...state.fields, elevation } };
   },
