@@ -200,3 +200,86 @@ not snow):
 | `pair-oro5-s1337-1350Myr-assembled.png` | candidate, seed 1337: early assembly episode |
 | `cliff-rift-hazard-third-3150Myr-dying.png` | cliff #1: hazard 0.0025 — monopoly world drowning |
 | `cliff-ref2x-stack-4500Myr-dead.png` | cliff #2: ref2x stack — frozen waterworld |
+
+## 10. Round 6 — why there is no Pangea, and what it would actually take
+
+Owner follow-up: the "supercontinent" frames still read as "small, thin, long
+landmasses", not a Pangea holding most of the dry land. "Is there too much
+water, perhaps?" Round 6 (9 runs, seed 42 + 1337 replications, candidate base)
+tested the water hypothesis directly and then located the real cause.
+
+### 10.1 The supercontinent exists — as crust. The sea floods its interior.
+
+In the candidate world at 4.5 Gyr, continental **crust** is coherent: 18–20
+crustal components, largest holding 40–56% of all continental crust. But dry
+**land** is 122–197 fragments, largest only ~0.37 of land area — ~7 land
+slivers per continent. The corridors between docked belts sit below sea level,
+so the map shows a lattice of orogenic belts, not continents. Root cause: every
+non-orogenic crust source parks crust BELOW the sea
+(`ARC_MATURATION_ELEVATION_M` −500, founder −200, passive-margin shelf −150,
+sediment ceiling −200), orogeny at boundaries is the ONLY lift, and **no
+process ever raises a flooded interior** — the freeboard mechanism's own
+comments call the ~2× Earth flooded-share overshoot "structural" and note
+flooded lobes ratchet to the buoyancy floor (−2500 m) and stay there.
+
+### 10.2 "Less water" is falsified — the freeboard regulator eats the knob
+
+`--water-scale` / `--initial-land-fraction` (all on candidate base, s42, final
+frame):
+
+| arm | land % | land comps | largest land comp |
+|---|---|---|---|
+| baseline (scale 1.0) | 26.9 | 122 | 0.366 |
+| water ×0.85 | 27.1 | 156 | 0.247 |
+| water ×0.7 | 23.4 | 112 | 0.524 |
+| water ×0.5 | **18.7** | 121 | 0.284 |
+| initial land 0.38 | **15.1** | 291 | 0.238 |
+
+Draining the ocean LOSES land: epeirogenic relaxation tracks the continental
+mean to `seaLevel + FREEBOARD_TARGET_M`, so continents follow the sea down and
+the endowment is neutralized within ~a Gyr (the #101 "insensitive to target"
+finding, seen from the other side). water ×0.7's 0.524 largest-comp is a
+spidery connected lattice (see evidence PNG), not a compact mass.
+`DEFAULT_NUM_PLATES` 10→6 is worse: tectonic death at 3563 Myr (960 Myr
+monopoly → drowning, the hazard-0.0025/ref2x cliff again — fewer plates is a
+THIRD route to the same monopoly death). Round-5 erosion ×3 also left land
+shape flat (186 comps). **No existing knob broadens land.**
+
+### 10.3 Cratonic platform emergence (prototype) — the missing process
+
+Measurement-worktree patch to `freeboard.ts`, term (3): flooded continental
+INTERIOR cells (outside the passive-margin band, not under convergent stress)
+relax upward toward `seaLevel + 150 m`, upward-only, clamped. At 20 m/Myr the
+epeirogenic regulator (pegged at its −20 m/Myr bound, since the belt-dominated
+mean rides km above target) cancels it exactly — interiors stall. At **100
+m/Myr** it outruns the regulator and the look transforms:
+
+| run (final frame) | land % | land comps | largest land comp | cont mean freeboard |
+|---|---|---|---|---|
+| candidate s42 | 26.9 | 122 | 0.366 | 4993 m |
+| + craton 100 m/Myr, s42 | 25.2 | 143 | **0.762** | 3649 m |
+| + craton 100 m/Myr, s1337 | 24.2 | 188 | 0.421 | 3519 m |
+
+Broad platform interiors (green plains) fuse the belt lattice into compact
+continents; at s42's final assembly 76% of all dry land is one landmass while
+dispersal (96.5%) and monopoly (0 Myr) stay healthy on both seeds — the Wilson
+cycle is untouched, land breadth no longer depends on catching an assembly
+moment. Side benefit: mean freeboard drops ~1.3 km (the regulator pulls belts
+down as platforms rise) — directly against the "too-high mountains" complaint.
+
+Promotion path (NOT done here): new gated mechanism (or freeboard term) with
+constants `CRATON_EMERGENCE_M_PER_YR` (~1e-4) and `CRATON_FREEBOARD_M` (~150),
+onset year + branched A/B contract, golden regen under a KBV bump, and a
+largest-land-component gate added to the metrics harness. Open question for
+promotion: rate/target sweep (50–150 m/Myr; does s1337 improve at 150?), and
+interaction with marinePlanation (which planes tops DOWN to −200 while this
+lifts interiors UP to +150 — they meet at the coastline from opposite sides).
+
+### 10.4 Round-6 evidence (new palette)
+
+| file | shows |
+|---|---|
+| `r6-baseline-s42-4500Myr.png` | candidate final frame — belt lattice, 122 land comps |
+| `r6-water07-s42-4500Myr.png` | water ×0.7 — "less water" falsified: connected but spidery |
+| `r6-craton100-s42-4500Myr.png` | + craton emergence — 76% of dry land in one mass |
+| `r6-craton100-s42-3600Myr.png` | + craton emergence, mid-run continent |
