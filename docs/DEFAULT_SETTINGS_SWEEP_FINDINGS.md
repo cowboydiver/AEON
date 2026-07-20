@@ -401,3 +401,57 @@ is reachable if ~16% land is acceptable — it likely isn't); s1337 land-min
 Round 8–9 evidence: `r8-oro3-s42-3000Myr.png` (the low-relief look — palette
 finally below saturation), `r9-both-s42-3600Myr.png` (**the Pangea frame**),
 `r9-both-s42-4500Myr.png`, `r9-both-s1337-2400Myr.png`.
+
+## 13. Round 10: third-seed replication + the craton levers are exhausted
+
+Four arms, all on the r9-both base (hazard 0.005, gap 4, orogeny 4e-4/6000,
+craton 1e-4 → sea+400, blockIsostasy ON, margin 1 cell), one delta each:
+
+| arm | delta vs r9-both | dispersal | monopoly | land min/max % | final land % | final largest land comp | freeboard | peak above sea |
+|---|---|---|---|---|---|---|---|---|
+| r9-both s42 (ref) | — | 98.4% | 0 | 10.7 / 30.2 | 20.8 | 0.806 | 2556 | 5928 |
+| **both, seed 1** | seed only | **99.1%** | 0 | 10.7 / 31.4 | **24.9** | 0.324* | 3085 | 5960 |
+| oro3b s42 | orogeny 3e-4/5000 | 95.1% | 0 | 8.3 / 30.3 | 18.4 | 0.354 | **2031** | 4958 |
+| rate2 s42 | craton uplift 2e-4 | 93.8% | 0 | 10.8 / 33.0 | 17.5 | 0.407 | 2200 | 5962 |
+| t600 s42 | platform sea+600 | 86.9% | **100 Myr** | **6.1** / 33.5 | 18.2 | 0.529 | 2197 | 5952 |
+
+\* seed 1's final frame is mid-dispersal (26 crustal components); its land
+area is the campaign's best final number. All four arms alive ≥ 4435 Myr.
+
+**Findings:**
+
+- **Replication PASSES.** The r9-both package is now 3-for-3 on seeds
+  {1, 42, 1337}: monopoly 0 everywhere, dispersal 94.9–99.1%, land min ≥
+  8.3%, and seed 1 finishes at 24.9% land — the best land figure of the
+  campaign, with a coherent central landmass in the final frame.
+- **Doubling the craton rate does NOT add land** (rate2: 17.5% final vs 20.8
+  reference; trajectory max 33.0 vs 30.2 — phase, not equilibrium). At 1e-4
+  the interiors already reach the platform level; a faster spring just gets
+  to the same equilibrium sooner, at a small dispersal cost (93.8%). The
+  craton RATE is not the binding constraint on land area. Not adopted.
+- **Raising the platform target HURTS.** t600 degrades every health floor
+  (dispersal 86.9%, one 100 Myr monopoly window, land min 6.1%) and adds no
+  land (18.2% final). The taller mesa feeds back into the tectonic engine
+  (higher interiors resist docking/rifting turnover) without changing the
+  flooded share. Not adopted; sea+400 stands.
+- **The stronger platform partially rescues low orogeny.** oro3b (round 8's
+  collapse setting, rerun on the r9 platform) holds 18.4% final / 8.3% min
+  vs round 8's 15–16.5% / 5–7%, at freeboard 2.0 km and peaks 5.0 km. But
+  the platform lift itself raises the continental mean, so freeboard lands
+  at 2.0, not round 8's 1.4 — and land is still ~2.4 points below the
+  reference. A viable relief-biased alternative, not a default.
+
+**Conclusion: r9-both is a genuine local optimum.** Both craton-side levers
+(rate, target) measurably fail to add land, so the remaining land gap
+(21–25% vs Earth 29) is structural: continental crust is capped at 40% of
+the sphere and 33–46% of it sits flooded (margin band + interiors in
+transit). The freeboard gap (2.5 km vs Earth 0.8) is belt-dominated and
+trades 1:1 against land under the current mechanism set. Closing both at
+once needs land in the 200–800 m band — a crustal-thickness field with real
+isostatic elevation, not another elevation-target servo (§10's promotion
+path). Knob-tuning on this mechanism set has converged.
+
+Round 10 evidence: `r10-both-s1-4500Myr.png` (best-land final frame),
+`r10-rate2-s42-4200Myr.png` (rate2 changes phase, not equilibrium — good
+blob, same land), `r10-oro3b-s42-4200Myr.png` (the relief-biased
+alternative).
