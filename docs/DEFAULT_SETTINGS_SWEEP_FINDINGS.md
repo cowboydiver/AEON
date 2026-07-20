@@ -210,10 +210,11 @@ tested the water hypothesis directly and then located the real cause.
 
 ### 10.1 The supercontinent exists — as crust. The sea floods its interior.
 
-In the candidate world at 4.5 Gyr, continental **crust** is coherent: 18–20
-crustal components, largest holding 40–56% of all continental crust. But dry
-**land** is 122–197 fragments, largest only ~0.37 of land area — ~7 land
-slivers per continent. The corridors between docked belts sit below sea level,
+In the candidate world at 4.5 Gyr, continental **crust** is coherent: 10–20
+crustal components, largest holding ~0.5–0.6 of all continental crust (s42
+final: 10 comps, largest 0.522). But dry **land** is 91–188 fragments across
+the three seeds, largest only ~0.38 of land area — many land slivers per
+continent. The corridors between docked belts sit below sea level,
 so the map shows a lattice of orogenic belts, not continents. Root cause: every
 non-orogenic crust source parks crust BELOW the sea
 (`ARC_MATURATION_ELEVATION_M` −500, founder −200, passive-margin shelf −150,
@@ -229,7 +230,7 @@ frame):
 
 | arm | land % | land comps | largest land comp |
 |---|---|---|---|
-| baseline (scale 1.0) | 26.9 | 122 | 0.366 |
+| baseline (scale 1.0) | 25.9 | 91 | 0.385 |
 | water ×0.85 | 27.1 | 156 | 0.247 |
 | water ×0.7 | 23.4 | 112 | 0.524 |
 | water ×0.5 | **18.7** | 121 | 0.284 |
@@ -256,16 +257,24 @@ m/Myr** it outruns the regulator and the look transforms:
 
 | run (final frame) | land % | land comps | largest land comp | cont mean freeboard |
 |---|---|---|---|---|
-| candidate s42 | 26.9 | 122 | 0.366 | 4993 m |
+| candidate s42 | 25.9 | 91 | 0.385 | (see note) |
 | + craton 100 m/Myr, s42 | 25.2 | 143 | **0.762** | 3649 m |
 | + craton 100 m/Myr, s1337 | 24.2 | 188 | 0.421 | 3519 m |
+
+(Baseline numbers are the fresh deterministic replay `log-r6-base-s42.txt` —
+an earlier draft of this table mistakenly quoted the hazmid-gap4 arm, 26.9/122/
+0.366/4993 m; corrected. The stock-orogeny freeboard mean 4993 m gives the
+scale of the belt-height regime the regulator sits in.)
 
 Broad platform interiors (green plains) fuse the belt lattice into compact
 continents; at s42's final assembly 76% of all dry land is one landmass while
 dispersal (96.5%) and monopoly (0 Myr) stay healthy on both seeds — the Wilson
 cycle is untouched, land breadth no longer depends on catching an assembly
-moment. Side benefit: mean freeboard drops ~1.3 km (the regulator pulls belts
-down as platforms rise) — directly against the "too-high mountains" complaint.
+moment. Mean freeboard drops ~1.3 km vs the stock-orogeny regime (the
+regulator pulls belts down as platforms rise) — directly against the
+"too-high mountains" complaint. Honest cost: total land component count goes
+UP (91 → 143 at s42) — emergence also exposes small platforms as new islets;
+the win is compactness (largest mass doubles), not fewer islands.
 
 Promotion path (NOT done here): new gated mechanism (or freeboard term) with
 constants `CRATON_EMERGENCE_M_PER_YR` (~1e-4) and `CRATON_FREEBOARD_M` (~150),
@@ -279,7 +288,7 @@ lifts interiors UP to +150 — they meet at the coastline from opposite sides).
 
 | file | shows |
 |---|---|
-| `r6-baseline-s42-4500Myr.png` | candidate final frame — belt lattice, 122 land comps |
+| `r6-baseline-s42-4500Myr.png` | candidate final frame — belt lattice, 91 land comps |
 | `r6-water07-s42-4500Myr.png` | water ×0.7 — "less water" falsified: connected but spidery |
 | `r6-craton100-s42-4500Myr.png` | + craton emergence — 76% of dry land in one mass |
 | `r6-craton100-s42-3600Myr.png` | + craton emergence, mid-run continent |
