@@ -343,3 +343,61 @@ craton emergence (new mechanism: ~1e-4 m/yr toward sea+150), blockIsostasy ON
 candidate knobs (hazard 0.005, gap 4). One KBV bump, one golden regen, a
 largest-land-component metric gate, and a rate/target A/B for the new
 mechanism.
+
+## 12. Rounds 8–9 — the land/relief trade, a fourth cliff, and the best world yet
+
+Owner: "keep tuning." Rounds 8–9 (8 runs) pushed relief down further and then
+recovered the land area it cost.
+
+### 12.1 Round 8: relief down, land follows (and cliff edge #4)
+
+On the earth-look base (craton100 + blockIso):
+
+| arm (final) | land % | land min % | peak above sea | freeboard | verdict |
+|---|---|---|---|---|---|
+| r7-earth (4e-4/6000, tau 300) | 19.7 | 10.3 | 5964 | 2027 | reference |
+| oro 3e-4/5000 | 16.5 | **5.5** | 4942 | **1357** | relief ✓, land paid |
+| root-decay tau 150 (alone) | **0.0** | 0.0 | 1534 | 397 | ☠ **cliff #4** |
+| all (3e-4/5000+tau150+founder 5e11) s42 | 15.4 | 5.8 | 4962 | 1521 | alive, land low |
+| all s1337 | 16.7 | 6.6 | 4943 | 1734 | alive, land low |
+
+- **Cliff edge #4: fast orogenic-root decay is seed-fragile.** tau 300→150 Myr
+  alone on s42 died the monopoly death (1090 Myr monopoly, drowned by 3.5
+  Gyr); the same tau inside the `all` stack survived both seeds. 1-in-3
+  mortality in family — disqualified for a default. Keep tau at 300e6.
+- **Belts are (still) a large share of land area.** Cutting orogeny 4e-4/6000
+  → 3e-4/5000 buys Earth-adjacent relief (freeboard 1.4–1.7 km vs Earth 0.8)
+  but drops land to 15–16.5% (Earth 29) with 5–7% transients — the relief/land
+  trade-off is the binding constraint now.
+
+### 12.2 Round 9: recover land via the platform, not the belts
+
+Two levers on the r7-earth base (relief kept at 4e-4/6000): craton mesa target
+sea+150 → **sea+400**, and `PASSIVE_MARGIN_WIDTH_CELLS` 2 → **1** (600 → 300
+km at N=64 — Earth passive margins are 100–500 km, so 1 cell is in-range and
+the 2-cell band was eating the whole interior of mid-size blobs).
+
+| arm (final) | land % | land min % | largest land comp | peak above sea | freeboard |
+|---|---|---|---|---|---|
+| t400 only | 23.2 | 4.9 | 0.749 | 5981 | 2446 |
+| margin1 only | 20.8 | **10.7** | 0.426 | 5966 | 2627 |
+| **both, s42** | 20.8 | **10.7** | **0.806** | 5928 | 2556 |
+| both, s1337 | 20.1 | 8.3 | 0.263* | 5976 | 2484 |
+
+\* dispersed at final; past-1-Gyr largest 0.482 — the campaign's best
+sustained coherence. The s42 3.6 Gyr frame is the campaign's best map: a true
+Pangea (green interior, belts as internal spines, one hemispheric ocean; 95.3%
+of continental crust in one block at final). Health: dispersal 94.9–98.4%,
+monopoly 0, alive ≥ 4455 on both seeds.
+
+**Current best package ("r9-both"), all measurement-only:** candidate knobs
+(hazard 0.005, gap 4) + orogeny 4e-4/6000 + craton emergence 1e-4 m/yr toward
+sea+400 + blockIsostasy ON + `PASSIVE_MARGIN_WIDTH_CELLS` 1. Remaining gaps:
+land 20–23% vs Earth 29 (next lever would be craton rate/target or narrower
+flooded corridors, not belts); freeboard ~2.5 km vs Earth 0.8 (r8 shows 1.4 km
+is reachable if ~16% land is acceptable — it likely isn't); s1337 land-min
+8.3% transient (in-family with accepted 7–8% dips).
+
+Round 8–9 evidence: `r8-oro3-s42-3000Myr.png` (the low-relief look — palette
+finally below saturation), `r9-both-s42-3600Myr.png` (**the Pangea frame**),
+`r9-both-s42-4500Myr.png`, `r9-both-s1337-2400Myr.png`.
