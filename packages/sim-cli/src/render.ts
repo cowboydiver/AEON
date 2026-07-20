@@ -39,20 +39,30 @@ const OCEAN_STOPS = [
 
 const LAND_STOPS = [
   [0, [34, 120, 56]],
-  [0.35, [130, 156, 72]],
-  [0.65, [150, 110, 66]],
-  [0.85, [130, 120, 120]],
-  [1, [245, 245, 245]],
+  [0.3, [130, 156, 72]],
+  [0.55, [150, 110, 66]],
+  [0.8, [110, 78, 52]],
+  [1, [82, 58, 46]],
 ] as const satisfies readonly (readonly [number, Rgb])[];
 
+/** Land height (m above sea) at/above which the darkest tint applies, and ocean
+ *  depth (m below sea) at/above which the deepest blue applies. FIXED references
+ *  (the PRECIP_VIZ_REF pattern), NOT the frame's own min/max: a per-frame
+ *  stretch painted the top of whatever relief existed near-white — a 3.6 km
+ *  plateau world read identical to an 8 km one, and the white peaks read as
+ *  snow/clouds next to the iceFraction dump. Absolute scaling makes elevation
+ *  comparable across frames and across sweep arms; white is reserved for ice. */
+const LAND_VIZ_REF_M = 6000;
+const OCEAN_VIZ_REF_M = 7000;
+
 /**
- * Hypsometric tint for elevation in meters. The ocean/land split sits at
- * `seaLevelM` — the DYNAMIC sea level (#33), not the fixed 0 m datum: the
- * deep-time sea-level fall leaves the datum ~3 km above the real coastline
- * (docs/SEA_LEVEL_DATUM_FINDINGS.md), and a 0-split dump painted emergent
- * land ocean-blue, which is a hazard for a project whose verification
- * workflow is "look at the PNGs". Defaults to 0 (identical arithmetic to
- * the old datum split) for callers without a keyframe in hand.
+ * Hypsometric tint for elevation in meters, on the fixed absolute scale above.
+ * The ocean/land split sits at `seaLevelM` — the DYNAMIC sea level (#33), not
+ * the fixed 0 m datum: the deep-time sea-level fall leaves the datum ~3 km
+ * above the real coastline (docs/SEA_LEVEL_DATUM_FINDINGS.md), and a 0-split
+ * dump painted emergent land ocean-blue, which is a hazard for a project whose
+ * verification workflow is "look at the PNGs". Defaults to 0 for callers
+ * without a keyframe in hand.
  */
 export function hypsometricColor(
   elevation: number,
@@ -60,12 +70,14 @@ export function hypsometricColor(
   max: number,
   seaLevelM = 0,
 ): Rgb {
+  void min;
+  void max;
   if (elevation <= seaLevelM) {
-    // 0 at the coastline, 1 at the deepest floor.
-    const depth = min < seaLevelM ? Math.min(1, (elevation - seaLevelM) / (min - seaLevelM)) : 0;
+    // 0 at the coastline, 1 at OCEAN_VIZ_REF_M depth (clamped beyond).
+    const depth = Math.min(1, (seaLevelM - elevation) / OCEAN_VIZ_REF_M);
     return ramp(OCEAN_STOPS, 1 - depth);
   }
-  const height = max > seaLevelM ? Math.min(1, (elevation - seaLevelM) / (max - seaLevelM)) : 0;
+  const height = Math.min(1, (elevation - seaLevelM) / LAND_VIZ_REF_M);
   return ramp(LAND_STOPS, height);
 }
 
