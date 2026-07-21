@@ -478,6 +478,34 @@ export interface Globals {
    *  into a flips-per-100-Myr churn rate. High = margins flickering — the
    *  flicker the force balance is meant to quiet. */
   marginConsolidationFlipsTotal: number;
+  /**
+   * Crustal-columns C2 planation-throughput diagnostics (proposal §6 C2: the
+   * measured planation rate must be reported against the 4.7 m/Myr budget on
+   * BOTH the source and sink sides). All cumulative since t=0, maintained ONLY
+   * while `crustalColumnsActive` (flag-off they hold 0 — the accounting is
+   * byte-neutral). Diagnostic-only, like the plate census: nothing in the
+   * kernel reads them back, they never cross the codec, and they are not in
+   * the golden field hashes. sim-cli `--crust-stats` differences them between
+   * keyframes into per-Myr rates. Volumes use true solid-angle cell areas × R²
+   * (trap T7).
+   */
+  /** Rock volume exported from continental columns across coastlines by
+   *  coastal export (#65) + marine planation (#90), m³ of continental crust —
+   *  the SOURCE side of the planation budget. Interior diffusion is excluded:
+   *  it redistributes within the continents and exports nothing. */
+  columnsExportedRockM3: number;
+  /** Coastal export/planation visits whose desired flux was bound by shelf
+   *  room (including room ≤ 0) — the sink-side saturation numerator. */
+  columnsExportShelfLimited: number;
+  /** Coastal export/planation visits with positive desired flux — the
+   *  saturation denominator. */
+  columnsExportVisits: number;
+  /** Sediment volume consumed when crust became continental (the tectonics
+   *  maturation sweep + crustFates weld bridges — the site-22 ledger exits,
+   *  shims until stage C4 accretes it as thickness), m³ of sediment. Lets the
+   *  sink-side subduction throughput be inferred honestly from the sediment
+   *  stock: subducted ≈ deposits − zeroed − Δstock. */
+  columnsSedimentZeroedM3: number;
 }
 
 export interface PlanetState {
@@ -653,6 +681,13 @@ export function createInitialState(params: PlanetParams): PlanetState {
       speedSlabAttachmentCorr: 0,
       poleStability: 0,
       marginConsolidationFlipsTotal: 0,
+      // Crustal-columns C2 planation-throughput counters: 0 until the erosion/
+      // tectonics/crustFates passes accumulate them, and only under an active
+      // column model — flag-off runs hold 0 forever.
+      columnsExportedRockM3: 0,
+      columnsExportShelfLimited: 0,
+      columnsExportVisits: 0,
+      columnsSedimentZeroedM3: 0,
     },
     fields,
     plates: [],

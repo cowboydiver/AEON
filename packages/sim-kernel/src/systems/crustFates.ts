@@ -54,7 +54,7 @@ import {
   OCEANIC_CRUST_THICKNESS_M,
 } from '../constants';
 import { platformDatumOffsetM } from '../datums';
-import { cellCount, neighborTable } from '../grid';
+import { cellCount, cellSolidAngleTable, neighborTable } from '../grid';
 import {
   continentalElevationForThicknessM,
   crustalColumnsActive,
@@ -148,6 +148,12 @@ export const crustFatesSystem: System = {
     let sedimentM: Float32Array | null = null;
     let plateId: Float32Array | null = null;
     let crustalThicknessM: Float32Array | null = null;
+    // C2 sink instrumentation: sediment the weld bridges consume (the
+    // crustFates half of the site-22 ledger exit), on true areas. Only
+    // accumulated under the active column model — flag-off globals hold 0.
+    let sedimentZeroedM3 = 0;
+    const solidAngle = columns ? cellSolidAngleTable(N) : null;
+    const r2 = state.params.radiusMeters * state.params.radiusMeters;
 
     for (let comp = 0; comp < nComps; comp++) {
       if (!isSmall[comp]) continue;
@@ -196,6 +202,10 @@ export const crustFatesSystem: System = {
           elevation[b] = weldElev;
           crustAge[b] = weldAge;
           sutureYears[b] = state.timeYears;
+          // C2: count the swallowed cover off the WORKING array (a bridge
+          // cell welded twice in overlapping docks is already 0 the second
+          // time — no double count).
+          if (solidAngle !== null) sedimentZeroedM3 += sedimentM[b]! * solidAngle[b]! * r2;
           sedimentM[b] = 0;
           plateId[b] = targetPlate;
           // C1 branch flip (site 18): the accreted weld cell founds its
@@ -269,6 +279,15 @@ export const crustFatesSystem: System = {
 
     let next: PlanetState = {
       ...state,
+      ...(sedimentZeroedM3 > 0
+        ? {
+            globals: {
+              ...state.globals,
+              columnsSedimentZeroedM3:
+                state.globals.columnsSedimentZeroedM3 + sedimentZeroedM3,
+            },
+          }
+        : {}),
       fields: {
         ...state.fields,
         ...(elevation !== null ? { elevation } : {}),

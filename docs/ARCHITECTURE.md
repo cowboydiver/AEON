@@ -526,6 +526,26 @@ replaced by the `moisture` system below. Erosion reads the previous step's
 `precipitation` — a one-step lag, since moisture runs after erosion in the
 pipeline — exactly as the energy balance reads the previous step's ice/CO₂.
 
+**Under `crustalColumns` (stage C2 — proposal §5 sites 13–15) erosion runs a
+separate thickness-space path** (the flag-off arithmetic above is untouched):
+the same rate laws with the computed flux read as ROCK THICKNESS removed
+(denudation), the surface answering through the Airy derivation — Δe = k·ΔT ≈
+0.142·ΔT, the emergent isostatic rebound that planes interiors toward base
+level (erode 1 km of rock, the surface drops ~142 m). Diffusion moves volume
+`X·(Ω_i+Ω_j)/2` between columns (exact continental-mass conservation on true
+cell areas — trap T7); coastal export and marine planation remove thickness
+and deposit `Δsed = X·(ρ_cc/ρ_sed)·(Ω_i/Ω_j)` into the oceanic neighbor, so
+Σ(T·ρ_cc·A) + Σ(sed·ρ_sed·A) is invariant across the coast (per-system closure
+fixtures, erosion.test.ts). The never-below-sea / never-below-planation-level
+caps bind on the SURFACE (÷k in rock space); the shelf-room cap converts
+through the density + area ratio. Root decay stays a mechanical Δe/k shim
+until stage C3. Source/sink throughput accumulates into the cumulative
+`columns*` globals counters (rock exported m³, shelf-limited/total export
+visits; tectonics/crustFates add sediment swallowed at maturation/welds) —
+diagnostic-only, like the plate census: flag-off they hold 0, nothing reads
+them back, and sim-cli `--crust-stats` differences them into the src/sat%/sink
+planation-rate columns the C2 gate reports against the 4.7 m/Myr budget.
+
 `blockIsostasy` (#84, **default-off prototype** behind `params.blockIsostasy`;
 after erosion, before the climate stack): small continental blocks cannot hold
 high topography. Each step it labels the 4-connected components of
@@ -734,8 +754,9 @@ key:
   > accordingly (still 2% of the 1e6 clamp).
 
 - **`crustalColumns` (docs/CRUSTAL_COLUMN_PROPOSAL.md; `isostasy.ts` +
-  shims in tectonics/boundaries/erosion/crustFates/blockIsostasy/freeboard;
-  default OFF, stage C1 of the staged landing plan):** `crustalThicknessM`
+  shims in tectonics/boundaries/crustFates/blockIsostasy/freeboard;
+  default OFF, stage C2 of the staged landing plan — erosion is real
+  thickness physics, see the erosion section above):** `crustalThicknessM`
   becomes the primary vertical state for continental crust and elevation
   its derived cache — dry Airy isostasy over a FIXED datum,
   `e = CONTINENTAL_ISOSTASY_DATUM_M + CONTINENTAL_BUOYANCY_FACTOR·T`
@@ -743,10 +764,11 @@ key:
   +4815 m — the kernel's first densities, all cited in constants.ts). The
   datum never reads sea level (T1-safe by construction); the OCEANIC branch
   keeps the empirical age-depth machinery verbatim, with oceanic thickness
-  pinned at 7.1 km as ledger bookkeeping. At C1 every continental elevation
-  writer routes its Δe through thickness (ΔT = Δe/k — mechanical shims that
-  reproduce today's behavior distributionally; trajectories diverge at f32
-  ULP level only) and re-derives elevation from the STORED thickness, so
+  pinned at 7.1 km as ledger bookkeeping. Since C2, EROSION's three fluxes
+  (sites 13–15) are real thickness transactions with emergent rebound and
+  per-system mass closure; every OTHER continental elevation writer still
+  routes its Δe through thickness (ΔT = Δe/k — the C1 mechanical shims).
+  All writers re-derive elevation from the STORED thickness, so
   `e === fround(C + k·T)` holds bit-exactly after every post-onset step
   (the derivation-coherence fixture). Branch flips: ocean→continent
   (arc maturation, weld bridges, consolidation hole fills) found T by
@@ -758,12 +780,13 @@ key:
   ≤ 1 f32 ULP), so the branched A/B is clean at any onset year. Shim-era
   validity domain (C1–C4): legacy-pump-flooded cells invert to unphysically
   thin, even negative, columns — declared Δ-space bookkeeping, regularized
-  at stage C5. Zero RNG anywhere in the model. Stages C2–C6 replace the
-  shims with mass-budget physics one mechanism at a time (erosion →
-  orogeny/collision → maturation/sediment accretion → servo retirement →
-  margins), each gated in the proposal's acceptance grid; the mass ledger
-  (`computeCrustalMassLedger`, true solid angles × R²) is a reported
-  tripwire until the C2 closure gates activate.
+  at stage C5. Zero RNG anywhere in the model. Stages C3–C6 replace the
+  remaining shims with mass-budget physics one mechanism at a time
+  (orogeny/collision/root decay → maturation/sediment accretion → servo
+  retirement → margins), each gated in the proposal's acceptance grid; the
+  mass ledger (`computeCrustalMassLedger`, true solid angles × R²) closes
+  per-system for the C2 erosion terms (kernel fixtures) and remains a
+  reported tripwire over the declared shim flows.
 
 `energyBalance` (#30): the Phase 3 climate hub. A Budyko–Sellers **zonal
 energy-balance model** solved on `ENERGY_BALANCE_BANDS` (90) equal-area
@@ -1053,7 +1076,14 @@ Globals     = { landFraction, co2, meanTemperatureK, seaLevelM, waterInventoryM,
                 // #67 boundary-churn proxy: cumulative margin-consolidation
                 // pair-flips, accumulated by the tectonics pass under
                 // params.plateCensus (0 otherwise):
-                marginConsolidationFlipsTotal }
+                marginConsolidationFlipsTotal,
+                // Crustal-columns C2 planation-throughput counters
+                // (cumulative; accumulated by erosion/tectonics/crustFates
+                // ONLY while crustalColumnsActive, else 0; same
+                // diagnostic-only contract as the census scalars — sim-cli
+                // --crust-stats differences them into src/sat%/sink rates):
+                columnsExportedRockM3, columnsExportShelfLimited,
+                columnsExportVisits, columnsSedimentZeroedM3 }
 ```
 
 The **plate census** (Tectonics V2 stage 0, #110) is a pure, RNG-free

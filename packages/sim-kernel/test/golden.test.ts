@@ -284,17 +284,21 @@ describe('golden field hashes: bathymetryDatum engaged (#102)', () => {
 });
 
 /**
- * Crustal-columns stage C1 spines (docs/CRUSTAL_COLUMN_PROPOSAL.md §6). Two
- * arms: the ISOLATED arm pins the shim path under ALL_MECHANISMS_OFF (the
- * cleanest exercise of the tectonics/boundaries/erosion shims alone); the
- * ENGAGED arm pins the shims riding the shipped DEFAULT stack, with the
- * bit-exact coherence assertion guarding engagement — a flag-off world fails
- * it (elevation evolves rawly), so this spine can never silently pin an
- * inert path (the #102 engaged-golden precedent). Both use onset 0. Initial
+ * Crustal-columns flag-arm spines (docs/CRUSTAL_COLUMN_PROPOSAL.md §6),
+ * currently at stage C2 (erosion sites 13–15 are thickness-space mass
+ * transactions; the other writers remain C1 shims). Regenerated at each
+ * stage per the owner's KBV-cadence decision (proposal §11 answer 4): the
+ * flag-off MAIN goldens are untouched, only this arm moves. Two arms: the
+ * ISOLATED arm pins the path under ALL_MECHANISMS_OFF (the cleanest
+ * exercise of the tectonics/boundaries/erosion writers alone); the ENGAGED
+ * arm pins it riding the shipped DEFAULT stack, with the bit-exact
+ * coherence assertion guarding engagement — a flag-off world fails it
+ * (elevation evolves rawly), so this spine can never silently pin an inert
+ * path (the #102 engaged-golden precedent). Both use onset 0. Initial
  * states are field-identical to flag-off (the founding synthesis is
  * unconditional), so only stepped hashes are pinned.
  */
-describe('golden field hashes: crustalColumns C1 (isolated + engaged)', () => {
+describe('golden field hashes: crustalColumns (isolated + engaged)', () => {
   it('seed 42: after 10 steps, isolated under ALL_MECHANISMS_OFF', () => {
     const params = createPlanetParams({ seed: 42, ...ALL_MECHANISMS_OFF, crustalColumns: true });
     const ctx: SimContext = { rng: createRng(params.seed).fork('sim') };

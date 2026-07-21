@@ -40,7 +40,14 @@ import {
   OROGENY_MAX_ELEVATION_M,
 } from '../constants';
 import { bathymetryDatumOffsetM, landDatumOffsetM, platformDatumOffsetM } from '../datums';
-import { cellCenterTable, cellCount, directionToIndex, neighborTable, type Vec3 } from '../grid';
+import {
+  cellCenterTable,
+  cellCount,
+  cellSolidAngleTable,
+  directionToIndex,
+  neighborTable,
+  type Vec3,
+} from '../grid';
 import { hash2, hashString } from '../hash';
 import {
   continentalElevationForThicknessM,
@@ -306,6 +313,21 @@ function applyTectonics(state: PlanetState, dtYears: number): PlanetState {
   // oceanic path (a consolidation-flipped island, #67) re-enters the ocean
   // ledger carrying the 0 this sweep gave it while it was continental, so
   // the invariant survives the flip in both directions.
+  // Crustal-columns C2 sink instrumentation: what this sweep consumes is the
+  // site-22 ledger exit (sediment swallowed at maturation — a shim until C4
+  // accretes it as thickness), counted on true areas so the sim-cli sink-side
+  // planation report can separate it from subduction throughput. Flag-off the
+  // counter is never touched and the globals hold 0.
+  let sedimentZeroedM3 = 0;
+  if (columns) {
+    const solidAngle = cellSolidAngleTable(N);
+    const r2 = state.params.radiusMeters * state.params.radiusMeters;
+    for (let i = 0; i < crustType.length; i++) {
+      if (crustType[i] === 1 && sedimentM[i]! > 0) {
+        sedimentZeroedM3 += sedimentM[i]! * solidAngle[i]! * r2;
+      }
+    }
+  }
   for (let i = 0; i < crustType.length; i++) {
     if (crustType[i] === 1) sedimentM[i] = 0;
   }
@@ -323,6 +345,7 @@ function applyTectonics(state: PlanetState, dtYears: number): PlanetState {
       marginConsolidationFlipsTotal:
         next.globals.marginConsolidationFlipsTotal +
         (state.params.plateCensus ? consolidationFlips : 0),
+      columnsSedimentZeroedM3: next.globals.columnsSedimentZeroedM3 + sedimentZeroedM3,
     },
     fields: {
       ...next.fields,

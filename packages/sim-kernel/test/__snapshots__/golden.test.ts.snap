@@ -373,48 +373,48 @@ exports[`golden field hashes: blockIsostasy on (#84) > seed 1337: after 10 steps
 }
 `;
 
-exports[`golden field hashes: crustalColumns C1 (isolated + engaged) > seed 42, N=32: after 30 steps on the DEFAULT world, derivation engaged 1`] = `
+exports[`golden field hashes: crustalColumns (isolated + engaged) > seed 42, N=32: after 30 steps on the DEFAULT world, derivation engaged 1`] = `
 {
   "after30Steps": {
-    "biome": "79729935",
+    "biome": "b1117178",
     "boundaryStress": "ae0fdb4c",
     "crustAge": "e02e596a",
     "crustType": "5b2d6f65",
-    "crustalThicknessM": "1da5f02e",
-    "elevation": "c5600f28",
-    "iceFraction": "c40b9c55",
-    "marineLife": "9bbf6f60",
+    "crustalThicknessM": "c6a599bb",
+    "elevation": "4b833f97",
+    "iceFraction": "fa6cd5b1",
+    "marineLife": "e5f206cc",
     "plateId": "e8298d3b",
-    "precipitation": "ddb6484f",
-    "sedimentM": "e5915750",
+    "precipitation": "8d39320a",
+    "sedimentM": "71120328",
     "sutureYears": "c8929ebd",
-    "temperature": "77c711c6",
+    "temperature": "59c1497d",
     "timeYears": 30000000,
-    "windU": "eb8b5785",
-    "windV": "a7c59465",
+    "windU": "852038f5",
+    "windV": "81097435",
   },
 }
 `;
 
-exports[`golden field hashes: crustalColumns C1 (isolated + engaged) > seed 42: after 10 steps, isolated under ALL_MECHANISMS_OFF 1`] = `
+exports[`golden field hashes: crustalColumns (isolated + engaged) > seed 42: after 10 steps, isolated under ALL_MECHANISMS_OFF 1`] = `
 {
   "after10Steps": {
-    "biome": "e2e31168",
+    "biome": "9442def8",
     "boundaryStress": "3470f23d",
     "crustAge": "5df42012",
     "crustType": "8383c658",
-    "crustalThicknessM": "f58d1ec6",
-    "elevation": "cebe781f",
-    "iceFraction": "ec2cdbfa",
-    "marineLife": "9dd3c472",
+    "crustalThicknessM": "4b1de08b",
+    "elevation": "bdc56be5",
+    "iceFraction": "16ebbf3a",
+    "marineLife": "e7de2016",
     "plateId": "830343d2",
-    "precipitation": "1851f38a",
-    "sedimentM": "b062a5f4",
+    "precipitation": "c2f1fdba",
+    "sedimentM": "b021d182",
     "sutureYears": "b0549dc5",
-    "temperature": "eb4494a2",
+    "temperature": "4034171a",
     "timeYears": 10000000,
-    "windU": "0d374505",
-    "windV": "0d0c34a5",
+    "windU": "963ab965",
+    "windV": "d7329175",
   },
 }
 `;

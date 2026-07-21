@@ -48,6 +48,30 @@
  *    the designed contrast with the #84 founder's non-conservative
  *    subsidence.
  *
+ * 5. Crustal columns, stage C2 (docs/CRUSTAL_COLUMN_PROPOSAL.md §5 sites
+ *    13–15, §6 C2): under an active `crustalColumns` the three fluxes above
+ *    become REAL MASS TRANSACTIONS in thickness space — the same rate laws,
+ *    with the computed flux read as ROCK THICKNESS removed (denudation, which
+ *    is what EROSION_RATE_PER_YR's mm/kyr calibration always described)
+ *    instead of surface drop. The surface answers through the derivation:
+ *    Δe = k·ΔT ≈ 0.142·ΔT (isostasy.ts) — erode 1 km of rock and the surface
+ *    drops only ~142 m, the emergent rebound that planes interiors toward
+ *    base level without a craton servo (proposal closure check 1). Ledger
+ *    honesty, per trap T7 (±35% per-cell area distortion):
+ *      - diffusion moves VOLUME `X·(Ω_i+Ω_j)/2` between the columns
+ *        (ΔT = ∓V/Ω), so continental crustal mass is conserved exactly;
+ *      - export/planation deposit `Δsed = X·(ρ_cc/ρ_sed)·(Ω_i/Ω_j)` — the
+ *        density conversion (site 14) on true areas, so
+ *        Σ(T·ρ_cc·A) + Σ(sed·ρ_sed·A) is invariant across the coast;
+ *      - the never-below-sea / never-below-planation-level caps bind on the
+ *        SURFACE, so the thickness caps divide by k; the shelf-room cap
+ *        converts through the density + area ratio.
+ *    Root decay (site 16) stays a mechanical Δe/k shim here — its thickness
+ *    relaxation toward CONTINENTAL_THICKNESS_EQUILIBRIUM_M is stage C3.
+ *    Source/sink throughput is accumulated into the `columns*` globals
+ *    counters (state.ts) for the C2 gate's planation-rate report; flag-off
+ *    the path below never runs and the counters hold 0.
+ *
  * Scope: oceanic ELEVATION is never written (it is isostatic, a function of
  * crustAge — #15); export writes oceanic sedimentM only. Fluxes are computed
  * Jacobi-style from the pre-step elevation; the export deposit cap reads the
@@ -57,6 +81,8 @@
 import { seaKeyedOceanicDepthForAge } from '../bathymetry';
 import { labelContinentalComponents } from '../components';
 import {
+  CONTINENTAL_BUOYANCY_FACTOR,
+  CRUST_DENSITY_CONTINENTAL_KG_M3,
   EROSION_PRECIP_FACTOR_MAX,
   EROSION_PRECIP_FACTOR_MIN,
   EROSION_PRECIP_REF,
@@ -67,16 +93,199 @@ import {
   MICROCONTINENT_FOUNDER_ELEVATION_M,
   OROGENIC_ROOT_DECAY_TAU_YEARS,
   OROGENIC_ROOT_REFERENCE_M,
+  SEDIMENT_DENSITY_KG_M3,
   SEDIMENT_SHELF_CEILING_M,
 } from '../constants';
 import { bathymetryDatumOffsetM, landDatumOffsetM, platformDatumOffsetM } from '../datums';
-import { cellCount, neighborTable } from '../grid';
-import { crustalColumnsActive, reconcileContinentalColumns } from '../isostasy';
+import { cellCount, cellSolidAngleTable, neighborTable } from '../grid';
+import { continentalElevationForThicknessM, crustalColumnsActive } from '../isostasy';
+import type { PlanetState } from '../state';
 import type { System } from '../step';
+
+/**
+ * Marine planation (#90): per-cell wave-attack strength, 1 − area/ref
+ * clamped to [0, 1] — full attack on a speck, none at/above the threshold,
+ * no cliff as a component grows across it. null when off (and every flag-off
+ * consumer below is byte-identical to the pre-#90 kernel). Hoisted so the
+ * legacy and crustal-columns paths share it verbatim — pure reads.
+ */
+function planationStrengthField(state: PlanetState): Float32Array | null {
+  if (
+    !(state.params.marinePlanation && state.timeYears >= state.params.marinePlanationOnsetYears)
+  ) {
+    return null;
+  }
+  const N = state.params.gridN;
+  const { componentOf, areasM2 } = labelContinentalComponents(
+    state.fields.crustType,
+    N,
+    state.params.radiusMeters,
+  );
+  const strength = areasM2.map((a) => Math.max(0, 1 - a / MARINE_PLANATION_AREA_M2));
+  if (!strength.some((s) => s > 0)) return null;
+  const count = cellCount(N);
+  const planation = new Float32Array(count);
+  for (let i = 0; i < count; i++) {
+    const comp = componentOf[i]!;
+    if (comp !== -1) planation[i] = strength[comp]!;
+  }
+  return planation;
+}
+
+/**
+ * Stage C2 (sites 13–15 + the site-16 shim): erosion as thickness
+ * transactions — see doc block (5). Every continental write stores thickness
+ * FIRST and re-derives elevation from the stored Float32 (the C1 coherence
+ * contract), so `e === fround(C + k·T)` stays bit-exact through this system.
+ */
+function applyColumns(state: PlanetState, dtYears: number): PlanetState {
+  const N = state.params.gridN;
+  const count = cellCount(N);
+  const nbTable = neighborTable(N);
+  const solidAngle = cellSolidAngleTable(N);
+  const r2 = state.params.radiusMeters * state.params.radiusMeters;
+  const { crustType, precipitation, crustAge } = state.fields;
+  // Previous step's sea level (the #33 explicit lag), as in the legacy path.
+  const seaLevel = state.globals.seaLevelM;
+  const old = state.fields.elevation;
+  const elevation = old.slice();
+  const thickness = state.fields.crustalThicknessM.slice();
+  const sedimentM = state.fields.sedimentM.slice();
+  const datumOffset = platformDatumOffsetM(state);
+  const shelfCeiling = datumOffset + SEDIMENT_SHELF_CEILING_M;
+  const planationLevel = datumOffset + MICROCONTINENT_FOUNDER_ELEVATION_M;
+  const bathyOffset = bathymetryDatumOffsetM(state);
+  const planation = planationStrengthField(state);
+
+  const k = CONTINENTAL_BUOYANCY_FACTOR;
+  // Meters of sediment per meter of eroded rock at equal area: rock is denser,
+  // so the pile is thicker than the column it came from (site 14's ρ_cc/ρ_sed).
+  const rockToSed = CRUST_DENSITY_CONTINENTAL_KG_M3 / SEDIMENT_DENSITY_KG_M3;
+
+  // C2 gate instrumentation (cumulative globals counters, state.ts).
+  let exportedRockM3 = 0;
+  let exportVisits = 0;
+  let shelfLimited = 0;
+
+  for (let i = 0; i < count; i++) {
+    if (crustType[i] !== 1) continue;
+    const ai = solidAngle[i]!;
+    for (let nb = 0; nb < 4; nb++) {
+      const j = nbTable[i * 4 + nb]!;
+      const precipFactor = Math.min(
+        EROSION_PRECIP_FACTOR_MAX,
+        Math.max(
+          EROSION_PRECIP_FACTOR_MIN,
+          (precipitation[i]! + precipitation[j]!) / 2 / EROSION_PRECIP_REF,
+        ),
+      );
+      if (crustType[j] === 1) {
+        // Site 13 — interior diffusion, each unordered pair once. The same
+        // slope-driven denudation law as the legacy path; X is meters of ROCK
+        // at the shared edge, moved as volume so mass is conserved on true
+        // areas. Rebound emerges: each side's surface answers by k·ΔT.
+        if (j <= i) continue;
+        let subsea = old[i]! < seaLevel || old[j]! < seaLevel ? EROSION_SUBSEA_FACTOR : 1;
+        if (planation !== null && subsea < 1) {
+          const s = Math.max(planation[i]!, planation[j]!);
+          if (s > 0) subsea += (1 - subsea) * s;
+        }
+        const X = EROSION_RATE_PER_YR * dtYears * precipFactor * subsea * (old[i]! - old[j]!);
+        if (X !== 0) {
+          const aj = solidAngle[j]!;
+          const volume = X * 0.5 * (ai + aj); // solid-angle volume; R² cancels
+          thickness[i] = thickness[i]! - volume / ai;
+          thickness[j] = thickness[j]! + volume / aj;
+          elevation[i] = continentalElevationForThicknessM(thickness[i]!);
+          elevation[j] = continentalElevationForThicknessM(thickness[j]!);
+        }
+      } else {
+        // Coastal terms: only toward a submerged oceanic neighbor, as today.
+        if (old[j]! >= seaLevel) continue;
+        const aj = solidAngle[j]!;
+        // Site 14 — coastal export. Rivers grade to base level, so the
+        // denudation rate scales with height above SEA LEVEL; the surface cap
+        // (never draw the cell below sea, however many neighbors drew from it
+        // this step) binds on the DERIVED surface, hence /k in rock space.
+        if (old[i]! > seaLevel) {
+          exportVisits++;
+          const desired = EROSION_RATE_PER_YR * dtYears * precipFactor * (old[i]! - seaLevel);
+          const room =
+            shelfCeiling - (seaKeyedOceanicDepthForAge(crustAge[j]!, bathyOffset) + sedimentM[j]!);
+          // Rock the shelf can still take: sediment room × density × area ratio.
+          const roomRock = room > 0 ? (room / rockToSed) * (aj / ai) : 0;
+          const surfaceRock = Math.max(0, elevation[i]! - seaLevel) / k;
+          if (roomRock < Math.min(desired, surfaceRock)) shelfLimited++;
+          const X = Math.min(desired, roomRock, surfaceRock);
+          if (X > 0) {
+            thickness[i] = thickness[i]! - X;
+            elevation[i] = continentalElevationForThicknessM(thickness[i]!);
+            sedimentM[j]! += X * rockToSed * (ai / aj);
+            exportedRockM3 += X * ai * r2;
+          }
+        }
+        // Site 15 — marine planation export (#90): wave attack grades a small
+        // component's coast toward the shelf/founder level; does NOT stop at
+        // sea level. Same deposit ledger, density conversion and shelf-room
+        // cap as site 14 (the room re-reads sedimentM[j], which the flux
+        // above may just have raised).
+        if (planation !== null && planation[i]! > 0) {
+          if (old[i]! <= planationLevel) continue;
+          exportVisits++;
+          const desired = MARINE_PLANATION_RATE_M_PER_YR * dtYears * planation[i]!;
+          const room =
+            shelfCeiling - (seaKeyedOceanicDepthForAge(crustAge[j]!, bathyOffset) + sedimentM[j]!);
+          const roomRock = room > 0 ? (room / rockToSed) * (aj / ai) : 0;
+          // Never plane the SURFACE below the founder level, hence /k.
+          const surfaceRock = Math.max(0, elevation[i]! - planationLevel) / k;
+          if (roomRock < Math.min(desired, surfaceRock)) shelfLimited++;
+          const X = Math.min(desired, roomRock, surfaceRock);
+          if (X > 0) {
+            thickness[i] = thickness[i]! - X;
+            elevation[i] = continentalElevationForThicknessM(thickness[i]!);
+            sedimentM[j]! += X * rockToSed * (ai / aj);
+            exportedRockM3 += X * ai * r2;
+          }
+        }
+      }
+    }
+  }
+
+  // Site 16 — orogenic root decay, still the mechanical C1 shim (ΔT = Δe/k on
+  // the same land-relief-datum law; the physical thickness relaxation toward
+  // CONTINENTAL_THICKNESS_EQUILIBRIUM_M is stage C3). Applied to the
+  // post-flux surface, as in the legacy path.
+  const rootReference = landDatumOffsetM(state) + OROGENIC_ROOT_REFERENCE_M;
+  const keep = Math.exp(-dtYears / OROGENIC_ROOT_DECAY_TAU_YEARS);
+  for (let i = 0; i < count; i++) {
+    if (crustType[i] !== 1) continue;
+    const e = elevation[i]!;
+    if (e > rootReference) {
+      const target = rootReference + (e - rootReference) * keep;
+      thickness[i] = thickness[i]! + (target - e) / k;
+      elevation[i] = continentalElevationForThicknessM(thickness[i]!);
+    }
+  }
+
+  return {
+    ...state,
+    globals: {
+      ...state.globals,
+      columnsExportedRockM3: state.globals.columnsExportedRockM3 + exportedRockM3,
+      columnsExportShelfLimited: state.globals.columnsExportShelfLimited + shelfLimited,
+      columnsExportVisits: state.globals.columnsExportVisits + exportVisits,
+    },
+    fields: { ...state.fields, elevation, sedimentM, crustalThicknessM: thickness },
+  };
+}
 
 export const erosionSystem: System = {
   name: 'erosion',
   apply: (state, dtYears) => {
+    // Crustal columns (stage C2): sites 13–15 become thickness transactions —
+    // a separate path, so the flag-off arithmetic below stays byte-identical.
+    if (crustalColumnsActive(state)) return applyColumns(state, dtYears);
+
     const N = state.params.gridN;
     const count = cellCount(N);
     const nbTable = neighborTable(N);
@@ -100,26 +309,7 @@ export const erosionSystem: System = {
     // offset 0 means the exact absolute curve.
     const bathyOffset = bathymetryDatumOffsetM(state);
 
-    // Marine planation (#90): per-cell wave-attack strength, 1 − area/ref
-    // clamped to [0, 1] — full attack on a speck, none at/above the
-    // threshold, no cliff as a component grows across it. null when off, and
-    // every flag-off code path below is byte-identical to the pre-#90 kernel.
-    let planation: Float32Array | null = null;
-    if (state.params.marinePlanation && state.timeYears >= state.params.marinePlanationOnsetYears) {
-      const { componentOf, areasM2 } = labelContinentalComponents(
-        crustType,
-        N,
-        state.params.radiusMeters,
-      );
-      const strength = areasM2.map((a) => Math.max(0, 1 - a / MARINE_PLANATION_AREA_M2));
-      if (strength.some((s) => s > 0)) {
-        planation = new Float32Array(count);
-        for (let i = 0; i < count; i++) {
-          const comp = componentOf[i]!;
-          if (comp !== -1) planation[i] = strength[comp]!;
-        }
-      }
-    }
+    const planation = planationStrengthField(state);
 
     for (let i = 0; i < count; i++) {
       if (crustType[i] !== 1) continue;
@@ -212,17 +402,6 @@ export const erosionSystem: System = {
       if (e > rootReference) {
         elevation[i] = rootReference + (e - rootReference) * keep;
       }
-    }
-
-    // Crustal columns (C1, sites 13–16): reconcile this system's continental
-    // Δe into thickness space at exit — every flux above ran bit-identically
-    // to the flag-off path; only the stored result snaps onto the derived
-    // manifold (isostasy.ts). Thickness diffusion with emergent rebound is
-    // stage C2's replacement.
-    if (crustalColumnsActive(state)) {
-      const crustalThicknessM = state.fields.crustalThicknessM.slice();
-      reconcileContinentalColumns(crustType, old, elevation, crustalThicknessM);
-      return { ...state, fields: { ...state.fields, elevation, sedimentM, crustalThicknessM } };
     }
 
     return { ...state, fields: { ...state.fields, elevation, sedimentM } };
