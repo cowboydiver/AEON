@@ -506,6 +506,13 @@ export interface Globals {
    *  sink-side subduction throughput be inferred honestly from the sediment
    *  stock: subducted ≈ deposits − zeroed − Δstock. */
   columnsSedimentZeroedM3: number;
+  /** Crustal-columns C3: cumulative count of orogeny/collision thickness
+   *  additions clipped by CONTINENTAL_THICKNESS_MAX_M (the gravitational-
+   *  collapse ceiling that replaces the 9 km elevation caps on the columns
+   *  path — the C3 gate counts these binds; the retired elevation caps are
+   *  structurally absent from that path, so their count is zero by
+   *  construction). Same diagnostic-only contract as the counters above. */
+  columnsThicknessCapBinds: number;
 }
 
 export interface PlanetState {
@@ -688,6 +695,7 @@ export function createInitialState(params: PlanetParams): PlanetState {
       columnsExportShelfLimited: 0,
       columnsExportVisits: 0,
       columnsSedimentZeroedM3: 0,
+      columnsThicknessCapBinds: 0,
     },
     fields,
     plates: [],

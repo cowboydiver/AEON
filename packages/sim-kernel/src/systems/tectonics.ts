@@ -33,6 +33,7 @@ import {
   ACTIVE_MARGIN_STRESS_M_PER_YR,
   COLLISION_THICKENING_FACTOR,
   CONTINENTAL_BUOYANCY_FACTOR,
+  CONTINENTAL_THICKNESS_MAX_M,
   MARGIN_CONSOLIDATION_HOLE_MIN_NEIGHBORS,
   MICROCONTINENT_FOUNDER_ELEVATION_M,
   OCEAN_RELIEF_RELAX_M_PER_YR,
@@ -175,7 +176,14 @@ function applyTectonics(state: PlanetState, dtYears: number): PlanetState {
   // this step's stress; mature arcs become continental crust. Mutates only
   // the local elevation/crustType (and, under crustalColumns, thickness)
   // copies.
-  applyConvergentTopography(next, boundaryStress, elevation, crustType, dtYears, crustalThicknessM);
+  const orogenyCapBinds = applyConvergentTopography(
+    next,
+    boundaryStress,
+    elevation,
+    crustType,
+    dtYears,
+    crustalThicknessM,
+  );
 
   // Isolated continental slivers founder (#59): a continental cell with no
   // continental 4-neighbor is pinned below sea level (it stays continental
@@ -346,6 +354,9 @@ function applyTectonics(state: PlanetState, dtYears: number): PlanetState {
         next.globals.marginConsolidationFlipsTotal +
         (state.params.plateCensus ? consolidationFlips : 0),
       columnsSedimentZeroedM3: next.globals.columnsSedimentZeroedM3 + sedimentZeroedM3,
+      // C3: advect-time collision binds are already in next.globals (advect
+      // accumulates them); add this step's orogeny-BFS binds on top.
+      columnsThicknessCapBinds: next.globals.columnsThicknessCapBinds + orogenyCapBinds,
     },
     fields: {
       ...next.fields,
@@ -394,6 +405,8 @@ function advect(
   // Crustal columns (C1): thickness ADVECTS unconditionally (the copy loop
   // below); its Δe mirrors and branch-flip founding are gated here.
   const columns = crustalColumnsActive(state);
+  // C3 gate counter: collision additions clipped by the 70 km ceiling.
+  let thicknessCapBinds = 0;
 
   // Claims + resolution. Overlaps (multiple claimants) are convergence: the
   // overriding side keeps the surface, the subducting side's OCEANIC crust
@@ -627,25 +640,40 @@ function advect(
               : bestContFwd;
     if (t === -1) continue;
     if (newFields.plateId[t] !== -1 && newFields.crustType[t] === 1) {
-      // Collision thickening caps at the orogeny ceiling — a land-relief
-      // datum that rides the dynamic sea level under the freeboard
-      // mechanism (landDatumOffsetM, datums.ts) and is exactly the absolute
-      // constant when it is off.
-      const thickened = Math.min(
-        landDatumOffsetM(state) + OROGENY_MAX_ELEVATION_M,
-        newFields.elevation[t]! + COLLISION_THICKENING_FACTOR * Math.max(0, push.elevation),
-      );
       if (columns) {
-        // C1 shim (site 7): today's Δe path kept, mirrored as ΔT = Δe/k —
-        // the physical column transaction is stage C3's replacement.
-        newFields.crustalThicknessM[t] =
-          newFields.crustalThicknessM[t]! +
-          (thickened - newFields.elevation[t]!) / CONTINENTAL_BUOYANCY_FACTOR;
-        newFields.elevation[t] = continentalElevationForThicknessM(
-          newFields.crustalThicknessM[t]!,
-        );
+        // C3 (site 7): the India–Asia partition read as crustal VOLUME —
+        // half the displaced COLUMN piles onto the receiving cell (the
+        // proposal's declared step change: a 36 km column contributes
+        // ~2.6 km of surface where today's subaerial-relief rule gave a
+        // +400 m cell only +200 m, and submerged columns now contribute
+        // where they added nothing). max(0,·) guards the shim-era negative
+        // lobe; the stop is the 70 km collapse ceiling, which clips the
+        // ADDITION only — it never snaps an already over-thick column down.
+        const tCur = newFields.crustalThicknessM[t]!;
+        const add = COLLISION_THICKENING_FACTOR * Math.max(0, push.crustalThicknessM);
+        if (tCur + add > CONTINENTAL_THICKNESS_MAX_M) {
+          thicknessCapBinds++;
+          if (tCur < CONTINENTAL_THICKNESS_MAX_M) {
+            newFields.crustalThicknessM[t] = CONTINENTAL_THICKNESS_MAX_M;
+            newFields.elevation[t] = continentalElevationForThicknessM(
+              newFields.crustalThicknessM[t]!,
+            );
+          }
+        } else if (add > 0) {
+          newFields.crustalThicknessM[t] = tCur + add;
+          newFields.elevation[t] = continentalElevationForThicknessM(
+            newFields.crustalThicknessM[t]!,
+          );
+        }
       } else {
-        newFields.elevation[t] = thickened;
+        // Collision thickening caps at the orogeny ceiling — a land-relief
+        // datum that rides the dynamic sea level under the freeboard
+        // mechanism (landDatumOffsetM, datums.ts) and is exactly the
+        // absolute constant when it is off.
+        newFields.elevation[t] = Math.min(
+          landDatumOffsetM(state) + OROGENY_MAX_ELEVATION_M,
+          newFields.elevation[t]! + COLLISION_THICKENING_FACTOR * Math.max(0, push.elevation),
+        );
       }
       newFields.crustAge[t] = Math.max(newFields.crustAge[t]!, push.crustAge);
       // Weld memory survives shortening: the newer of the two suture stamps
@@ -718,7 +746,11 @@ function advect(
 
   return {
     ...state,
-    globals: { ...state.globals, landFraction: land / count },
+    globals: {
+      ...state.globals,
+      landFraction: land / count,
+      columnsThicknessCapBinds: state.globals.columnsThicknessCapBinds + thicknessCapBinds,
+    },
     fields: { ...state.fields, ...newFields },
   };
 }

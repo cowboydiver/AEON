@@ -85,6 +85,7 @@ export function twoPlateState(
       columnsExportShelfLimited: 0,
       columnsExportVisits: 0,
       columnsSedimentZeroedM3: 0,
+      columnsThicknessCapBinds: 0,
     },
     fields,
     plates: [makePlate(plate0), makePlate(plate1)],

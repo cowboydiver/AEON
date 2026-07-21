@@ -66,8 +66,9 @@
  *      - the never-below-sea / never-below-planation-level caps bind on the
  *        SURFACE, so the thickness caps divide by k; the shelf-room cap
  *        converts through the density + area ratio.
- *    Root decay (site 16) stays a mechanical Δe/k shim here — its thickness
- *    relaxation toward CONTINENTAL_THICKNESS_EQUILIBRIUM_M is stage C3.
+ *    Root decay (site 16) is physical since stage C3: thickness above
+ *    CONTINENTAL_THICKNESS_EQUILIBRIUM_M (39 km) relaxes toward it with the
+ *    unchanged τ = 300 Myr — the target no longer reads sea level (T1).
  *    Source/sink throughput is accumulated into the `columns*` globals
  *    counters (state.ts) for the C2 gate's planation-rate report; flag-off
  *    the path below never runs and the counters hold 0.
@@ -82,6 +83,7 @@ import { seaKeyedOceanicDepthForAge } from '../bathymetry';
 import { labelContinentalComponents } from '../components';
 import {
   CONTINENTAL_BUOYANCY_FACTOR,
+  CONTINENTAL_THICKNESS_EQUILIBRIUM_M,
   CRUST_DENSITY_CONTINENTAL_KG_M3,
   EROSION_PRECIP_FACTOR_MAX,
   EROSION_PRECIP_FACTOR_MIN,
@@ -133,10 +135,10 @@ function planationStrengthField(state: PlanetState): Float32Array | null {
 }
 
 /**
- * Stage C2 (sites 13–15 + the site-16 shim): erosion as thickness
- * transactions — see doc block (5). Every continental write stores thickness
- * FIRST and re-derives elevation from the stored Float32 (the C1 coherence
- * contract), so `e === fround(C + k·T)` stays bit-exact through this system.
+ * Stages C2–C3 (sites 13–16): erosion as thickness transactions — see doc
+ * block (5). Every continental write stores thickness FIRST and re-derives
+ * elevation from the stored Float32 (the C1 coherence contract), so
+ * `e === fround(C + k·T)` stays bit-exact through this system.
  */
 function applyColumns(state: PlanetState, dtYears: number): PlanetState {
   const N = state.params.gridN;
@@ -251,18 +253,22 @@ function applyColumns(state: PlanetState, dtYears: number): PlanetState {
     }
   }
 
-  // Site 16 — orogenic root decay, still the mechanical C1 shim (ΔT = Δe/k on
-  // the same land-relief-datum law; the physical thickness relaxation toward
-  // CONTINENTAL_THICKNESS_EQUILIBRIUM_M is stage C3). Applied to the
-  // post-flux surface, as in the legacy path.
-  const rootReference = landDatumOffsetM(state) + OROGENIC_ROOT_REFERENCE_M;
+  // Site 16 — orogenic root decay, physical since stage C3: thickness above
+  // CONTINENTAL_THICKNESS_EQUILIBRIUM_M relaxes toward it with the same
+  // τ = 300 Myr (the timescale was always the physical part; the target
+  // becomes the cited 39 km equilibrium column). The sea-keyed land-relief
+  // reference retires on this path — one less relaxation target reading sea
+  // level (trap T1). Still deliberately non-conservative: root loss is
+  // foundering into the mantle, not transport (today's declared posture).
+  // Applied to the post-flux columns, as the legacy decay is to the
+  // post-flux surface.
   const keep = Math.exp(-dtYears / OROGENIC_ROOT_DECAY_TAU_YEARS);
   for (let i = 0; i < count; i++) {
     if (crustType[i] !== 1) continue;
-    const e = elevation[i]!;
-    if (e > rootReference) {
-      const target = rootReference + (e - rootReference) * keep;
-      thickness[i] = thickness[i]! + (target - e) / k;
+    const t = thickness[i]!;
+    if (t > CONTINENTAL_THICKNESS_EQUILIBRIUM_M) {
+      thickness[i] =
+        CONTINENTAL_THICKNESS_EQUILIBRIUM_M + (t - CONTINENTAL_THICKNESS_EQUILIBRIUM_M) * keep;
       elevation[i] = continentalElevationForThicknessM(thickness[i]!);
     }
   }

@@ -63,6 +63,7 @@ function singlePlate(overrides: Partial<PlanetState['plates'][number]> = {}): Pl
       columnsExportShelfLimited: 0,
       columnsExportVisits: 0,
       columnsSedimentZeroedM3: 0,
+      columnsThicknessCapBinds: 0,
     },
     fields,
     plates: [{ ...makePlate({ pole: [1, 0, 0], omega: 4e-9 }), ...overrides }],

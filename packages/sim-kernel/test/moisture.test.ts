@@ -92,6 +92,7 @@ function ridgeWorld(gridN: number, windUms: number, ridgePeakM = 3500): PlanetSt
       columnsExportShelfLimited: 0,
       columnsExportVisits: 0,
       columnsSedimentZeroedM3: 0,
+      columnsThicknessCapBinds: 0,
     },
     fields,
     plates: [],

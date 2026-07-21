@@ -1,7 +1,19 @@
 import { describe, expect, it } from 'vitest';
 import { oceanicAgeForDepth, oceanicDepthForAge } from '../src/bathymetry';
-import { OROGENY_MAX_ELEVATION_M } from '../src/constants';
+import {
+  CONTINENTAL_BUOYANCY_FACTOR,
+  CONTINENTAL_ISOSTASY_DATUM_M,
+  CONTINENTAL_THICKNESS_MAX_M,
+  OROGENY_MAX_ELEVATION_M,
+  OROGENY_RATE_M_PER_YR,
+  OROGENY_STRESS_REF_M_PER_YR,
+} from '../src/constants';
 import { cellCenterDirection, cellCount, neighbors } from '../src/grid';
+import {
+  continentalElevationForThicknessM,
+  foundCrustalThickness,
+} from '../src/isostasy';
+import { applyConvergentTopography } from '../src/systems/boundaries';
 import { runSystems, twoPlateState, type TestPlateSpec } from './helpers';
 import type { PlanetState } from '../src/state';
 
@@ -74,6 +86,123 @@ describe('continent-continent collision (#16)', () => {
       expect(n).toBeGreaterThan(0);
       expect(sum / n).toBeGreaterThan(1500);
     }
+  });
+});
+
+/**
+ * Stage C3 (proposal §5 sites 7/12): under crustalColumns, collision and
+ * orogeny are crustal-shortening THICKNESS additions — the same rate
+ * constant read as rock, the surface answering k·ΔT — and the 9 km
+ * elevation ceilings retire in favor of the 70 km gravitational-collapse
+ * thickness cap (counted in `columnsThicknessCapBinds`).
+ */
+describe('collision under crustal columns (stage C3)', () => {
+  function columnsStart(): PlanetState {
+    const s = twoPlateState(N, P0, P1); // all continental
+    const params = { ...s.params, crustalColumns: true, crustalColumnsOnsetYears: 0 };
+    const elevation = s.fields.elevation.slice();
+    elevation.fill(200);
+    const crustalThicknessM = foundCrustalThickness(elevation, s.fields.crustType);
+    for (let i = 0; i < elevation.length; i++) {
+      elevation[i] = continentalElevationForThicknessM(crustalThicknessM[i]!);
+    }
+    return { ...s, params, fields: { ...s.fields, elevation, crustalThicknessM } };
+  }
+
+  /** Mean elevation over convergent-cap boundary cells. */
+  function beltMean(state: PlanetState): number {
+    let sum = 0;
+    let n = 0;
+    for (let i = 0; i < cellCount(N); i++) {
+      if (!inCap(i, CONVERGE_DIR, 0.93) || !isBoundary(state, i)) continue;
+      sum += state.fields.elevation[i]!;
+      n++;
+    }
+    expect(n).toBeGreaterThan(0);
+    return sum / n;
+  }
+
+  it('site 12 in isolation: the BFS seed adds ROCK — surface rises k× the legacy uplift', () => {
+    // Direct call, no advection, one full-stress seed on the seam: the C3
+    // uplift is the same rate constant read as thickness, so the seed cell's
+    // surface rise must be exactly k × the legacy path's rise.
+    const base = columnsStart();
+    const count = cellCount(N);
+    let seedCell = -1;
+    for (let i = 0; i < count && seedCell === -1; i++) {
+      if (isBoundary(base, i) && inCap(i, CONVERGE_DIR, 0.93)) seedCell = i;
+    }
+    expect(seedCell).not.toBe(-1);
+    const stress = new Float32Array(count);
+    stress[seedCell] = OROGENY_STRESS_REF_M_PER_YR; // norm exactly 1
+    const dt = 1e6;
+
+    const elevOn = base.fields.elevation.slice();
+    const thickOn = base.fields.crustalThicknessM.slice();
+    applyConvergentTopography(base, stress, elevOn, base.fields.crustType.slice(), dt, thickOn);
+    const onRise = elevOn[seedCell]! - base.fields.elevation[seedCell]!;
+
+    const elevOff = base.fields.elevation.slice();
+    applyConvergentTopography(base, stress, elevOff, base.fields.crustType.slice(), dt, null);
+    const offRise = elevOff[seedCell]! - base.fields.elevation[seedCell]!;
+
+    expect(offRise).toBeCloseTo(OROGENY_RATE_M_PER_YR * dt, 3); // 600 m, legacy
+    expect(onRise).toBeCloseTo(CONTINENTAL_BUOYANCY_FACTOR * OROGENY_RATE_M_PER_YR * dt, 1);
+    expect(thickOn[seedCell]! - base.fields.crustalThicknessM[seedCell]!).toBeCloseTo(
+      OROGENY_RATE_M_PER_YR * dt,
+      1,
+    );
+  });
+
+  it('head-on collision: belts grow, bounded by the 4815 m ceiling instead of 9 km, coherent', () => {
+    // The full system: BFS uplift at the rebound tempo PLUS site 7's column
+    // stacking — the declared step change (half the displaced ~36 km column
+    // is ~2.5 km of surface per overlap, far stronger than today's
+    // subaerial-relief rule) — so belts grow FAST, but the ceiling is now
+    // e(70 km) ≈ +4815 m instead of the legacy 9 km.
+    const on = runSystems(columnsStart(), 10);
+    const legacyStart = ((): PlanetState => {
+      const s = twoPlateState(N, P0, P1);
+      const elevation = s.fields.elevation.slice();
+      elevation.fill(200);
+      return { ...s, fields: { ...s.fields, elevation } };
+    })();
+    const off = runSystems(legacyStart, 10);
+    const onGrowth = beltMean(on) - 200;
+    const offGrowth = beltMean(off) - 200;
+    expect(onGrowth).toBeGreaterThan(50); // mountains genuinely grow
+    // The legacy arm runs to its 9 km cap; the columns arm is structurally
+    // bounded 4.2 km lower.
+    expect(onGrowth).toBeLessThan(offGrowth);
+    // Coherence held through the tectonics writers.
+    const { elevation, crustType, crustalThicknessM } = on.fields;
+    for (let i = 0; i < elevation.length; i++) {
+      if (crustType[i] !== 1) continue;
+      expect(elevation[i]).toBe(
+        Math.fround(
+          CONTINENTAL_ISOSTASY_DATUM_M + CONTINENTAL_BUOYANCY_FACTOR * crustalThicknessM[i]!,
+        ),
+      );
+    }
+  });
+
+  it('sustained collision binds the 70 km cap — counted, never exceeded, never snapped down', () => {
+    // ~35.8 km columns shortened at up to 600 m/Myr of thickness reach the
+    // ceiling within ~60-80 Myr of head-on convergence (runSystems runs
+    // tectonics only, so root decay does not oppose here).
+    const end = runSystems(columnsStart(), 120);
+    expect(end.globals.columnsThicknessCapBinds).toBeGreaterThan(0);
+    const eCeiling = Math.fround(
+      CONTINENTAL_ISOSTASY_DATUM_M + CONTINENTAL_BUOYANCY_FACTOR * CONTINENTAL_THICKNESS_MAX_M,
+    );
+    let atCap = 0;
+    for (let i = 0; i < cellCount(N); i++) {
+      if (end.fields.crustType[i] !== 1) continue;
+      expect(end.fields.crustalThicknessM[i]).toBeLessThanOrEqual(CONTINENTAL_THICKNESS_MAX_M);
+      expect(end.fields.elevation[i]).toBeLessThanOrEqual(eCeiling);
+      if (end.fields.crustalThicknessM[i]! === CONTINENTAL_THICKNESS_MAX_M) atCap++;
+    }
+    expect(atCap).toBeGreaterThan(0); // the belt genuinely saturates
   });
 });
 

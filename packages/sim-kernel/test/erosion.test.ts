@@ -309,10 +309,11 @@ describe('erosion under crustal columns (stage C2)', () => {
     const precipitation = state.fields.precipitation.slice();
     precipitation.fill(EROSION_PRECIP_REF);
     const elevation = state.fields.elevation.slice();
-    // Rough relief below the root-decay reference: diffusion is the only
+    // Rough relief whose inverted columns stay below the 39 km root-decay
+    // equilibrium (e ≤ +400 m ⇔ T ≤ T_eq since C3): diffusion is the only
     // active term, now a volume exchange on true cell areas.
     for (let i = 0; i < cellCount(N); i++) {
-      elevation[i] = (i * 2654435761) % 7 === 0 ? 900 : 200;
+      elevation[i] = (i * 2654435761) % 7 === 0 ? 350 : 100;
     }
     state = columnsWorld({ ...state, fields: { ...state.fields, elevation, precipitation } });
     const before = contPlusSedimentKg(state);
@@ -338,7 +339,10 @@ describe('erosion under crustal columns (stage C2)', () => {
         crustAge[i] = 100e6;
         elevation[i] = oceanicDepthForAge(100e6);
       } else {
-        elevation[i] = (i * 2654435761) % 7 === 0 ? 900 : 300;
+        // Below the 39 km decay equilibrium (e ≤ +400 m) so the C3 root
+        // relaxation — deliberately non-conservative — stays out of the
+        // conservation ledger under test.
+        elevation[i] = (i * 2654435761) % 7 === 0 ? 350 : 100;
       }
     }
     state = columnsWorld({
@@ -388,7 +392,9 @@ describe('erosion under crustal columns (stage C2)', () => {
       }
       const island = directionToIndex(normalize3([0, -0.4, -0.9]), N);
       crustType[island] = 1;
-      elevation[island] = 500;
+      // Below the 39 km decay equilibrium (e ≤ +400 m): export is the only
+      // active term on the island, so the drop ratio isolates the rebound.
+      elevation[island] = 350;
       return { ...s, fields: { ...s.fields, crustType, crustAge, elevation, precipitation } };
     }
     const island = directionToIndex(normalize3([0, -0.4, -0.9]), N);
@@ -408,7 +414,7 @@ describe('erosion under crustal columns (stage C2)', () => {
     // Same denudation law + rebound ⇒ the columns surface must fall far
     // slower — the erode-1-km-drop-142-m factor made measurable.
     const off1 = runSystems(islandWorld(), 20, [erosionSystem]);
-    const legacyDrop = 500 - off1.fields.elevation[island]!;
+    const legacyDrop = 350 - off1.fields.elevation[island]!;
     expect(legacyDrop).toBeGreaterThan(0);
     expect(eDrop).toBeLessThan(legacyDrop * 0.3);
     // And the island still never crosses sea level (the #65 cap, /k form).
@@ -451,6 +457,38 @@ describe('erosion under crustal columns (stage C2)', () => {
     expect(saturated).toBeGreaterThan(0);
     // The sink-side instrument saw the saturation.
     expect(end.globals.columnsExportShelfLimited).toBeGreaterThan(0);
+  });
+
+  it('C3 root decay: thickness above the 39 km equilibrium relaxes with the e-folding time', () => {
+    let state = twoPlateState(N, { pole: [0, 0, 1], omega: 0 }, { pole: [0, 1, 0], omega: 0 });
+    const precipitation = state.fields.precipitation.slice();
+    precipitation.fill(EROSION_PRECIP_REF);
+    const elevation = state.fields.elevation.slice();
+    // Uniform 50 km columns (e(50 km) ≈ +1966 m): diffusion is exactly zero,
+    // there is no coast, so the C3 thickness relaxation is fully isolated.
+    elevation.fill(continentalElevationForThicknessM(50000));
+    state = columnsWorld({ ...state, fields: { ...state.fields, elevation, precipitation } });
+    const steps = Math.round(OROGENIC_ROOT_DECAY_TAU_YEARS / state.params.stepYears); // 1 τ
+    const end = runSystems(state, steps, [erosionSystem]);
+    const expected = 39000 + (50000 - 39000) * Math.exp(-1);
+    for (let i = 0; i < cellCount(N); i++) {
+      expect(Math.abs(end.fields.crustalThicknessM[i]! - expected)).toBeLessThan(40);
+    }
+    assertCoherent(end);
+  });
+
+  it('C3 root decay: leaves columns at or below the equilibrium bit-untouched', () => {
+    let state = twoPlateState(N, { pole: [0, 0, 1], omega: 0 }, { pole: [0, 1, 0], omega: 0 });
+    const precipitation = state.fields.precipitation.slice();
+    precipitation.fill(EROSION_PRECIP_REF);
+    const elevation = state.fields.elevation.slice();
+    // Uniform 35 km columns: below T_eq, uniform (zero diffusion), landlocked
+    // — nothing in the system may move a single bit.
+    elevation.fill(continentalElevationForThicknessM(35000));
+    state = columnsWorld({ ...state, fields: { ...state.fields, elevation, precipitation } });
+    const end = runSystems(state, 100, [erosionSystem]);
+    expect(end.fields.crustalThicknessM).toEqual(state.fields.crustalThicknessM);
+    expect(end.fields.elevation).toEqual(state.fields.elevation);
   });
 
   it('flag-off leaves the C2 counters at zero (byte-neutral accounting)', () => {

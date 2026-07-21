@@ -46,7 +46,7 @@ function wholeSpherePlate(): PlanetState {
       emergentSuture: false,
       tensionRift: false,
     }),
-    globals: { landFraction: 0, co2: 280, meanTemperatureK: 0, seaLevelM: 0, waterInventoryM: 0, oxygen: 0, oxygenReductant: 0, abiogenesisYear: -1, plateSpeedMedianMPerYr: 0, plateSpeedMinMPerYr: 0, plateSpeedMaxMPerYr: 0, oceanicContinentalSpeedRatio: 0, speedContinentalityCorr: 0, speedSlabAttachmentCorr: 0, poleStability: 0, columnsExportedRockM3: 0, columnsExportShelfLimited: 0, columnsExportVisits: 0, columnsSedimentZeroedM3: 0, marginConsolidationFlipsTotal: 0 },
+    globals: { landFraction: 0, co2: 280, meanTemperatureK: 0, seaLevelM: 0, waterInventoryM: 0, oxygen: 0, oxygenReductant: 0, abiogenesisYear: -1, plateSpeedMedianMPerYr: 0, plateSpeedMinMPerYr: 0, plateSpeedMaxMPerYr: 0, oceanicContinentalSpeedRatio: 0, speedContinentalityCorr: 0, speedSlabAttachmentCorr: 0, poleStability: 0, columnsExportedRockM3: 0, columnsExportShelfLimited: 0, columnsExportVisits: 0, columnsSedimentZeroedM3: 0, columnsThicknessCapBinds: 0, marginConsolidationFlipsTotal: 0 },
     fields,
     plates: [makePlate({ pole: [1, 0, 0], omega: 4e-9 })],
     events: [],

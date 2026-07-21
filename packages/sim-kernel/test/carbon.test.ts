@@ -74,6 +74,7 @@ function carbonState(
       columnsExportShelfLimited: 0,
       columnsExportVisits: 0,
       columnsSedimentZeroedM3: 0,
+      columnsThicknessCapBinds: 0,
     },
     fields,
     plates: [],

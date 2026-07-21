@@ -21,7 +21,7 @@ import {
   ARC_MAX_ELEVATION_M,
   COLLISION_WIDTH_CELLS,
   COMPACT_ARC_MIN_CONT_NEIGHBORS,
-  CONTINENTAL_BUOYANCY_FACTOR,
+  CONTINENTAL_THICKNESS_MAX_M,
   OROGENY_MAX_ELEVATION_M,
   OROGENY_RATE_M_PER_YR,
   OROGENY_STRESS_REF_M_PER_YR,
@@ -204,14 +204,15 @@ export function applyConvergentTopography(
   elevation: Float32Array,
   crustType: Float32Array,
   dtYears: number,
-  // Crustal columns (C1): the caller's working thickness copy, or null when
-  // the mechanism is inactive. Continental writes (orogeny/collision BFS)
-  // mirror ΔT = Δe/k and re-derive elevation; maturation flips found the new
-  // column by inversion. Oceanic writes (arc growth, trench pinning) are
-  // untouched — the oceanic branch keeps today's machinery verbatim
-  // (proposal §2.4, trap T1).
+  // Crustal columns: the caller's working thickness copy, or null when the
+  // mechanism is inactive. Since stage C3 the orogeny/collision BFS is a
+  // real thickness transaction (crustal shortening as rock addition, capped
+  // at the 70 km collapse ceiling — see the seed loop); maturation flips
+  // found the new column by inversion. Oceanic writes (arc growth, trench
+  // pinning) are untouched — the oceanic branch keeps today's machinery
+  // verbatim (proposal §2.4, trap T1).
   crustalThicknessM: Float32Array | null = null,
-): void {
+): number {
   const N = state.params.gridN;
   const nbTable = neighborTable(N);
   const { plateId, crustAge } = state.fields;
@@ -391,6 +392,7 @@ export function applyConvergentTopography(
   // Deterministic: seeds are in ascending cell order, BFS order is fixed.
   // dist doubles as the visited marker; only touched cells are reset after
   // each seed, so cost stays O(seeds x width^2), not O(seeds x grid).
+  let capBinds = 0;
   const dist = new Int32Array(plateId.length).fill(-1);
   for (const seed of seeds) {
     const plate = plateId[seed.cell]!;
@@ -400,16 +402,29 @@ export function applyConvergentTopography(
       const c = queue[q]!;
       const d = dist[c]!;
       const falloff = (seed.width + 1 - d) / (seed.width + 1);
-      const uplifted = Math.min(orogenyCeiling, elevation[c]! + seed.amount * falloff);
       if (crustalThicknessM !== null) {
-        // C1 shim (site 12): orogenic uplift routes through thickness
-        // (ΔT = Δe/k) — crustal shortening as a real thickness addition is
-        // stage C3's replacement.
-        crustalThicknessM[c] =
-          crustalThicknessM[c]! + (uplifted - elevation[c]!) / CONTINENTAL_BUOYANCY_FACTOR;
-        elevation[c] = continentalElevationForThicknessM(crustalThicknessM[c]!);
+        // C3 (site 12): crustal shortening as a real thickness addition —
+        // the same rate constant read as ROCK (600 m/Myr of thickness at
+        // full stress: Tibetan-order shortening influx; the surface answers
+        // k·ΔT ≈ 85 m/Myr through the derivation). The 9 km ELEVATION
+        // ceiling retires on this path; the physical stop is the 70 km
+        // gravitational-collapse thickness cap (England & Houseman 1989),
+        // which only ever clips the ADDITION — it never snaps an already
+        // over-thick shim-era column down (root decay owns that relaxation).
+        const tCur = crustalThicknessM[c]!;
+        const add = seed.amount * falloff;
+        if (tCur + add > CONTINENTAL_THICKNESS_MAX_M) {
+          capBinds++;
+          if (tCur < CONTINENTAL_THICKNESS_MAX_M) {
+            crustalThicknessM[c] = CONTINENTAL_THICKNESS_MAX_M;
+            elevation[c] = continentalElevationForThicknessM(crustalThicknessM[c]!);
+          }
+        } else {
+          crustalThicknessM[c] = tCur + add;
+          elevation[c] = continentalElevationForThicknessM(crustalThicknessM[c]!);
+        }
       } else {
-        elevation[c] = uplifted;
+        elevation[c] = Math.min(orogenyCeiling, elevation[c]! + seed.amount * falloff);
       }
       if (d >= seed.width) continue;
       for (let k = 0; k < 4; k++) {
@@ -422,4 +437,5 @@ export function applyConvergentTopography(
     }
     for (const c of queue) dist[c] = -1;
   }
+  return capBinds;
 }

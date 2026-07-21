@@ -538,8 +538,10 @@ and deposit `Δsed = X·(ρ_cc/ρ_sed)·(Ω_i/Ω_j)` into the oceanic neighbor, 
 Σ(T·ρ_cc·A) + Σ(sed·ρ_sed·A) is invariant across the coast (per-system closure
 fixtures, erosion.test.ts). The never-below-sea / never-below-planation-level
 caps bind on the SURFACE (÷k in rock space); the shelf-room cap converts
-through the density + area ratio. Root decay stays a mechanical Δe/k shim
-until stage C3. Source/sink throughput accumulates into the cumulative
+through the density + area ratio. Root decay is physical since stage C3:
+thickness above the 39 km equilibrium relaxes toward it (τ 300 Myr
+unchanged), the target no longer reading sea level. Source/sink throughput
+accumulates into the cumulative
 `columns*` globals counters (rock exported m³, shelf-limited/total export
 visits; tectonics/crustFates add sediment swallowed at maturation/welds) —
 diagnostic-only, like the plate census: flag-off they hold 0, nothing reads
@@ -755,8 +757,9 @@ key:
 
 - **`crustalColumns` (docs/CRUSTAL_COLUMN_PROPOSAL.md; `isostasy.ts` +
   shims in tectonics/boundaries/crustFates/blockIsostasy/freeboard;
-  default OFF, stage C2 of the staged landing plan — erosion is real
-  thickness physics, see the erosion section above):** `crustalThicknessM`
+  default OFF, stage C3 of the staged landing plan — erosion, orogeny,
+  collision and root decay are real thickness physics):**
+  `crustalThicknessM`
   becomes the primary vertical state for continental crust and elevation
   its derived cache — dry Airy isostasy over a FIXED datum,
   `e = CONTINENTAL_ISOSTASY_DATUM_M + CONTINENTAL_BUOYANCY_FACTOR·T`
@@ -766,11 +769,24 @@ key:
   keeps the empirical age-depth machinery verbatim, with oceanic thickness
   pinned at 7.1 km as ledger bookkeeping. Since C2, EROSION's three fluxes
   (sites 13–15) are real thickness transactions with emergent rebound and
-  per-system mass closure; every OTHER continental elevation writer still
-  routes its Δe through thickness (ΔT = Δe/k — the C1 mechanical shims).
-  All writers re-derive elevation from the STORED thickness, so
-  `e === fround(C + k·T)` holds bit-exactly after every post-onset step
-  (the derivation-coherence fixture). Branch flips: ocean→continent
+  per-system mass closure. Since C3, so are the vertical injectors:
+  orogenic uplift (site 12) is crustal shortening — the same
+  `OROGENY_RATE_M_PER_YR` read as ROCK (600 m/Myr of thickness at full
+  stress, surface answering k·ΔT ≈ 85 m/Myr); collision thickening
+  (site 7) piles on half the displaced COLUMN (the declared step change —
+  ~10× today's subaerial-relief rule, submerged columns now contribute);
+  root decay (site 16) relaxes thickness above
+  `CONTINENTAL_THICKNESS_EQUILIBRIUM_M` (39 km) toward it, τ 300 Myr, the
+  target no longer reading sea level (T1). The 9 km ELEVATION ceilings
+  retire on the columns path: the stop is the 70 km gravitational-collapse
+  thickness cap (`CONTINENTAL_THICKNESS_MAX_M`, e(70 km) ≈ +4815 m), which
+  clips additions only — never snaps an over-thick column down — and every
+  bind is counted in the `columnsThicknessCapBinds` diagnostic global.
+  Every remaining continental elevation writer (freeboard servos, margins,
+  founder/caps — stages C5–C6) still routes its Δe through thickness
+  (ΔT = Δe/k — the C1 mechanical shims). All writers re-derive elevation
+  from the STORED thickness, so `e === fround(C + k·T)` holds bit-exactly
+  after every post-onset step (the derivation-coherence fixture). Branch flips: ocean→continent
   (arc maturation, weld bridges, consolidation hole fills) found T by
   inversion of the inherited elevation — elevation-continuous by
   construction; continent→ocean (retirement, consolidation island flips)
@@ -780,13 +796,14 @@ key:
   ≤ 1 f32 ULP), so the branched A/B is clean at any onset year. Shim-era
   validity domain (C1–C4): legacy-pump-flooded cells invert to unphysically
   thin, even negative, columns — declared Δ-space bookkeeping, regularized
-  at stage C5. Zero RNG anywhere in the model. Stages C3–C6 replace the
+  at stage C5. Zero RNG anywhere in the model. Stages C4–C6 replace the
   remaining shims with mass-budget physics one mechanism at a time
-  (orogeny/collision/root decay → maturation/sediment accretion → servo
-  retirement → margins), each gated in the proposal's acceptance grid; the
-  mass ledger (`computeCrustalMassLedger`, true solid angles × R²) closes
-  per-system for the C2 erosion terms (kernel fixtures) and remains a
-  reported tripwire over the declared shim flows.
+  (maturation/sediment accretion → servo retirement → margins), each gated
+  in the proposal's acceptance grid; the mass ledger
+  (`computeCrustalMassLedger`, true solid angles × R²) closes per-system
+  for the C2 erosion terms (kernel fixtures), carries orogeny/collision as
+  the declared shortening influx (C3), and remains a reported tripwire
+  over the remaining shim flows.
 
 `energyBalance` (#30): the Phase 3 climate hub. A Budyko–Sellers **zonal
 energy-balance model** solved on `ENERGY_BALANCE_BANDS` (90) equal-area
@@ -1077,13 +1094,15 @@ Globals     = { landFraction, co2, meanTemperatureK, seaLevelM, waterInventoryM,
                 // pair-flips, accumulated by the tectonics pass under
                 // params.plateCensus (0 otherwise):
                 marginConsolidationFlipsTotal,
-                // Crustal-columns C2 planation-throughput counters
-                // (cumulative; accumulated by erosion/tectonics/crustFates
+                // Crustal-columns C2/C3 throughput counters (cumulative;
+                // accumulated by erosion/tectonics/boundaries/crustFates
                 // ONLY while crustalColumnsActive, else 0; same
                 // diagnostic-only contract as the census scalars — sim-cli
-                // --crust-stats differences them into src/sat%/sink rates):
+                // --crust-stats differences the C2 ones into src/sat%/sink
+                // rates; columnsThicknessCapBinds counts 70 km-cap clips):
                 columnsExportedRockM3, columnsExportShelfLimited,
-                columnsExportVisits, columnsSedimentZeroedM3 }
+                columnsExportVisits, columnsSedimentZeroedM3,
+                columnsThicknessCapBinds }
 ```
 
 The **plate census** (Tectonics V2 stage 0, #110) is a pure, RNG-free
