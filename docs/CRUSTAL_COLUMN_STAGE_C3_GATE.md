@@ -179,3 +179,82 @@ re-staging, not a rewrite."**
 
 Everything ships default-off and flag-off-byte-identical; no rollback cost
 on any option.
+
+**Decision executed (2026-07-21): option (a)** — the owner directed
+continuation on the recommended path; the site-20 retirement landed as
+kernel `7e8fd5e` and the re-measurement follows in §6.
+
+## 6. Addendum — post-retirement re-measurement (the mass budget's own world)
+
+Same protocol (N=64, 4.5 Gyr, seeds {1, 42, 1337}, flag-on onset 0 vs the
+unchanged flag-off baselines). "Late" = past-1-Gyr mean.
+
+| | seed 1 | seed 42 | seed 1337 |
+|---|---|---|---|
+| late mean freeboard, m (off / on) | 5104 / **2720** | 4707 / **2914** | 4933 / **2961** |
+| @1.0 Gyr Δfreeboard, m | −2053 | −1009 | −394 |
+| 0–1 Gyr paired mean Δfb, m | −1102 | −928 | −181 |
+| late mean band% (off / on) | 6.3 / **14.7** | 6.7 / **13.6** | 7.0 / **13.3** |
+| final landA% (off / on) | 32.2 / 30.9 | 32.0 / 33.3 | 33.7 / 33.6 |
+| **landA% min (off / on)** | 21.9 / **28.6** | 22.2 / **25.8** | 23.2 / **28.0** |
+| peaks above sea ≥1 Gyr, mean (range) | 6543 (6207–6998) | 6620 (6258–7047) | 6676 (6416–7013) |
+| final Tmean / Tmin / Tmax, km | 41.7 / 20.5 / 69.9 | 44.1 / 20.1 / 69.9 | 44.4 / 20.2 / 69.9 |
+| final crustal mass, e21 kg (t=0: 28.7) | 30.1 | 31.4 | 31.4 |
+| cont crust fraction (late) | 0.384 | 0.391 | 0.41 |
+| src late m/Myr / sat% / sink | 7.0 / 17.2 / 4.3 | 7.7 / 16.6 / 4.9 | 7.6 / 16.9 / 4.8 |
+| thickness-cap binds (cumulative) | 14.8M | 15.8M | 16.8M |
+| dispersal / monopoly | **93.1%** / 0 | 98.2% / 0 | 100% / 0 |
+| late land components / largest comp | 211 / 0.319 | 200 / 0.354 | 180 / 0.39 |
+
+Scoring, all pre-registered gates:
+
+- **Freeboard −200 m by +1 Gyr: PASS** on the at-1-Gyr reading on all
+  seeds (−2053 / −1009 / −394 m); the 0–1 Gyr windowed mean on seed 1337
+  is −181 m (noted — divergence develops slowly on that seed, the deep-time
+  signal is unambiguous: late means fall 1.8–2.4 km below flag-off).
+- **Band strictly up: PASS** — late means roughly double (6.3–7.0% →
+  13.3–14.7%) on every seed, now WITHOUT the servo's help.
+- **landA floor: RESTORED with margin** — run minima 25.8–28.6% (breach
+  was 15.3–16.3%); finals 30.9–33.6%, inside the §3 25–35% target band.
+- **Peaks 5–9 km: PASS** (6.2–7.0 km). Cap binds rose to 15–17M (belts
+  live nearer the ceiling without the servo grinding them); zero
+  elevation-cap events, structurally.
+- **The mass budget CLOSES to +5–9% per 4.5 Gyr** (28.7 → 30.1–31.4e21 kg
+  — vs +40%+ at C1 and −30% in the servo-dominated C3 world), with Tmean
+  41.7–44.4 km near the 39 km reference and crust fraction in the T3 band.
+- **The shim-era negative lobe dissipated on its own:** Tmin ends at
+  20.1–20.5 km — the identity floor — without any regularization applied.
+  With the pump retired nothing re-floods interiors, and diffusion/
+  deposition fill the thin cells; the C5 one-time `max(T, 20 km)` credit
+  (§9 risk 3's feared large number) is now measured ≈ nil.
+- **Land shape: 3× recovered** from the servo world (largest land
+  component 0.32–0.39 of land late, vs 0.12; ~200 components vs ~350) —
+  still somewhat more fragmented than flag-off (0.40–0.44 / ~155): a
+  watch item for C4/C6, not a floor.
+- **Watch item:** seed-1 dispersal 93.1% (reference floor ~94.9%; the
+  other seeds 98.2/100%), driven by late-epoch large-plate phases that
+  never cross the 85% monopoly line (window 0 Myr everywhere) — the same
+  epochs the C7 scoreboard *wants* as supercontinent episodes. Re-scored
+  at C7.
+- **PNGs:** the best-looking worlds of the program to date — coherent
+  continental blocks, brown highland interiors ringed by green coastal
+  lowlands (the band made visible), shelf halos, ridge fabric. Numbers and
+  maps agree.
+
+Freeboard honesty against the headline: 2.7–3.0 km at water scale 1.0 is
+above the pre-registered 1.5–2.5 km partial-win band — but it now sits
+almost exactly where closure check 4's equation of state puts equilibrium
+columns over THIS planet's sea (≈ 2.4 km at sea −2.0 km; we measure sea
+−2.4…−2.6 km). The remaining gap to < 1.5 km at scale 1.0 was always
+assigned to erosion thinning platforms below equilibrium (running: src
+7.0–7.7 m/Myr, sink unclogged) plus the C4 accretion credit; and the REAL
+acceptance axis is the §3 water sweep (< 1.0 km at Earth-like endowments),
+which is a C7 measurement. The freeboard–endowment coupling is now an
+equation in the kernel, not a servo target.
+
+**Stage C3 (with the site-20 pull-forward) is complete: all pre-registered
+gates pass, all floors hold, two watch items recorded. Next per the staged
+plan: C4 (maturation gate re-key + sediment accretion, crust fraction read
+first — T3), then the C5 remainder (founder/caps/retirement re-keys + the
+now-trivial regularization), C6 margins, C7 calibration + the water
+sweep.**
