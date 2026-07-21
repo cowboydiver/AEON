@@ -13,8 +13,11 @@ import {
   crustalColumnsOnsetReinversion,
   foundCrustalThickness,
 } from '../src/isostasy';
+import { createRng } from '../src/rng';
 import { createInitialState, createPlanetParams, type PlanetState } from '../src/state';
 import { run, type Keyframe } from '../src/step';
+import { freeboardSystem } from '../src/systems/freeboard';
+import { twoPlateState } from './helpers';
 
 /**
  * Crustal-column model, stage C1 (docs/CRUSTAL_COLUMN_PROPOSAL.md §6/§7):
@@ -197,6 +200,51 @@ describe('derivation coherence through the full pipeline (the C1 invariant fixtu
       if (elevation[i] !== derived) incoherent++;
     }
     expect(incoherent).toBeGreaterThan(0);
+  });
+});
+
+describe('site-20 pump retirement (pulled forward from C5 — C3 gate record §5)', () => {
+  it('the epeirogenic servo is inert on the columns path, alive on the legacy path', () => {
+    // A landlocked all-continental world 2.6 km above the sea+400 target:
+    // the passive-margin band (site 21, still a shim) has no ocean to seed
+    // from, so the servo term is fully isolated. Legacy freeboard must pull
+    // the whole stack down at the bounded rate; the columns arm must leave
+    // every byte untouched — the servo and its buoyancy floor are retired,
+    // freeboard is the mass budget's output there.
+    const mk = (columns: boolean): PlanetState => {
+      const s = twoPlateState(32, { pole: [0, 0, 1], omega: 0 }, { pole: [0, 1, 0], omega: 0 });
+      const params = {
+        ...s.params,
+        freeboard: true, // twoPlateState pins the datum trio off; re-enable
+        crustalColumns: columns,
+        crustalColumnsOnsetYears: 0,
+      };
+      const elevation = s.fields.elevation.slice();
+      elevation.fill(3000);
+      const crustalThicknessM = foundCrustalThickness(elevation, s.fields.crustType);
+      for (let i = 0; i < elevation.length; i++) {
+        elevation[i] = continentalElevationForThicknessM(crustalThicknessM[i]!);
+      }
+      return { ...s, params, fields: { ...s.fields, elevation, crustalThicknessM } };
+    };
+
+    const on = mk(true);
+    const off = mk(false);
+    const dt = on.params.stepYears;
+    const ctx = { rng: createRng(on.params.seed).fork('sim') };
+    const onNext = freeboardSystem.apply(on, dt, ctx);
+    const offNext = freeboardSystem.apply(off, dt, ctx);
+
+    // Legacy: the uniform shift moved the whole stack down.
+    let offMovedDown = 0;
+    for (let i = 0; i < off.fields.elevation.length; i++) {
+      if (offNext.fields.elevation[i]! < off.fields.elevation[i]!) offMovedDown++;
+    }
+    expect(offMovedDown).toBe(off.fields.elevation.length);
+    // Columns: bit-identical fields — the servo contributes nothing.
+    expect(onNext.fields.elevation).toEqual(on.fields.elevation);
+    expect(onNext.fields.crustalThicknessM).toEqual(on.fields.crustalThicknessM);
+    assertCoherent(onNext.fields, 'post-freeboard columns arm');
   });
 });
 

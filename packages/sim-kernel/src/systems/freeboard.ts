@@ -64,6 +64,13 @@
  * unlike re-keying the age-depth curve itself, which the findings doc shows
  * is unconditionally divergent.
  *
+ * Under `crustalColumns` (docs/CRUSTAL_COLUMN_PROPOSAL.md): term (1) and
+ * its buoyancy floor are RETIRED on the columns path — freeboard is the
+ * mass budget's output there (site 20; pulled forward from stage C5 by the
+ * §9 risk 3 escalation after the C3 gate measured the servo dominating the
+ * honest injectors — see CRUSTAL_COLUMN_STAGE_C3_GATE.md). Term (2)
+ * remains a ΔT = Δe/k shim until C6.
+ *
  * Determinism: no RNG, fixed-order scans, one BFS in ascending seed order.
  * Gated behind params.freeboard (default off) with the standard
  * freeboardOnsetYears branched-A/B contract; flag-off is byte-identical
@@ -105,6 +112,15 @@ export const freeboardSystem: System = {
     // Previous step's sea level (the #33 explicit lag), like every other
     // cross-system read in the climate block.
     const seaLevel = state.globals.seaLevelM;
+    // Crustal columns: site 20 — term (1) and its buoyancy floor — is
+    // RETIRED on the columns path (pulled forward from stage C5 by the §9
+    // risk 3 escalation, C3 gate record §5: with the C3-honest injectors
+    // the servo dominated the vertical balance and ground the continents
+    // onto its sea+400 target). Freeboard is now the mass budget's output;
+    // the −17.8 km ratchet the floor guarded against is non-expressible in
+    // thickness space (e ≥ C + k·T_min once C5 regularizes the shim lobe).
+    // Term (2), the margin band, remains a C1 shim until C6.
+    const columns = crustalColumnsActive(state);
 
     // --- (1) Epeirogenic relaxation: uniform shift of the continental stack.
     let sum = 0;
@@ -159,26 +175,29 @@ export const freeboardSystem: System = {
     const elevation = old.slice();
     for (let i = 0; i < count; i++) {
       if (crustType[i] !== 1) continue;
-      // The downward shift stops at the buoyancy floor (continental crust
-      // floats — see CONTINENTAL_BUOYANCY_FLOOR_M for the unbounded-ratchet
-      // failure this prevents); cells already below the floor are left in
-      // place, never lifted. Upward shifts apply everywhere.
       let e = elevation[i]!;
-      if (delta >= 0) e += delta;
-      else if (e > floorLevel) e = Math.max(floorLevel, e + delta);
+      // The epeirogenic shift and its buoyancy floor apply on the LEGACY
+      // path only — retired on the columns path (see above). The downward
+      // shift stops at the buoyancy floor (continental crust floats — see
+      // CONTINENTAL_BUOYANCY_FLOOR_M for the unbounded-ratchet failure this
+      // prevents); cells already below the floor are left in place, never
+      // lifted. Upward shifts apply everywhere.
+      if (!columns) {
+        if (delta >= 0) e += delta;
+        else if (e > floorLevel) e = Math.max(floorLevel, e + delta);
+      }
       // Downward only, clamped at the shelf level — subsidence never raises
       // a cell and never digs the shelf past its target.
       if (depth[i] !== -1 && e > shelfLevel) e = Math.max(shelfLevel, e - subside);
       elevation[i] = e;
     }
 
-    // Crustal columns (C1, sites 20–21): the epeirogenic shift and margin
-    // subsidence above ran bit-identically to the flag-off path; reconcile
-    // their continental Δe into thickness space at exit (uniform Δe ⇒
-    // uniform ΔT = Δe/k — the servo's mechanical shim). Stage C5 RETIRES
-    // term (1) outright and C6 replaces term (2) with the finite-budget
-    // rift-margin thinning (proposal §6).
-    if (crustalColumnsActive(state)) {
+    // Crustal columns (C1, site 21): the margin subsidence above ran with
+    // today's arithmetic; reconcile its continental Δe into thickness space
+    // at exit (ΔT = Δe/k — the mechanical shim). Stage C6 replaces it with
+    // the finite-budget rift-margin thinning (proposal §6). Site 20
+    // contributes no Δe here anymore — retired above.
+    if (columns) {
       const crustalThicknessM = state.fields.crustalThicknessM.slice();
       reconcileContinentalColumns(crustType, old, elevation, crustalThicknessM);
       return { ...state, fields: { ...state.fields, elevation, crustalThicknessM } };
