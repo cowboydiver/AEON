@@ -137,16 +137,19 @@ Options:
                               120e6→30e6→0 for the cooldown-retirement measurement.
                               No effect without --tension-rift (flag-off always
                               uses the legacy 120 Myr constant)
-  --crustal-columns           enable the crustal-column model, stage C2
+  --crustal-columns           enable the crustal-column model, stage C3
                               (docs/CRUSTAL_COLUMN_PROPOSAL.md): crustal
                               thickness is the primary vertical state and
                               continental elevation its Airy-derived cache.
-                              At C2, erosion (interior diffusion, coastal
-                              export, marine planation) runs as thickness-
-                              space mass transactions — denudation with
-                              emergent isostatic rebound (erode 1 km of rock,
-                              the surface drops ~142 m) — while the other
-                              writers remain C1 shims of today's mechanisms.
+                              Erosion (C2) and the vertical injectors (C3:
+                              orogeny as crustal shortening, collision as
+                              column stacking, root decay toward the 39 km
+                              equilibrium) run as thickness-space mass
+                              transactions — denudation with emergent
+                              isostatic rebound, the 9 km elevation caps
+                              retired for the 70 km collapse ceiling
+                              (e(70 km) ≈ +4815 m) — while the freeboard/
+                              margin/founder writers remain C1 shims.
                               --crust-stats gains src/sat%/sink planation-
                               throughput columns (default off; measure with
                               --ab crustal-columns)

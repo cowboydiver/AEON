@@ -155,4 +155,10 @@ the same mass space as the remover.
   revert; the shipped world is untouched either way.
 
 Everything above ships default-off and flag-off-byte-identical, so neither
-option carries rollback cost. Awaiting the owner's call before entering C3.
+option carries rollback cost.
+
+**Owner decision (2026-07-21): option (a) — proceed to C3 under the
+documented re-staging.** The band/freeboard hypsometry gates are re-armed
+as the C2+C3 combined exit; C3 carries its own pre-registered gates (peaks
+5–9 km at scale 1.0, zero elevation-cap clamp events with the 70 km
+thickness cap counted instead, belts still die in interiors) on top.
