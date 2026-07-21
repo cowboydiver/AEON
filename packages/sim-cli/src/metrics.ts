@@ -83,6 +83,9 @@ export interface CrustStats {
   /** Minimum elevation — the buoyancy-floor ratchet tripwire (#101): healthy
    *  is trench order (−6..−9 km), not the pre-floor −17 km runaway. */
   minElevationM: number;
+  /** Maximum elevation — with the C3 peaks gate read as max − seaLevelM
+   *  (peak height above the sea; target 5–9 km at water scale 1.0). */
+  maxElevationM: number;
   /**
    * Emergent share of the sphere, AREA-WEIGHTED (true solid angles, not cell
    * count — the warp's ±35% per-cell area distortion is real; crustal-columns
@@ -154,6 +157,7 @@ export function computeCrustStats(
   let ocean = 0;
   let shallow = 0;
   let minElevation = Infinity;
+  let maxElevation = -Infinity;
   let land0m = 0;
   let landArea = 0;
   let bandArea = 0;
@@ -168,6 +172,7 @@ export function computeCrustStats(
     const a = solidAngle[i]!;
     totalArea += a;
     if (e < minElevation) minElevation = e;
+    if (e > maxElevation) maxElevation = e;
     if (e >= 0) land0m++;
     const isCont = crustType[i] === 1;
     if (isCont) {
@@ -202,6 +207,7 @@ export function computeCrustStats(
     shallowOceanFrac: shallow / count,
     landFrac: (count - ocean) / count,
     minElevationM: minElevation,
+    maxElevationM: maxElevation,
     landFracArea: landArea / totalArea,
     bandOccupancyFrac: landArea > 0 ? bandArea / landArea : 0,
     landFrac0m: land0m / count,

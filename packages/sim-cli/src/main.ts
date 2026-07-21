@@ -590,6 +590,12 @@ function reportCrustStats(keyframe: Keyframe): void {
         'src'.padStart(6),
         'sat%'.padStart(6),
         'sink'.padStart(6),
+        // C3 instruments: max elevation (the peaks gate reads max − sea) and
+        // the CUMULATIVE 70 km thickness-cap bind count (the C3 gate counts
+        // these; the retired 9 km elevation caps are structurally absent
+        // from the columns path).
+        'max elev'.padStart(9),
+        'capB'.padStart(8),
       ].join('  '),
     );
     printedCrustStatsHeader = true;
@@ -648,6 +654,8 @@ function reportCrustStats(keyframe: Keyframe): void {
       src.padStart(6),
       sat.padStart(6),
       sink.padStart(6),
+      s.maxElevationM.toFixed(0).padStart(9),
+      String(g.columnsThicknessCapBinds).padStart(8),
     ].join('  '),
   );
 }
