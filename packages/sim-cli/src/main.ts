@@ -4,6 +4,8 @@ import { parseArgs } from 'node:util';
 import { PNG } from 'pngjs';
 import {
   CONTINENTAL_CRUST_FRACTION,
+  CRUST_DENSITY_CONTINENTAL_KG_M3,
+  SEDIMENT_DENSITY_KG_M3,
   FIELD_NAMES,
   createPlanetParams,
   hashFloat32Array,
@@ -135,13 +137,19 @@ Options:
                               120e6→30e6→0 for the cooldown-retirement measurement.
                               No effect without --tension-rift (flag-off always
                               uses the legacy 120 Myr constant)
-  --crustal-columns           enable the crustal-column model, stage C1
+  --crustal-columns           enable the crustal-column model, stage C2
                               (docs/CRUSTAL_COLUMN_PROPOSAL.md): crustal
-                              thickness becomes the primary vertical state and
-                              continental elevation its Airy-derived cache,
-                              through mechanical shims that reproduce today's
-                              behavior distributionally (default off; measure
-                              with --ab crustal-columns)
+                              thickness is the primary vertical state and
+                              continental elevation its Airy-derived cache.
+                              At C2, erosion (interior diffusion, coastal
+                              export, marine planation) runs as thickness-
+                              space mass transactions — denudation with
+                              emergent isostatic rebound (erode 1 km of rock,
+                              the surface drops ~142 m) — while the other
+                              writers remain C1 shims of today's mechanisms.
+                              --crust-stats gains src/sat%/sink planation-
+                              throughput columns (default off; measure with
+                              --ab crustal-columns)
   --suture-analysis           print the stage-4 rift-lifecycle harness (#114):
                               re-suture interval of rifted halves from the event
                               log (the pre-#59 ~16 Myr re-suture pathology is the
@@ -526,6 +534,17 @@ function report(keyframe: Keyframe): void {
 }
 
 let printedCrustStatsHeader = false;
+// Crustal-columns C2 planation-throughput rates: the kernel counters are
+// cumulative since t=0 (state.ts `columns*` globals), so the per-keyframe
+// source/sink rates come from differencing against the previous keyframe.
+let prevCrustStatsRow: {
+  timeYears: number;
+  exportedRockM3: number;
+  shelfLimited: number;
+  visits: number;
+  zeroedM3: number;
+  sedimentVolumeM3: number;
+} | null = null;
 
 /** Per-keyframe sea-level/flooding row (the #101 calibration table). */
 function reportCrustStats(keyframe: Keyframe): void {
@@ -550,12 +569,24 @@ function reportCrustStats(keyframe: Keyframe): void {
         'min elev'.padStart(10),
         // Crustal-columns C1 instruments: continental thickness stats (km,
         // RAW — the shim-era negative lobe is deliberately visible) and the
-        // total crustal mass ledger (1e21 kg; a reported tripwire until the
-        // C2 closure gates).
+        // total crustal mass ledger (1e21 kg; the C2 erosion terms close
+        // per-system, the remaining shim writers stay declared flows).
         'Tmean'.padStart(7),
         'Tmin'.padStart(7),
         'Tmax'.padStart(6),
         'mass'.padStart(7),
+        // Crustal-columns C2 instruments (proposal §6 C2 gate: the measured
+        // planation rate against the 4.7 m/Myr budget, BOTH sides), from the
+        // cumulative kernel counters differenced between keyframes:
+        //   src   thickness export off the continents (coastal export +
+        //         marine planation), m of rock / Myr over continental area;
+        //   sat%  share of export visits bound by shelf room (sink choke);
+        //   sink  net sediment leaving the shelves (subduction consumption +
+        //         maturation swallowing), rock-equivalent m / Myr over
+        //         continental area. '-' until the mechanism engages.
+        'src'.padStart(6),
+        'sat%'.padStart(6),
+        'sink'.padStart(6),
       ].join('  '),
     );
     printedCrustStatsHeader = true;
@@ -563,6 +594,36 @@ function reportCrustStats(keyframe: Keyframe): void {
   const s = computeCrustStats(keyframe, params.gridN, params.radiusMeters);
   const pct = (x: number): string => `${(x * 100).toFixed(1)}%`;
   const km = (x: number): string => (x / 1000).toFixed(1);
+  const g = keyframe.globals;
+  let src = '-';
+  let sat = '-';
+  let sink = '-';
+  if (prevCrustStatsRow !== null && g.columnsExportVisits > 0) {
+    const dtMyr = (keyframe.timeYears - prevCrustStatsRow.timeYears) / 1e6;
+    if (dtMyr > 0 && s.contAreaM2 > 0) {
+      const dExported = g.columnsExportedRockM3 - prevCrustStatsRow.exportedRockM3;
+      const dVisits = g.columnsExportVisits - prevCrustStatsRow.visits;
+      const dLimited = g.columnsExportShelfLimited - prevCrustStatsRow.shelfLimited;
+      const dZeroed = g.columnsSedimentZeroedM3 - prevCrustStatsRow.zeroedM3;
+      const dStock = s.sedimentVolumeM3 - prevCrustStatsRow.sedimentVolumeM3;
+      src = (dExported / dtMyr / s.contAreaM2).toFixed(2);
+      sat = dVisits > 0 ? pct(dLimited / dVisits) : '-';
+      // Sediment out of the shelf stock = deposits − Δstock − maturation
+      // swallowing, converted back to rock-equivalent meters (× ρ_sed/ρ_cc).
+      const sedToRock = SEDIMENT_DENSITY_KG_M3 / CRUST_DENSITY_CONTINENTAL_KG_M3;
+      const depositsSedM3 = dExported / sedToRock;
+      const subductedRockM3 = (depositsSedM3 - dZeroed - dStock) * sedToRock;
+      sink = (subductedRockM3 / dtMyr / s.contAreaM2).toFixed(2);
+    }
+  }
+  prevCrustStatsRow = {
+    timeYears: keyframe.timeYears,
+    exportedRockM3: g.columnsExportedRockM3,
+    shelfLimited: g.columnsExportShelfLimited,
+    visits: g.columnsExportVisits,
+    zeroedM3: g.columnsSedimentZeroedM3,
+    sedimentVolumeM3: s.sedimentVolumeM3,
+  };
   console.log(
     [
       formatYears(s.timeYears),
@@ -581,6 +642,9 @@ function reportCrustStats(keyframe: Keyframe): void {
       km(s.contThicknessMinM).padStart(7),
       km(s.contThicknessMaxM).padStart(6),
       (s.crustalMassKg / 1e21).toFixed(1).padStart(7),
+      src.padStart(6),
+      sat.padStart(6),
+      sink.padStart(6),
     ].join('  '),
   );
 }

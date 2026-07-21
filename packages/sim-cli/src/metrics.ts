@@ -121,9 +121,16 @@ export interface CrustStats {
    * The crustal mass-ledger total, kg (kernel `computeCrustalMassLedger`):
    * continental + oceanic crust + oceanic sediment over true cell areas. At
    * C1 a reported tripwire (the shims mirror today's non-conservative
-   * mechanisms); per-term closure gates activate at C2.
+   * mechanisms); the C2 erosion terms now close per-system (kernel fixtures),
+   * while the C1-shim writers (orogeny, freeboard, arcs) stay declared flows.
    */
   crustalMassKg: number;
+  /** Continental crust area, m² (true solid angles × R²) — the denominator
+   *  the C2 source/sink planation rates are quoted over. */
+  contAreaM2: number;
+  /** Oceanic sediment stock, m³ (Σ sedimentM × true area) — differenced
+   *  between keyframes for the sink-side subduction throughput. */
+  sedimentVolumeM3: number;
 }
 
 /** Ocean shallower than this counts as shelf sea in CrustStats. */
@@ -137,7 +144,7 @@ export function computeCrustStats(
   gridN: number,
   radiusMeters: number = EARTH_RADIUS_M,
 ): CrustStats {
-  const { crustType, elevation, crustalThicknessM } = keyframe.fields;
+  const { crustType, elevation, crustalThicknessM, sedimentM } = keyframe.fields;
   const count = elevation.length;
   const seaLevelM = keyframe.globals.seaLevelM;
   const solidAngle = cellSolidAngleTable(gridN);
@@ -154,6 +161,8 @@ export function computeCrustStats(
   let thickSum = 0;
   let thickMin = Infinity;
   let thickMax = -Infinity;
+  let contArea = 0;
+  let sedVolume = 0;
   for (let i = 0; i < count; i++) {
     const e = elevation[i]!;
     const a = solidAngle[i]!;
@@ -164,10 +173,13 @@ export function computeCrustStats(
     if (isCont) {
       cont++;
       contSum += e;
+      contArea += a;
       const t = crustalThicknessM[i]!;
       thickSum += t;
       if (t < thickMin) thickMin = t;
       if (t > thickMax) thickMax = t;
+    } else {
+      sedVolume += sedimentM[i]! * a;
     }
     if (e < seaLevelM) {
       ocean++;
@@ -197,6 +209,8 @@ export function computeCrustStats(
     contThicknessMinM: cont > 0 ? thickMin : 0,
     contThicknessMaxM: cont > 0 ? thickMax : 0,
     crustalMassKg: ledger.continentalMassKg + ledger.oceanicMassKg + ledger.sedimentMassKg,
+    contAreaM2: contArea * radiusMeters * radiusMeters,
+    sedimentVolumeM3: sedVolume * radiusMeters * radiusMeters,
   };
 }
 
