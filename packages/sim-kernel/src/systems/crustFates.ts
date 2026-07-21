@@ -47,11 +47,14 @@
 import { labelContinentalComponents } from '../components';
 import {
   CONTINENTAL_BUOYANCY_FACTOR,
+  CONTINENTAL_THICKNESS_MAX_M,
+  CRUST_DENSITY_CONTINENTAL_KG_M3,
   CRUST_FATE_MERGE_GAP_CELLS,
   CRUST_FATE_SMALL_AREA_M2,
   CRUST_FATE_SUBSIDENCE_M_PER_YR,
   MICROCONTINENT_FOUNDER_ELEVATION_M,
   OCEANIC_CRUST_THICKNESS_M,
+  SEDIMENT_DENSITY_KG_M3,
 } from '../constants';
 import { platformDatumOffsetM } from '../datums';
 import { cellCount, cellSolidAngleTable, neighborTable } from '../grid';
@@ -152,6 +155,8 @@ export const crustFatesSystem: System = {
     // crustFates half of the site-22 ledger exit), on true areas. Only
     // accumulated under the active column model — flag-off globals hold 0.
     let sedimentZeroedM3 = 0;
+    // C4: weld accretions clipped by the 70 km collapse ceiling.
+    let capBinds = 0;
     const solidAngle = columns ? cellSolidAngleTable(N) : null;
     const r2 = state.params.radiusMeters * state.params.radiusMeters;
 
@@ -206,15 +211,36 @@ export const crustFatesSystem: System = {
           // cell welded twice in overlapping docks is already 0 the second
           // time — no double count).
           if (solidAngle !== null) sedimentZeroedM3 += sedimentM[b]! * solidAngle[b]! * r2;
-          sedimentM[b] = 0;
           plateId[b] = targetPlate;
           // C1 branch flip (site 18): the accreted weld cell founds its
           // column by inversion of the weld elevation — continuous, and the
-          // ledger's docking credit.
+          // ledger's docking credit. C4 (site 22, crustFates half): the
+          // strait's sediment cover then ACCRETES into the founded column —
+          // ΔT = sed·ρ_sed/ρ_cc, mass-conserving, elevation re-derived from
+          // the stored thickness — instead of being destroyed; the C2
+          // counter above keeps counting the same flux through this exit.
+          // The 70 km collapse ceiling clips the addition (C3 semantics):
+          // only the above-cap remainder is destroyed, counted as a bind.
           if (columns) {
             crustalThicknessM ??= pre.crustalThicknessM.slice();
             foundColumnFromElevation(elevation, crustalThicknessM, b);
+            const sed = sedimentM[b]!;
+            if (sed > 0) {
+              const tCur = crustalThicknessM[b]!;
+              const add = sed * (SEDIMENT_DENSITY_KG_M3 / CRUST_DENSITY_CONTINENTAL_KG_M3);
+              if (tCur + add > CONTINENTAL_THICKNESS_MAX_M) {
+                capBinds++;
+                if (tCur < CONTINENTAL_THICKNESS_MAX_M) {
+                  crustalThicknessM[b] = CONTINENTAL_THICKNESS_MAX_M;
+                  elevation[b] = continentalElevationForThicknessM(crustalThicknessM[b]!);
+                }
+              } else {
+                crustalThicknessM[b] = tCur + add;
+                elevation[b] = continentalElevationForThicknessM(crustalThicknessM[b]!);
+              }
+            }
           }
+          sedimentM[b] = 0;
         }
         // The whole terrane transfers to the large component's plate so the
         // weld is durable under subsequent advection.
@@ -279,12 +305,13 @@ export const crustFatesSystem: System = {
 
     let next: PlanetState = {
       ...state,
-      ...(sedimentZeroedM3 > 0
+      ...(sedimentZeroedM3 > 0 || capBinds > 0
         ? {
             globals: {
               ...state.globals,
               columnsSedimentZeroedM3:
                 state.globals.columnsSedimentZeroedM3 + sedimentZeroedM3,
+              columnsThicknessCapBinds: state.globals.columnsThicknessCapBinds + capBinds,
             },
           }
         : {}),

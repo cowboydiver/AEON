@@ -3,10 +3,15 @@ import { oceanicDepthForAge } from '../src/bathymetry';
 import {
   ARC_EMERGENT_GROWTH_FACTOR,
   ARC_GROWTH_RATE_M_PER_YR,
+  ARC_MATURATION_THICKNESS_M,
   ARC_MAX_ELEVATION_M,
   OROGENY_STRESS_REF_M_PER_YR,
 } from '../src/constants';
-import { cellCount, neighbors } from '../src/grid';
+import { cellCount, cellSolidAngleTable, neighbors } from '../src/grid';
+import {
+  continentalElevationForThicknessM,
+  foundCrustalThickness,
+} from '../src/isostasy';
 import { applyConvergentTopography } from '../src/systems/boundaries';
 import type { PlanetState } from '../src/state';
 import { runSystems, twoPlateState, type TestPlateSpec } from './helpers';
@@ -109,6 +114,102 @@ describe('compact arc maturation (#89)', () => {
     const workCrust = state.fields.crustType.slice();
     applyConvergentTopography(state, stressAt(cell), workElev, workCrust, DT);
     expect(workCrust[cell]).toBe(1);
+  });
+});
+
+describe('C4 absolute maturation gate (crustal columns, site 10)', () => {
+  // Surgical harness mirroring matureScenario: one active margin cell whose
+  // arc has built to `startElev`, one continental 4-neighbor (belt rule
+  // satisfied). The columns arm passes a working thickness copy (the caller
+  // contract — tectonics passes null when the mechanism is inactive); the
+  // legacy arm passes null. Growth applies before the gate check, so the
+  // observable gate level is on the POST-growth elevation.
+  function mature(
+    startElev: number,
+    columns: boolean,
+    sea?: { seaLevelM: number },
+  ): {
+    matured: boolean;
+    elevation: number;
+    thickness: number;
+    stats: ReturnType<typeof applyConvergentTopography>;
+  } {
+    const { state: base, cell, p0nb } = arcWorld(1);
+    const crustType = base.fields.crustType.slice();
+    const elevation = base.fields.elevation.slice();
+    crustType[p0nb[0]!] = 1;
+    elevation[cell] = startElev;
+    const state: PlanetState = {
+      ...base,
+      params: sea ? { ...base.params, seaLevelDatums: true } : base.params,
+      globals: sea ? { ...base.globals, seaLevelM: sea.seaLevelM } : base.globals,
+      fields: { ...base.fields, crustType, elevation },
+    };
+    const workElev = state.fields.elevation.slice();
+    const workCrust = state.fields.crustType.slice();
+    const workThickness = columns ? foundCrustalThickness(workElev, workCrust) : null;
+    const stats = applyConvergentTopography(
+      state,
+      stressAt(cell),
+      workElev,
+      workCrust,
+      DT,
+      workThickness,
+    );
+    return {
+      matured: workCrust[cell] === 1,
+      elevation: workElev[cell]!,
+      thickness: workThickness !== null ? workThickness[cell]! : NaN,
+      stats,
+    };
+  }
+
+  const GATE = continentalElevationForThicknessM(ARC_MATURATION_THICKNESS_M); // ≈ −2306 m
+
+  it('columns: a deep arc matures at the absolute e(20 km) gate, far below the legacy −500 m', () => {
+    // Post-growth elevation −3200 + 1250 = −1950: above the absolute gate,
+    // well below the legacy gate — only the columns path matures.
+    const on = mature(-3200, true);
+    const off = mature(-3200, false);
+    expect(on.matured).toBe(true);
+    expect(on.elevation).toBeGreaterThanOrEqual(GATE);
+    expect(off.matured).toBe(false);
+    // Legacy path is uninstrumented: stats structurally zero.
+    expect(off.stats).toEqual({
+      capBinds: 0,
+      maturationFlips: 0,
+      maturationElevSumM: 0,
+      maturationCreditM3: 0,
+    });
+  });
+
+  it('columns: the inversion-at-flip founds ≥ 20 km by algebra, and the stats count it', () => {
+    const on = mature(-3200, true);
+    // T = (e − C)/k at the post-growth elevation: ≥ the maturation thickness
+    // exactly when the gate passes — no clamp anywhere in the flip.
+    expect(on.thickness).toBeGreaterThanOrEqual(ARC_MATURATION_THICKNESS_M);
+    expect(on.elevation).toBeCloseTo(continentalElevationForThicknessM(on.thickness), 2);
+    // C4 diagnostics: one flip, its depth, its founded-mass credit on true areas.
+    expect(on.stats.maturationFlips).toBe(1);
+    expect(on.stats.maturationElevSumM).toBeCloseTo(on.elevation, 6);
+    const { cell } = arcWorld(1);
+    const omega = cellSolidAngleTable(N)[cell]!;
+    const r = twoPlateState(N, P0, P1).params.radiusMeters;
+    expect(on.stats.maturationCreditM3).toBeCloseTo(on.thickness * omega * r * r, -6);
+  });
+
+  it('columns: the gate does NOT ride the sea — a fallen sea matures legacy arcs, not columns arcs (T1)', () => {
+    // Sea at −4000 with seaLevelDatums on: the legacy gate rides to −4500,
+    // so a post-growth −4350 arc matures there; the absolute columns gate
+    // stays at −2306 and the same arc stays an oceanic arc.
+    const sea = { seaLevelM: -4000 };
+    const off = mature(-5600, false, sea);
+    const on = mature(-5600, true, sea);
+    expect(off.matured).toBe(true);
+    expect(on.matured).toBe(false);
+    expect(on.elevation).toBeLessThan(GATE);
+    expect(on.stats.maturationFlips).toBe(0);
+    expect(on.stats.maturationCreditM3).toBe(0);
   });
 });
 

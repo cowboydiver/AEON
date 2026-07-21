@@ -757,8 +757,9 @@ key:
 
 - **`crustalColumns` (docs/CRUSTAL_COLUMN_PROPOSAL.md; `isostasy.ts` +
   shims in tectonics/boundaries/crustFates/blockIsostasy/freeboard;
-  default OFF, stage C3 of the staged landing plan — erosion, orogeny,
-  collision and root decay are real thickness physics):**
+  default OFF, stage C4 of the staged landing plan — erosion, the vertical
+  injectors, the creation re-key and the epeirogenic-servo retirement are
+  real thickness physics):**
   `crustalThicknessM`
   becomes the primary vertical state for continental crust and elevation
   its derived cache — dry Airy isostasy over a FIXED datum,
@@ -782,28 +783,44 @@ key:
   thickness cap (`CONTINENTAL_THICKNESS_MAX_M`, e(70 km) ≈ +4815 m), which
   clips additions only — never snaps an over-thick column down — and every
   bind is counted in the `columnsThicknessCapBinds` diagnostic global.
-  Every remaining continental elevation writer (freeboard servos, margins,
-  founder/caps — stages C5–C6) still routes its Δe through thickness
+  The site-20 epeirogenic servo and its buoyancy floor are RETIRED on this
+  path (pulled forward from C5 at the C3 gate — the measured pump that
+  ground continents to sea + 400; freeboard is the mass budget's output;
+  freeboard.ts keeps only the passive-margin shim there). Since C4, the
+  CREATION budget is thickness-keyed too: the arc-maturation gate (site 10,
+  gate only — growth untouched) is the ABSOLUTE derived-equivalent
+  elevation `e(ARC_MATURATION_THICKNESS_M) ≈ −2306 m` instead of the
+  sea-keyed −500 m (one less sea-keyed target — T1; the creation-budget
+  shift is measured crust-fraction-first — T3), and sediment ACCRETES into
+  the columns at continentalization (site 22 — the tectonics sweep and the
+  crustFates weld bridges): ΔT = sed·ρ_sed/ρ_cc, mass-conserving, clipped
+  at the collapse ceiling (only the above-cap remainder is destroyed,
+  counted as a bind) — closing the ledger leak the C1–C3 shims declared.
+  The remaining continental elevation writers (passive margins,
+  founder/caps — stages C5–C6) still route their Δe through thickness
   (ΔT = Δe/k — the C1 mechanical shims). All writers re-derive elevation
   from the STORED thickness, so `e === fround(C + k·T)` holds bit-exactly
   after every post-onset step (the derivation-coherence fixture). Branch flips: ocean→continent
   (arc maturation, weld bridges, consolidation hole fills) found T by
   inversion of the inherited elevation — elevation-continuous by
-  construction; continent→ocean (retirement, consolidation island flips)
+  construction, and under the C4 absolute gate the maturation inversion is
+  ≥ 20 km by algebra; continent→ocean (retirement, consolidation island flips)
   re-found a 7.1 km oceanic column, the ledger debit. Founding: t=0
   inversion at init (unconditional — flag-off/A/B arms carry identical
   bytes) + an onset re-inversion over the current elevation (zero-snap:
   ≤ 1 f32 ULP), so the branched A/B is clean at any onset year. Shim-era
   validity domain (C1–C4): legacy-pump-flooded cells invert to unphysically
-  thin, even negative, columns — declared Δ-space bookkeeping, regularized
-  at stage C5. Zero RNG anywhere in the model. Stages C4–C6 replace the
-  remaining shims with mass-budget physics one mechanism at a time
-  (maturation/sediment accretion → servo retirement → margins), each gated
-  in the proposal's acceptance grid; the mass ledger
+  thin, even negative, columns — declared Δ-space bookkeeping (measured
+  ≈ dissipated after the servo retirement), regularized at stage C5. Zero
+  RNG anywhere in the model. Stages C5–C6 replace the remaining shims with
+  mass-budget physics (founder/caps/retirement re-keys → margins), each
+  gated in the proposal's acceptance grid; the mass ledger
   (`computeCrustalMassLedger`, true solid angles × R²) closes per-system
-  for the C2 erosion terms (kernel fixtures), carries orogeny/collision as
-  the declared shortening influx (C3), and remains a reported tripwire
-  over the remaining shim flows.
+  for the C2 erosion terms and the C4 sediment accretion (kernel
+  fixtures), carries orogeny/collision as the declared shortening influx
+  (C3) and arc maturation as the declared creation credit (counted in
+  `columnsMaturationCreditM3`), and remains a reported tripwire over the
+  remaining shim flows.
 
 `energyBalance` (#30): the Phase 3 climate hub. A Budyko–Sellers **zonal
 energy-balance model** solved on `ENERGY_BALANCE_BANDS` (90) equal-area
@@ -1094,15 +1111,20 @@ Globals     = { landFraction, co2, meanTemperatureK, seaLevelM, waterInventoryM,
                 // pair-flips, accumulated by the tectonics pass under
                 // params.plateCensus (0 otherwise):
                 marginConsolidationFlipsTotal,
-                // Crustal-columns C2/C3 throughput counters (cumulative;
+                // Crustal-columns C2/C3/C4 throughput counters (cumulative;
                 // accumulated by erosion/tectonics/boundaries/crustFates
                 // ONLY while crustalColumnsActive, else 0; same
                 // diagnostic-only contract as the census scalars — sim-cli
                 // --crust-stats differences the C2 ones into src/sat%/sink
-                // rates; columnsThicknessCapBinds counts 70 km-cap clips):
+                // rates and the C4 ones into matF/matE/crea/accr;
+                // columnsThicknessCapBinds counts 70 km-cap clips
+                // (orogeny/collision C3 + sediment accretion C4); the C4
+                // trio carries the maturation-depth distribution and the
+                // arc-accretion creation credit):
                 columnsExportedRockM3, columnsExportShelfLimited,
                 columnsExportVisits, columnsSedimentZeroedM3,
-                columnsThicknessCapBinds }
+                columnsThicknessCapBinds, columnsMaturationFlips,
+                columnsMaturationElevSumM, columnsMaturationCreditM3 }
 ```
 
 The **plate census** (Tectonics V2 stage 0, #110) is a pure, RNG-free

@@ -501,18 +501,36 @@ export interface Globals {
    *  saturation denominator. */
   columnsExportVisits: number;
   /** Sediment volume consumed when crust became continental (the tectonics
-   *  maturation sweep + crustFates weld bridges — the site-22 ledger exits,
-   *  shims until stage C4 accretes it as thickness), m³ of sediment. Lets the
-   *  sink-side subduction throughput be inferred honestly from the sediment
-   *  stock: subducted ≈ deposits − zeroed − Δstock. */
+   *  maturation sweep + crustFates weld bridges — the site-22 exits), m³ of
+   *  sediment. Since stage C4 this flux ACCRETES into the columns as
+   *  thickness (ΔT = sed·ρ_sed/ρ_cc — mass-conserving) instead of being
+   *  destroyed; the counter keeps its name and meaning (sediment leaving the
+   *  ocean sediment stock at continentalization), so the sink-side
+   *  subduction inference is unchanged: subducted ≈ deposits − zeroed −
+   *  Δstock. */
   columnsSedimentZeroedM3: number;
-  /** Crustal-columns C3: cumulative count of orogeny/collision thickness
-   *  additions clipped by CONTINENTAL_THICKNESS_MAX_M (the gravitational-
-   *  collapse ceiling that replaces the 9 km elevation caps on the columns
-   *  path — the C3 gate counts these binds; the retired elevation caps are
-   *  structurally absent from that path, so their count is zero by
-   *  construction). Same diagnostic-only contract as the counters above. */
+  /** Crustal-columns C3/C4: cumulative count of thickness additions clipped
+   *  by CONTINENTAL_THICKNESS_MAX_M (the gravitational-collapse ceiling that
+   *  replaces the 9 km elevation caps on the columns path — the C3 gate
+   *  counts these binds; the retired elevation caps are structurally absent
+   *  from that path, so their count is zero by construction). Sources:
+   *  orogeny/collision additions (C3) and sediment accretions at
+   *  maturation/welds (C4 — only the above-cap remainder is destroyed,
+   *  declared). Same diagnostic-only contract as the counters above. */
   columnsThicknessCapBinds: number;
+  /** Crustal-columns C4: cumulative count of arc-maturation flips on the
+   *  columns path (the maturation-depth distribution's denominator; the
+   *  legacy path is not instrumented — flag-off holds 0). */
+  columnsMaturationFlips: number;
+  /** Crustal-columns C4: cumulative Σ of flip-time elevation over those
+   *  flips, m — sim-cli differences Δsum/Δflips into the mean maturation
+   *  depth per interval (proposal §2.3 closure check 3: the absolute gate
+   *  puts flips near e(20 km) = −2306 m regardless of the sea). */
+  columnsMaturationElevSumM: number;
+  /** Crustal-columns C4: cumulative rock volume founded at arc-maturation
+   *  flips (inversion thickness × true cell area), m³ — the arc-accretion
+   *  creation credit, the creation side of the §6 C4 budget print. */
+  columnsMaturationCreditM3: number;
 }
 
 export interface PlanetState {
@@ -696,6 +714,9 @@ export function createInitialState(params: PlanetParams): PlanetState {
       columnsExportVisits: 0,
       columnsSedimentZeroedM3: 0,
       columnsThicknessCapBinds: 0,
+      columnsMaturationFlips: 0,
+      columnsMaturationElevSumM: 0,
+      columnsMaturationCreditM3: 0,
     },
     fields,
     plates: [],

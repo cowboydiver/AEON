@@ -1,9 +1,14 @@
 import { describe, expect, it } from 'vitest';
 import {
+  CONTINENTAL_BUOYANCY_FACTOR,
+  CONTINENTAL_ISOSTASY_DATUM_M,
+  CRUST_DENSITY_CONTINENTAL_KG_M3,
   CRUST_FATE_SUBSIDENCE_M_PER_YR,
   MICROCONTINENT_FOUNDER_ELEVATION_M,
+  SEDIMENT_DENSITY_KG_M3,
 } from '../src/constants';
-import { faceRCToIndex } from '../src/grid';
+import { cellSolidAngleTable, faceRCToIndex } from '../src/grid';
+import { continentalThicknessForElevationM } from '../src/isostasy';
 import { crustFatesSystem } from '../src/systems/crustFates';
 import type { PlanetState } from '../src/state';
 import { runSystems, twoPlateState } from './helpers';
@@ -107,6 +112,46 @@ describe('crustFates system (#88)', () => {
       expect(out.fields.crustType[c]).toBe(1);
       expect(out.fields.elevation[c]).toBe(1000);
     }
+  });
+
+  it('C4 weld accretion (site 22, crustFates half): the strait sediment accretes into the founded column', () => {
+    // The dock scenario above with sediment cover painted on the strait and
+    // crustal columns active: each bridge cell founds its column by
+    // inversion of the weld elevation (C1), then its cover accretes as
+    // thickness — ΔT = sed·ρ_sed/ρ_cc, mass-conserving — instead of being
+    // destroyed (C4). Elevation is re-derived from the stored thickness.
+    const SED_M = 400;
+    let world = paintBlock(oceanWorld(), 0, 6, 6, 1000, 0, 0);
+    world = paintBlock(world, 0, 1, 2, 500, 8, 1);
+    const bridge = [faceRCToIndex(0, MID, MID + 6, N), faceRCToIndex(0, MID, MID + 7, N)];
+    const sedimentM = world.fields.sedimentM.slice();
+    for (const b of bridge) sedimentM[b] = SED_M;
+    world = {
+      ...world,
+      timeYears: 5e6,
+      params: { ...world.params, crustalColumns: true },
+      fields: { ...world.fields, sedimentM },
+    };
+
+    const out = crustFatesSystem.apply(world, world.params.stepYears, { rng: undefined as never });
+
+    const weldT = Math.fround(continentalThicknessForElevationM(500));
+    const dT = SED_M * (SEDIMENT_DENSITY_KG_M3 / CRUST_DENSITY_CONTINENTAL_KG_M3);
+    let expectedZeroedM3 = 0;
+    for (const b of bridge) {
+      expect(out.fields.crustType[b]).toBe(1);
+      expect(out.fields.sedimentM[b]).toBe(0);
+      const t = out.fields.crustalThicknessM[b]!;
+      expect(t).toBeCloseTo(weldT + dT, 1);
+      // Coherent, and the accreted cover lifts the weld by k·ΔT ≈ 48 m.
+      expect(out.fields.elevation[b]).toBe(
+        Math.fround(CONTINENTAL_ISOSTASY_DATUM_M + CONTINENTAL_BUOYANCY_FACTOR * t),
+      );
+      expect(out.fields.elevation[b]).toBeGreaterThan(500);
+      expectedZeroedM3 += SED_M * cellSolidAngleTable(N)[b]! * world.params.radiusMeters ** 2;
+    }
+    // The C2 exit counter keeps counting the same flux through this exit.
+    expect(out.globals.columnsSedimentZeroedM3).toBeCloseTo(expectedZeroedM3, -6);
   });
 
   it('founders an out-of-range small component: rate-bounded sink, then crust retirement', () => {

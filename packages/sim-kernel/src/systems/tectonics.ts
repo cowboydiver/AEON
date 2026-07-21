@@ -34,11 +34,13 @@ import {
   COLLISION_THICKENING_FACTOR,
   CONTINENTAL_BUOYANCY_FACTOR,
   CONTINENTAL_THICKNESS_MAX_M,
+  CRUST_DENSITY_CONTINENTAL_KG_M3,
   MARGIN_CONSOLIDATION_HOLE_MIN_NEIGHBORS,
   MICROCONTINENT_FOUNDER_ELEVATION_M,
   OCEAN_RELIEF_RELAX_M_PER_YR,
   OCEANIC_CRUST_THICKNESS_M,
   OROGENY_MAX_ELEVATION_M,
+  SEDIMENT_DENSITY_KG_M3,
 } from '../constants';
 import { bathymetryDatumOffsetM, landDatumOffsetM, platformDatumOffsetM } from '../datums';
 import {
@@ -175,8 +177,9 @@ function applyTectonics(state: PlanetState, dtYears: number): PlanetState {
   // Convergent topography (#16): trench + arc + orogenic uplift, driven by
   // this step's stress; mature arcs become continental crust. Mutates only
   // the local elevation/crustType (and, under crustalColumns, thickness)
-  // copies.
-  const orogenyCapBinds = applyConvergentTopography(
+  // copies. The returned stats are columns-path diagnostics (all 0 flag-off):
+  // C3 cap binds plus the C4 maturation-depth/creation-credit counters.
+  const convergent = applyConvergentTopography(
     next,
     boundaryStress,
     elevation,
@@ -321,18 +324,41 @@ function applyTectonics(state: PlanetState, dtYears: number): PlanetState {
   // oceanic path (a consolidation-flipped island, #67) re-enters the ocean
   // ledger carrying the 0 this sweep gave it while it was continental, so
   // the invariant survives the flip in both directions.
-  // Crustal-columns C2 sink instrumentation: what this sweep consumes is the
-  // site-22 ledger exit (sediment swallowed at maturation — a shim until C4
-  // accretes it as thickness), counted on true areas so the sim-cli sink-side
-  // planation report can separate it from subduction throughput. Flag-off the
-  // counter is never touched and the globals hold 0.
+  // Crustal-columns C4 (site 22): on the columns path the consumed cover
+  // ACCRETES into the column — ΔT = sed·ρ_sed/ρ_cc, the mass-conserving
+  // conversion, elevation re-derived from the stored thickness (coherence) —
+  // closing the ledger leak the C1–C3 shim declared (the cover used to be
+  // destroyed here). The C2 counter keeps counting the same flux through
+  // this exit (m³ of sediment leaving the ocean sediment stock), so the
+  // sim-cli sink-side arithmetic is unchanged; the flux is now a
+  // conservative credit rather than a leak. Flag-off: zeroed exactly as
+  // today, counter untouched, globals hold 0.
   let sedimentZeroedM3 = 0;
-  if (columns) {
+  let sweepCapBinds = 0;
+  if (crustalThicknessM !== null) {
     const solidAngle = cellSolidAngleTable(N);
     const r2 = state.params.radiusMeters * state.params.radiusMeters;
+    const sedToRock = SEDIMENT_DENSITY_KG_M3 / CRUST_DENSITY_CONTINENTAL_KG_M3;
     for (let i = 0; i < crustType.length; i++) {
       if (crustType[i] === 1 && sedimentM[i]! > 0) {
         sedimentZeroedM3 += sedimentM[i]! * solidAngle[i]! * r2;
+        const tCur = crustalThicknessM[i]!;
+        const add = sedimentM[i]! * sedToRock;
+        // The 70 km collapse ceiling clips accretion exactly as it clips
+        // orogeny/collision additions (C3 semantics): a thick stack docking
+        // onto a near-ceiling column (hole fills inherit up to e(70 km))
+        // loses only its above-cap remainder — the pre-C4 fate of the WHOLE
+        // stack — counted as a cap bind, never a snap-down.
+        if (tCur + add > CONTINENTAL_THICKNESS_MAX_M) {
+          sweepCapBinds++;
+          if (tCur < CONTINENTAL_THICKNESS_MAX_M) {
+            crustalThicknessM[i] = CONTINENTAL_THICKNESS_MAX_M;
+            elevation[i] = continentalElevationForThicknessM(crustalThicknessM[i]!);
+          }
+        } else {
+          crustalThicknessM[i] = tCur + add;
+          elevation[i] = continentalElevationForThicknessM(crustalThicknessM[i]!);
+        }
       }
     }
   }
@@ -355,8 +381,17 @@ function applyTectonics(state: PlanetState, dtYears: number): PlanetState {
         (state.params.plateCensus ? consolidationFlips : 0),
       columnsSedimentZeroedM3: next.globals.columnsSedimentZeroedM3 + sedimentZeroedM3,
       // C3: advect-time collision binds are already in next.globals (advect
-      // accumulates them); add this step's orogeny-BFS binds on top.
-      columnsThicknessCapBinds: next.globals.columnsThicknessCapBinds + orogenyCapBinds,
+      // accumulates them); add this step's orogeny-BFS binds and the C4
+      // sediment-accretion clips on top.
+      columnsThicknessCapBinds:
+        next.globals.columnsThicknessCapBinds + convergent.capBinds + sweepCapBinds,
+      // C4: maturation-depth distribution + arc-accretion creation credit
+      // (columns-path only — the stats are structurally 0 flag-off).
+      columnsMaturationFlips: next.globals.columnsMaturationFlips + convergent.maturationFlips,
+      columnsMaturationElevSumM:
+        next.globals.columnsMaturationElevSumM + convergent.maturationElevSumM,
+      columnsMaturationCreditM3:
+        next.globals.columnsMaturationCreditM3 + convergent.maturationCreditM3,
     },
     fields: {
       ...next.fields,

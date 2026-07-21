@@ -18,6 +18,7 @@ import {
   ARC_EMERGENT_GROWTH_FACTOR,
   ARC_GROWTH_RATE_M_PER_YR,
   ARC_MATURATION_ELEVATION_M,
+  ARC_MATURATION_THICKNESS_M,
   ARC_MAX_ELEVATION_M,
   COLLISION_WIDTH_CELLS,
   COMPACT_ARC_MIN_CONT_NEIGHBORS,
@@ -29,7 +30,7 @@ import {
   TRENCH_EXTRA_DEPTH_M,
 } from '../constants';
 import { bathymetryDatumOffsetM, landDatumOffsetM, platformDatumOffsetM } from '../datums';
-import { cellCenterTable, neighborTable, type Vec3 } from '../grid';
+import { cellCenterTable, cellSolidAngleTable, neighborTable, type Vec3 } from '../grid';
 import { continentalElevationForThicknessM, foundColumnFromElevation } from '../isostasy';
 import { plateVelocityAt } from '../plates';
 import type { PlanetState } from '../state';
@@ -191,13 +192,32 @@ export function overrides(
  *    and relax to the age-depth curve (a documented Phase 1 simplification:
  *    dead arcs sink instantly instead of persisting as seamounts).
  *
- * Arcs that build above ARC_MATURATION_ELEVATION_M become continental crust
- * (arc magmatism is how continental crust is manufactured) — the source of
- * new continental area balancing what collisions consume.
+ * Arcs that build above the maturation gate become continental crust (arc
+ * magmatism is how continental crust is manufactured) — the source of new
+ * continental area balancing what collisions consume. The gate is
+ * ARC_MATURATION_ELEVATION_M (sea-keyed under seaLevelDatums) on the legacy
+ * path and the absolute e(ARC_MATURATION_THICKNESS_M) on the columns path
+ * (C4 site 10 — see the gate comment below).
  *
  * Mutates only the caller's working `elevation`/`crustType` copies — never
- * state fields.
+ * state fields. Returns the columns-path diagnostics (all exactly 0 when
+ * `crustalThicknessM` is null — the legacy path is not instrumented).
  */
+export interface ConvergentTopographyStats {
+  /** Orogeny/collision thickness additions clipped by the 70 km ceiling
+   *  (C3 — accumulated into `globals.columnsThicknessCapBinds`). */
+  capBinds: number;
+  /** Arc-maturation flips this step (C4 — the maturation-depth
+   *  distribution's denominator). */
+  maturationFlips: number;
+  /** Σ of flip-time elevation over those flips, m (C4 — mean maturation
+   *  depth per interval = Δsum/Δflips in sim-cli). */
+  maturationElevSumM: number;
+  /** Rock volume founded at those flips (inversion thickness × true cell
+   *  area), m³ — the arc-accretion creation credit (C4). */
+  maturationCreditM3: number;
+}
+
 export function applyConvergentTopography(
   state: PlanetState,
   stress: Float32Array,
@@ -212,7 +232,7 @@ export function applyConvergentTopography(
   // pinning) are untouched — the oceanic branch keeps today's machinery
   // verbatim (proposal §2.4, trap T1).
   crustalThicknessM: Float32Array | null = null,
-): number {
+): ConvergentTopographyStats {
   const N = state.params.gridN;
   const nbTable = neighborTable(N);
   const { plateId, crustAge } = state.fields;
@@ -242,7 +262,19 @@ export function applyConvergentTopography(
   // sea level when the mechanism is on, and is exactly 0 when off.
   const datumOffset = platformDatumOffsetM(state);
   const arcCeiling = datumOffset + ARC_MAX_ELEVATION_M;
-  const maturationGate = datumOffset + ARC_MATURATION_ELEVATION_M;
+  // C4 (site 10, gate only — the growth term above is untouched): on the
+  // columns path the maturation gate is the ABSOLUTE derived-equivalent
+  // elevation e(ARC_MATURATION_THICKNESS_M) ≈ −2306 m — one condition, two
+  // readings: the cell's elevation-inversion thickness reaches the cited
+  // 20 km (Suyehiro et al. 1996; Calvert 2011) exactly when its elevation
+  // reaches this level, so the inversion-at-flip below founds ≥ 20 km by
+  // algebra. The gate stops reading sea level here (one less sea-keyed
+  // target — trap T1); the creation-budget shift this causes is the reason
+  // stage C4 reads crust fraction FIRST (trap T3, proposal §6 C4).
+  const maturationGate =
+    crustalThicknessM !== null
+      ? continentalElevationForThicknessM(ARC_MATURATION_THICKNESS_M)
+      : datumOffset + ARC_MATURATION_ELEVATION_M;
   // Freeboard regulation (datums.ts): the orogeny ceiling is a land-relief
   // datum ("mountains cap near 9 km" — above the SEA); under the freeboard
   // mechanism it rides the dynamic sea level, and is exactly the absolute
@@ -257,6 +289,9 @@ export function applyConvergentTopography(
   // is decided in one attachment pass after the margin loop, not inline —
   // see below.
   const matureCandidates: number[] = [];
+  let maturationFlips = 0;
+  let maturationElevSumM = 0;
+  let maturationCreditM3 = 0;
 
   interface Seed {
     cell: number;
@@ -359,6 +394,11 @@ export function applyConvergentTopography(
       }
       frontier = next;
     }
+    // C4 diagnostics: the maturation-depth distribution and the founded-mass
+    // creation credit, on true solid-angle areas (trap T7). Columns-path
+    // only; the legacy path stays uninstrumented (stats hold 0).
+    const solidAngle = crustalThicknessM !== null ? cellSolidAngleTable(N) : null;
+    const r2 = state.params.radiusMeters * state.params.radiusMeters;
     for (const i of matureCandidates) {
       if (belt[i] !== 1) continue;
       if (compactArcs) {
@@ -379,10 +419,15 @@ export function applyConvergentTopography(
       // C1 branch flip (oceanic → continental, proposal §2.4): the matured
       // cell founds its column by inversion of its current elevation — the
       // assigned mass IS the ledger's arc-accretion credit, and elevation is
-      // continuous through the flip by construction. The maturation GATE
-      // itself is untouched until stage C4.
-      if (crustalThicknessM !== null) {
+      // continuous through the flip by construction. Under the C4 absolute
+      // gate the inversion is ≥ ARC_MATURATION_THICKNESS_M by algebra.
+      // The cell's sediment cover, if any, accretes as thickness in the
+      // tectonics site-22 sweep this same step (C4).
+      if (crustalThicknessM !== null && solidAngle !== null) {
         foundColumnFromElevation(elevation, crustalThicknessM, i);
+        maturationFlips++;
+        maturationElevSumM += elevation[i]!;
+        maturationCreditM3 += crustalThicknessM[i]! * solidAngle[i]! * r2;
       }
     }
   }
@@ -437,5 +482,5 @@ export function applyConvergentTopography(
     }
     for (const c of queue) dist[c] = -1;
   }
-  return capBinds;
+  return { capBinds, maturationFlips, maturationElevSumM, maturationCreditM3 };
 }

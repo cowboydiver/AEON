@@ -4,8 +4,11 @@ import {
   CONTINENTAL_ISOSTASY_DATUM_M,
   CONTINENTAL_REFERENCE_ELEVATION_M,
   CONTINENTAL_REFERENCE_THICKNESS_M,
+  CRUST_DENSITY_CONTINENTAL_KG_M3,
   OCEANIC_CRUST_THICKNESS_M,
+  SEDIMENT_DENSITY_KG_M3,
 } from '../src/constants';
+import { cellSolidAngleTable, faceRCToIndex } from '../src/grid';
 import {
   computeCrustalMassLedger,
   continentalElevationForThicknessM,
@@ -17,7 +20,8 @@ import { createRng } from '../src/rng';
 import { createInitialState, createPlanetParams, type PlanetState } from '../src/state';
 import { run, type Keyframe } from '../src/step';
 import { freeboardSystem } from '../src/systems/freeboard';
-import { twoPlateState } from './helpers';
+import { tectonicsSystem } from '../src/systems/tectonics';
+import { runSystems, twoPlateState } from './helpers';
 
 /**
  * Crustal-column model, stage C1 (docs/CRUSTAL_COLUMN_PROPOSAL.md §6/§7):
@@ -245,6 +249,90 @@ describe('site-20 pump retirement (pulled forward from C5 — C3 gate record §5
     expect(onNext.fields.elevation).toEqual(on.fields.elevation);
     expect(onNext.fields.crustalThicknessM).toEqual(on.fields.crustalThicknessM);
     assertCoherent(onNext.fields, 'post-freeboard columns arm');
+  });
+});
+
+describe('C4 sediment accretion (site 22 — the ledger leak closed)', () => {
+  // Static all-continental two-plate world (zero motion, so the tectonics
+  // maturation sweep is the only writer that can touch the planted cell):
+  // one interior cell hand-planted with sediment cover, which the sweep —
+  // the single enforcement point of "sedimentM = 0 on continental crust" —
+  // must ACCRETE as thickness on the columns path and destroy flag-off.
+  const N32 = 32;
+  const CELL = faceRCToIndex(0, 16, 16, N32);
+  const SED_M = 300;
+  const SED_TO_ROCK = SEDIMENT_DENSITY_KG_M3 / CRUST_DENSITY_CONTINENTAL_KG_M3;
+
+  function sedimentWorld(columns: boolean): PlanetState {
+    const s = twoPlateState(N32, { pole: [0, 0, 1], omega: 0 }, { pole: [0, 1, 0], omega: 0 });
+    const elevation = s.fields.elevation.slice();
+    elevation.fill(500);
+    const crustalThicknessM = foundCrustalThickness(elevation, s.fields.crustType);
+    for (let i = 0; i < elevation.length; i++) {
+      elevation[i] = continentalElevationForThicknessM(crustalThicknessM[i]!);
+    }
+    const sedimentM = s.fields.sedimentM.slice();
+    sedimentM[CELL] = SED_M;
+    return {
+      ...s,
+      params: { ...s.params, crustalColumns: columns },
+      fields: { ...s.fields, elevation, crustalThicknessM, sedimentM },
+    };
+  }
+
+  it('columns: the cover converts to thickness (ΔT = sed·ρ_sed/ρ_cc), coherent and counted', () => {
+    const start = sedimentWorld(true);
+    const tBefore = start.fields.crustalThicknessM[CELL]!;
+    const out = runSystems(start, 1, [tectonicsSystem]);
+    const tAfter = out.fields.crustalThicknessM[CELL]!;
+
+    expect(out.fields.sedimentM[CELL]).toBe(0);
+    // Mass-conserving conversion, to f32 store tolerance at ~40 km magnitude.
+    expect(tAfter).toBeCloseTo(tBefore + SED_M * SED_TO_ROCK, 1);
+    // Coherence: elevation re-derived from the STORED thickness, bit-exact.
+    expect(out.fields.elevation[CELL]).toBe(
+      Math.fround(CONTINENTAL_ISOSTASY_DATUM_M + CONTINENTAL_BUOYANCY_FACTOR * tAfter),
+    );
+    // A sediment-free neighbor is untouched by the sweep.
+    const nb = faceRCToIndex(0, 16, 18, N32);
+    expect(out.fields.crustalThicknessM[nb]).toBe(start.fields.crustalThicknessM[nb]);
+    // The C2 exit counter keeps counting the same flux (m³ of sediment).
+    const area = cellSolidAngleTable(N32)[CELL]! * start.params.radiusMeters ** 2;
+    expect(out.globals.columnsSedimentZeroedM3).toBeCloseTo(SED_M * area, -6);
+    // Per-cell mass equality IS the ledger closure: ΔT·ρ_cc = sed·ρ_sed.
+    expect((tAfter - tBefore) * CRUST_DENSITY_CONTINENTAL_KG_M3).toBeCloseTo(
+      SED_M * SEDIMENT_DENSITY_KG_M3,
+      -3,
+    );
+  });
+
+  it('columns: accretion clips at the 70 km collapse ceiling — above-cap remainder destroyed, bind counted', () => {
+    // A near-ceiling column (the C3 cap semantics extend to the C4 adder):
+    // elevation e(70 km) inverts to exactly the ceiling, so the whole
+    // accretion is above-cap — thickness pins at 70 km, the destroyed
+    // remainder is the declared loss, and the bind is counted.
+    const start = sedimentWorld(true);
+    const elevation = start.fields.elevation.slice();
+    const crustalThicknessM = start.fields.crustalThicknessM.slice();
+    crustalThicknessM[CELL] = 70000;
+    elevation[CELL] = continentalElevationForThicknessM(70000);
+    const world = { ...start, fields: { ...start.fields, elevation, crustalThicknessM } };
+    const out = runSystems(world, 1, [tectonicsSystem]);
+    expect(out.fields.sedimentM[CELL]).toBe(0);
+    expect(out.fields.crustalThicknessM[CELL]).toBeLessThanOrEqual(70000);
+    expect(out.fields.crustalThicknessM[CELL]).toBeCloseTo(70000, 0);
+    expect(out.globals.columnsThicknessCapBinds).toBeGreaterThan(0);
+  });
+
+  it('flag-off: the cover is destroyed exactly as today and the columns stay untouched', () => {
+    const start = sedimentWorld(false);
+    const out = runSystems(start, 1, [tectonicsSystem]);
+    expect(out.fields.sedimentM[CELL]).toBe(0);
+    expect(out.fields.crustalThicknessM).toEqual(start.fields.crustalThicknessM);
+    expect(out.fields.elevation[CELL]).toBe(start.fields.elevation[CELL]);
+    expect(out.globals.columnsSedimentZeroedM3).toBe(0);
+    expect(out.globals.columnsMaturationFlips).toBe(0);
+    expect(out.globals.columnsMaturationCreditM3).toBe(0);
   });
 });
 
