@@ -137,21 +137,28 @@ Options:
                               120e6→30e6→0 for the cooldown-retirement measurement.
                               No effect without --tension-rift (flag-off always
                               uses the legacy 120 Myr constant)
-  --crustal-columns           enable the crustal-column model, stage C3
+  --crustal-columns           enable the crustal-column model, stage C4
                               (docs/CRUSTAL_COLUMN_PROPOSAL.md): crustal
                               thickness is the primary vertical state and
                               continental elevation its Airy-derived cache.
-                              Erosion (C2) and the vertical injectors (C3:
+                              Erosion (C2), the vertical injectors (C3:
                               orogeny as crustal shortening, collision as
                               column stacking, root decay toward the 39 km
-                              equilibrium) run as thickness-space mass
-                              transactions — denudation with emergent
-                              isostatic rebound, the 9 km elevation caps
-                              retired for the 70 km collapse ceiling
-                              (e(70 km) ≈ +4815 m) — while the freeboard/
-                              margin/founder writers remain C1 shims.
-                              --crust-stats gains src/sat%/sink planation-
-                              throughput columns (default off; measure with
+                              equilibrium, the 9 km elevation caps retired
+                              for the 70 km collapse ceiling), the site-20
+                              epeirogenic-servo retirement (pulled forward
+                              from C5 — freeboard is the mass budget's
+                              output), and the C4 creation re-key (arc
+                              maturation gates on the ABSOLUTE
+                              e(20 km) ≈ −2306 m instead of the sea-keyed
+                              −500 m; sediment ACCRETES into columns at
+                              maturation/welds — the site-22 leak closed)
+                              all run as thickness-space mass transactions,
+                              while the margin/founder writers remain C1
+                              shims. --crust-stats gains src/sat%/sink
+                              planation-throughput columns plus the C4
+                              matF/matE/crea/accr maturation and creation-
+                              budget columns (default off; measure with
                               --ab crustal-columns)
   --suture-analysis           print the stage-4 rift-lifecycle harness (#114):
                               re-suture interval of rifted halves from the event
@@ -547,6 +554,9 @@ let prevCrustStatsRow: {
   visits: number;
   zeroedM3: number;
   sedimentVolumeM3: number;
+  maturationFlips: number;
+  maturationElevSumM: number;
+  maturationCreditM3: number;
 } | null = null;
 
 /** Per-keyframe sea-level/flooding row (the #101 calibration table). */
@@ -596,6 +606,22 @@ function reportCrustStats(keyframe: Keyframe): void {
         // from the columns path).
         'max elev'.padStart(9),
         'capB'.padStart(8),
+        // C4 instruments (proposal §6 C4: maturation-depth distribution +
+        // creation/consumption budget), per keyframe interval from the
+        // cumulative kernel counters:
+        //   matF  arc-maturation flips in the interval;
+        //   matE  mean flip-time elevation, m (the absolute gate puts this
+        //         near e(20 km) = −2306 m — closure check 3);
+        //   crea  arc-accretion creation credit (founded columns), rock m /
+        //         Myr over continental area — the creation side answering
+        //         the src/sink consumption columns;
+        //   accr  sediment accreted into columns at maturation/welds
+        //         (site 22, conservative since C4), rock-equivalent m/Myr
+        //         over continental area. '-' until the mechanism engages.
+        'matF'.padStart(6),
+        'matE'.padStart(7),
+        'crea'.padStart(6),
+        'accr'.padStart(6),
       ].join('  '),
     );
     printedCrustStatsHeader = true;
@@ -607,6 +633,10 @@ function reportCrustStats(keyframe: Keyframe): void {
   let src = '-';
   let sat = '-';
   let sink = '-';
+  let matF = '-';
+  let matE = '-';
+  let crea = '-';
+  let accr = '-';
   if (prevCrustStatsRow !== null && g.columnsExportVisits > 0) {
     const dtMyr = (keyframe.timeYears - prevCrustStatsRow.timeYears) / 1e6;
     if (dtMyr > 0 && s.contAreaM2 > 0) {
@@ -619,10 +649,20 @@ function reportCrustStats(keyframe: Keyframe): void {
       sat = dVisits > 0 ? pct(dLimited / dVisits) : '-';
       // Sediment out of the shelf stock = deposits − Δstock − maturation
       // swallowing, converted back to rock-equivalent meters (× ρ_sed/ρ_cc).
+      // (Since C4 the swallowed flux accretes into the columns — same exit,
+      // now a conservative credit; the arithmetic is unchanged.)
       const sedToRock = SEDIMENT_DENSITY_KG_M3 / CRUST_DENSITY_CONTINENTAL_KG_M3;
       const depositsSedM3 = dExported / sedToRock;
       const subductedRockM3 = (depositsSedM3 - dZeroed - dStock) * sedToRock;
       sink = (subductedRockM3 / dtMyr / s.contAreaM2).toFixed(2);
+      // C4: maturation-depth distribution + creation budget for the interval.
+      const dFlips = g.columnsMaturationFlips - prevCrustStatsRow.maturationFlips;
+      const dElevSum = g.columnsMaturationElevSumM - prevCrustStatsRow.maturationElevSumM;
+      const dCredit = g.columnsMaturationCreditM3 - prevCrustStatsRow.maturationCreditM3;
+      matF = String(dFlips);
+      matE = dFlips > 0 ? (dElevSum / dFlips).toFixed(0) : '-';
+      crea = (dCredit / dtMyr / s.contAreaM2).toFixed(2);
+      accr = ((dZeroed * sedToRock) / dtMyr / s.contAreaM2).toFixed(2);
     }
   }
   prevCrustStatsRow = {
@@ -632,6 +672,9 @@ function reportCrustStats(keyframe: Keyframe): void {
     visits: g.columnsExportVisits,
     zeroedM3: g.columnsSedimentZeroedM3,
     sedimentVolumeM3: s.sedimentVolumeM3,
+    maturationFlips: g.columnsMaturationFlips,
+    maturationElevSumM: g.columnsMaturationElevSumM,
+    maturationCreditM3: g.columnsMaturationCreditM3,
   };
   console.log(
     [
@@ -656,6 +699,10 @@ function reportCrustStats(keyframe: Keyframe): void {
       sink.padStart(6),
       s.maxElevationM.toFixed(0).padStart(9),
       String(g.columnsThicknessCapBinds).padStart(8),
+      matF.padStart(6),
+      matE.padStart(7),
+      crea.padStart(6),
+      accr.padStart(6),
     ].join('  '),
   );
 }
