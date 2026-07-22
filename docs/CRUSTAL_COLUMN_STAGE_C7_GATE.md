@@ -36,8 +36,16 @@ which owner decision §11.2 pre-authorized judging across the sweep). The
 default-endowment product decision (§11 answer 2's anticipated "make
 scale ~1.5 the shipped default planet") is now fully quantified for the
 owner, with the measured trade: Earth-like flooding/shallow-seas/land at
-1.5 versus the supercontinent story and the 1337 death; promotion, KBV
-bump, golden regen and the default flip all await sign-off.**
+1.5 versus the supercontinent story and the 1337 death. The N=128
+replication (§7) preserves aliveness, the structural floors and the
+monotonic water axis and produces the program's most Earth-like maps —
+band occupancy 37.7% at scale 1.5, one knife edge from the Earth-shape
+gate the coarse grid missed by 3× — but the creation–consumption
+equilibrium drifts with resolution (crust fraction 0.30–0.32 late,
+below the T3 band; the founder/retirement granularity is the
+un-N-scaled consumption family), a named pre-promotion calibration
+item. Promotion, KBV bump, golden regen and the default flip all await
+sign-off.**
 
 Companions: `CRUSTAL_COLUMN_PROPOSAL.md` (§3 scoreboard, §6 C7, §10
 acceptance grid, §11 owner decisions), `CRUSTAL_COLUMN_STAGE_C6_GATE.md`
@@ -375,9 +383,65 @@ scale-1.5 default (or motivates hazard-side work in the V2 trio's
 territory, where the sweep campaign's cliff notes already live) is the
 owner's §5/§9 call.
 
-## 7. N=128 replication
+## 7. N=128 replication (the shipped default grid)
 
-*(placeholder — runs in flight: seed 42 × scales 1.0 and 1.5)*
+Two 4.5 Gyr runs, seed 42, scales 1.0 and 1.5, N=128 — the handover §9
+requirement ("replicate any final calibration at N=128 before
+promotion"), and it earns its keep: the qualitative story replicates,
+the quantitative equilibrium does not.
+
+| | N=64 @ 1.0 | **N=128 @ 1.0** | N=64 @ 1.5 | **N=128 @ 1.5** |
+|---|---|---|---|---|
+| alive (disp/monopoly/last event) | 99.8/0/4435 | 97.3%/0/4497 | 97.6/0/4434 | 99.1%/0/4466 |
+| cont crust fraction late | 0.388 | **0.303** | 0.381 | **0.321** |
+| sea late, m | −1766 | −2421 | −556 | −1047 |
+| mean freeboard late, m | 3108 | 2938 | 1963 | 1699 |
+| landA% late | 38.5 | 31.0 | 28.1 | 27.9 |
+| band% late | 12.6 | 8.7 | 15.6 | **37.7** |
+| submerged% late | 3.2 | 0.2 | 27.8 | 14.2 |
+| shallow% late | 3.3 | 3.1 | 7.5 | 3.4 |
+| peaks above sea late, m | 6566 | 7221 | 5356 | 5847 |
+| mass final, e21 kg (t=0 28.6) | 30.5 | 25.5 | 31.6 | 25.9 |
+| cmin run-min / reg | −2306 / 0 | −2306 / 0 | −2306 / 0 | −2306 / 0 |
+| retC final | 437 | 2118 | 429 | 4586 |
+
+**What replicates:** aliveness and tempo (dispersal 97–99%, monopoly 0,
+last events > 4.45 Gyr at both endowments); the monotonic water axis
+(freeboard 2938 → 1699, submergence 0.2 → 14.2 across 1.0 → 1.5); the
+structural floors (cmin pinned at −2306 bit-exactly, reg 0.00, zero
+elevation-cap events); the character in the dumps — the N=128 frames
+resolve narrow orogenic spines over broad green lowlands with crisp
+ridge fabric and are the most Earth-like maps the program has produced
+(inspected; the scale-1.5 final frame especially).
+
+**What does not: the creation–consumption equilibrium drifts with
+resolution.** Crust fraction settles at 0.30–0.32 late — BELOW the T3
+0.35–0.45 band that N=64 sits inside — with the sea correspondingly
+~0.5–0.65 km lower, land at 1.0 down to 31%, and total mass drifting
+−10% instead of +7…+10%. The arc machinery carries explicit N-scaling
+(`ARC_CREATION_REFERENCE_GRID_N`: per-cell rate and belt width both
+∝ N/32) and creation per area indeed holds (crea 120–145 vs 108–120),
+but the consumption side scales FASTER at fine grid: the founder/
+retirement layer sees many more small components (retC 2118–4586 vs
+~430 — component granularity is resolution-dependent) and trim runs
+38–24 vs 24–25 m/Myr, so the inventory equilibrates lower. One genuine
+hypsometry surprise, in-family with the granularity story: at scale 1.5
+band occupancy nearly reaches the Earth-shape gate (37.7% vs ≥ 40%,
+N=64: 15.6%) — the chunky N=64 belts under-resolved exactly the coastal
+lowland band the gate reads, so §4.4's miss is partly a RESOLUTION
+artifact, and the shipped-grid Earth-candidate world stands one knife
+edge from the discriminating gate.
+
+Verdict for the promotion decision: the N=64 gate tables are the right
+MECHANISM evidence (every stage's A/B was N=64-internal), but the
+shipped world is the N=128 world, and its budget sits ~6 points of
+crust fraction below the N=64 calibration. Pre-registered response
+shapes, for the owner: accept the N=128 numbers as the shipped truth
+and re-anchor the T3 band (the world is alive, Earth-shaped, and
+floor-sound there); or charter a resolution-invariance pass on the
+founder/retirement granularity terms (the one consumption family
+without explicit N-scaling) before the flip. Both are one-decision
+items; neither is a servo.
 
 ## 8. Watch items (carried / updated)
 
@@ -401,6 +465,15 @@ owner's §5/§9 call.
 5. **Kinematic fragility at off-default endowments (§4.2, §6):** first
    measured instance of the V2 monopoly death inside the acceptance
    grid. Whether this gates the 1.5 default is the owner's §5 call.
+6. **NEW — resolution drift in the crust budget (§7):** the shipped
+   N=128 grid equilibrates ~6 points of crust fraction below the N=64
+   calibration (0.30–0.32 vs 0.385–0.398), driven by the
+   resolution-dependent granularity of the founder/retirement layer
+   (retC 2118–4586 vs ~430) against N-scaled creation. Pre-promotion
+   decision item: re-anchor T3 to the shipped grid, or charter the
+   resolution-invariance pass. Paired upside, same cause: N=128
+   resolves the coastal-lowland band the hypsometry gate reads
+   (band 37.7% at scale 1.5 vs the ≥ 40% gate).
 
 ## 9. Promotion checklist (all awaiting owner sign-off — none executed)
 
