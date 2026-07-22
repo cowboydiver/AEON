@@ -137,7 +137,7 @@ Options:
                               120e6→30e6→0 for the cooldown-retirement measurement.
                               No effect without --tension-rift (flag-off always
                               uses the legacy 120 Myr constant)
-  --crustal-columns           enable the crustal-column model, stage C5
+  --crustal-columns           enable the crustal-column model, stage C6
                               (docs/CRUSTAL_COLUMN_PROPOSAL.md): crustal
                               thickness is the primary vertical state and
                               continental elevation its Airy-derived cache.
@@ -150,7 +150,7 @@ Options:
                               the mass budget's output), the C4 creation
                               re-key (arc maturation gates on the ABSOLUTE
                               e(20 km) ≈ −2306 m; sediment ACCRETES into
-                              columns at maturation/welds), and the C5
+                              columns at maturation/welds), the C5
                               founder/retirement re-keys (isolated slivers
                               and crustFates foundering thin to the 20 km
                               identity floor; retirement fires only for
@@ -158,13 +158,18 @@ Options:
                               the one-time onset regularization closes the
                               shim-era lobe; no process thins below
                               e(T_min) ≈ −2306 m — the structural T2 floor)
-                              all run as thickness-space mass transactions;
-                              only the site-21 margin writer remains a
-                              (floored) C1 shim until C6. --crust-stats
+                              and the C6 rift-margin thinning (passive
+                              margins thin toward the finite 30 km stretch
+                              budget — β 1.3, never the identity floor,
+                              never a sea-keyed level: the model's last
+                              shim AND last sea-keyed relaxation target
+                              retired) all run as thickness-space mass
+                              transactions. --crust-stats
                               gains src/sat%/sink planation-throughput
                               columns, the C4 matF/matE/crea/accr creation
-                              columns, and the C5 cmin/reg/trim/ret/retC
-                              floor and consumption columns (default off;
+                              columns, the C5 cmin/reg/trim/ret/retC
+                              floor and consumption columns, and the C6
+                              marg margin-thinning debit (default off;
                               measure with --ab crustal-columns)
   --suture-analysis           print the stage-4 rift-lifecycle harness (#114):
                               re-suture interval of rifted halves from the event
@@ -565,6 +570,7 @@ let prevCrustStatsRow: {
   maturationCreditM3: number;
   founderTrimM3: number;
   retiredDebitM3: number;
+  marginThinnedM3: number;
 } | null = null;
 
 /** Per-keyframe sea-level/flooding row (the #101 calibration table). */
@@ -649,6 +655,13 @@ function reportCrustStats(keyframe: Keyframe): void {
         'trim'.padStart(6),
         'ret'.padStart(6),
         'retC'.padStart(7),
+        // C6 instrument (proposal §6 C6), from the cumulative kernel counter:
+        //   marg  rift-margin thinning debit (site 21 — the finite-β stretch
+        //         budget: bands thin toward 30 km and STOP), rock m / Myr
+        //         over continental area — the last consumption term, so the
+        //         §5 ledger print now covers every declared flow. '-' until
+        //         the mechanism engages.
+        'marg'.padStart(6),
       ].join('  '),
     );
     printedCrustStatsHeader = true;
@@ -666,6 +679,7 @@ function reportCrustStats(keyframe: Keyframe): void {
   let accr = '-';
   let trim = '-';
   let ret = '-';
+  let marg = '-';
   if (prevCrustStatsRow !== null && g.columnsExportVisits > 0) {
     const dtMyr = (keyframe.timeYears - prevCrustStatsRow.timeYears) / 1e6;
     if (dtMyr > 0 && s.contAreaM2 > 0) {
@@ -697,6 +711,10 @@ function reportCrustStats(keyframe: Keyframe): void {
       const dRetired = g.columnsRetiredDebitM3 - prevCrustStatsRow.retiredDebitM3;
       trim = (dTrim / dtMyr / s.contAreaM2).toFixed(2);
       ret = (dRetired / dtMyr / s.contAreaM2).toFixed(2);
+      // C6: the rift-margin thinning debit — the last declared consumption
+      // term of the §5 ledger print.
+      const dMargin = g.columnsMarginThinnedM3 - prevCrustStatsRow.marginThinnedM3;
+      marg = (dMargin / dtMyr / s.contAreaM2).toFixed(2);
     }
   }
   prevCrustStatsRow = {
@@ -711,6 +729,7 @@ function reportCrustStats(keyframe: Keyframe): void {
     maturationCreditM3: g.columnsMaturationCreditM3,
     founderTrimM3: g.columnsFounderTrimM3,
     retiredDebitM3: g.columnsRetiredDebitM3,
+    marginThinnedM3: g.columnsMarginThinnedM3,
   };
   console.log(
     [
@@ -748,6 +767,7 @@ function reportCrustStats(keyframe: Keyframe): void {
       trim.padStart(6),
       ret.padStart(6),
       String(g.columnsRetiredCells).padStart(7),
+      marg.padStart(6),
     ].join('  '),
   );
 }
