@@ -181,7 +181,11 @@ first ~150 Myr; the post-200 Myr minima quoted are the floors the worlds
 actually live above.)
 
 PNG dumps inspected across the grid (house rule; final frames all seeds,
-seed-42 flipbook at every scale): the endowment story is VISIBLE — proud
+seed-42 flipbook at every scale), with the headline frames committed for
+the sign-off review in `docs/crustal-column-c7-evidence/` (the seed-42
+final at all four scales, the 1337 scale-1.0 supercontinent, the
+1337×1.5 dead world, both N=128 finals — the sweep-campaign evidence
+precedent): the endowment story is VISIBLE — proud
 brown highland blocks with little shelf at 0.5; the C6 look (coherent
 continents, highland interiors ringed by green lowlands, ridge fabric,
 shelf halos) at 1.0; broad green lowlands and wide flooded margins at
