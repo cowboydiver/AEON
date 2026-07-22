@@ -86,6 +86,12 @@ export interface CrustStats {
   /** Maximum elevation — with the C3 peaks gate read as max − seaLevelM
    *  (peak height above the sea; target 5–9 km at water scale 1.0). */
   maxElevationM: number;
+  /** Minimum CONTINENTAL elevation, m (crustal-columns C5) — the T2 floor
+   *  gate reads this directly: ≥ e(T_min) ≈ −2306 m from stage C5 on, with
+   *  the time series bounded (no ratchet). By derived-cache coherence this
+   *  equals e(contThicknessMinM) on the columns path; printed raw so the
+   *  gate does not depend on that identity. 0 when no continental crust. */
+  minContElevationM: number;
   /**
    * Emergent share of the sphere, AREA-WEIGHTED (true solid angles, not cell
    * count — the warp's ±35% per-cell area distortion is real; crustal-columns
@@ -158,6 +164,7 @@ export function computeCrustStats(
   let shallow = 0;
   let minElevation = Infinity;
   let maxElevation = -Infinity;
+  let minContElevation = Infinity;
   let land0m = 0;
   let landArea = 0;
   let bandArea = 0;
@@ -179,6 +186,7 @@ export function computeCrustStats(
       cont++;
       contSum += e;
       contArea += a;
+      if (e < minContElevation) minContElevation = e;
       const t = crustalThicknessM[i]!;
       thickSum += t;
       if (t < thickMin) thickMin = t;
@@ -208,6 +216,7 @@ export function computeCrustStats(
     landFrac: (count - ocean) / count,
     minElevationM: minElevation,
     maxElevationM: maxElevation,
+    minContElevationM: cont > 0 ? minContElevation : 0,
     landFracArea: landArea / totalArea,
     bandOccupancyFrac: landArea > 0 ? bandArea / landArea : 0,
     landFrac0m: land0m / count,

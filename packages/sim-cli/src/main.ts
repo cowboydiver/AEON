@@ -137,7 +137,7 @@ Options:
                               120e6→30e6→0 for the cooldown-retirement measurement.
                               No effect without --tension-rift (flag-off always
                               uses the legacy 120 Myr constant)
-  --crustal-columns           enable the crustal-column model, stage C4
+  --crustal-columns           enable the crustal-column model, stage C5
                               (docs/CRUSTAL_COLUMN_PROPOSAL.md): crustal
                               thickness is the primary vertical state and
                               continental elevation its Airy-derived cache.
@@ -146,20 +146,26 @@ Options:
                               column stacking, root decay toward the 39 km
                               equilibrium, the 9 km elevation caps retired
                               for the 70 km collapse ceiling), the site-20
-                              epeirogenic-servo retirement (pulled forward
-                              from C5 — freeboard is the mass budget's
-                              output), and the C4 creation re-key (arc
-                              maturation gates on the ABSOLUTE
-                              e(20 km) ≈ −2306 m instead of the sea-keyed
-                              −500 m; sediment ACCRETES into columns at
-                              maturation/welds — the site-22 leak closed)
-                              all run as thickness-space mass transactions,
-                              while the margin/founder writers remain C1
-                              shims. --crust-stats gains src/sat%/sink
-                              planation-throughput columns plus the C4
-                              matF/matE/crea/accr maturation and creation-
-                              budget columns (default off; measure with
-                              --ab crustal-columns)
+                              epeirogenic-servo retirement (freeboard is
+                              the mass budget's output), the C4 creation
+                              re-key (arc maturation gates on the ABSOLUTE
+                              e(20 km) ≈ −2306 m; sediment ACCRETES into
+                              columns at maturation/welds), and the C5
+                              founder/retirement re-keys (isolated slivers
+                              and crustFates foundering thin to the 20 km
+                              identity floor; retirement fires only for
+                              components wholly submerged AND at the floor;
+                              the one-time onset regularization closes the
+                              shim-era lobe; no process thins below
+                              e(T_min) ≈ −2306 m — the structural T2 floor)
+                              all run as thickness-space mass transactions;
+                              only the site-21 margin writer remains a
+                              (floored) C1 shim until C6. --crust-stats
+                              gains src/sat%/sink planation-throughput
+                              columns, the C4 matF/matE/crea/accr creation
+                              columns, and the C5 cmin/reg/trim/ret/retC
+                              floor and consumption columns (default off;
+                              measure with --ab crustal-columns)
   --suture-analysis           print the stage-4 rift-lifecycle harness (#114):
                               re-suture interval of rifted halves from the event
                               log (the pre-#59 ~16 Myr re-suture pathology is the
@@ -557,6 +563,8 @@ let prevCrustStatsRow: {
   maturationFlips: number;
   maturationElevSumM: number;
   maturationCreditM3: number;
+  founderTrimM3: number;
+  retiredDebitM3: number;
 } | null = null;
 
 /** Per-keyframe sea-level/flooding row (the #101 calibration table). */
@@ -622,6 +630,25 @@ function reportCrustStats(keyframe: Keyframe): void {
         'matE'.padStart(7),
         'crea'.padStart(6),
         'accr'.padStart(6),
+        // C5 instruments (proposal §6 C5 gates), from the cumulative kernel
+        // counters:
+        //   cmin  min CONTINENTAL elevation, m — the T2 floor gate
+        //         (≥ e(T_min) ≈ −2306 m from C5 on, time series bounded);
+        //   reg   the one-time onset regularization credit, cumulative rock
+        //         m over continental area (§9 risk 3's reported statistic —
+        //         expected ≈ 0 after the servo retirement);
+        //   trim  founder trim debit (site-4 sliver trims + site-19
+        //         thinning), rock m / Myr over continental area;
+        //   ret   thickness-keyed retirement debit, rock m / Myr over
+        //         continental area;
+        //   retC  cumulative retired cells — the retirement-reachability
+        //         audit's numerator (0 on seas below the floor, where
+        //         foundered fragments stand emergent and crust is hoarded).
+        'cmin'.padStart(7),
+        'reg'.padStart(6),
+        'trim'.padStart(6),
+        'ret'.padStart(6),
+        'retC'.padStart(7),
       ].join('  '),
     );
     printedCrustStatsHeader = true;
@@ -637,6 +664,8 @@ function reportCrustStats(keyframe: Keyframe): void {
   let matE = '-';
   let crea = '-';
   let accr = '-';
+  let trim = '-';
+  let ret = '-';
   if (prevCrustStatsRow !== null && g.columnsExportVisits > 0) {
     const dtMyr = (keyframe.timeYears - prevCrustStatsRow.timeYears) / 1e6;
     if (dtMyr > 0 && s.contAreaM2 > 0) {
@@ -663,6 +692,11 @@ function reportCrustStats(keyframe: Keyframe): void {
       matE = dFlips > 0 ? (dElevSum / dFlips).toFixed(0) : '-';
       crea = (dCredit / dtMyr / s.contAreaM2).toFixed(2);
       accr = ((dZeroed * sedToRock) / dtMyr / s.contAreaM2).toFixed(2);
+      // C5: the consumption side — founder trims + retirement debits.
+      const dTrim = g.columnsFounderTrimM3 - prevCrustStatsRow.founderTrimM3;
+      const dRetired = g.columnsRetiredDebitM3 - prevCrustStatsRow.retiredDebitM3;
+      trim = (dTrim / dtMyr / s.contAreaM2).toFixed(2);
+      ret = (dRetired / dtMyr / s.contAreaM2).toFixed(2);
     }
   }
   prevCrustStatsRow = {
@@ -675,6 +709,8 @@ function reportCrustStats(keyframe: Keyframe): void {
     maturationFlips: g.columnsMaturationFlips,
     maturationElevSumM: g.columnsMaturationElevSumM,
     maturationCreditM3: g.columnsMaturationCreditM3,
+    founderTrimM3: g.columnsFounderTrimM3,
+    retiredDebitM3: g.columnsRetiredDebitM3,
   };
   console.log(
     [
@@ -703,6 +739,15 @@ function reportCrustStats(keyframe: Keyframe): void {
       matE.padStart(7),
       crea.padStart(6),
       accr.padStart(6),
+      s.minContElevationM.toFixed(0).padStart(7),
+      // The regularization credit is one-time: cumulative rock meters over
+      // the CURRENT continental area (a magnitude, not a rate).
+      (s.contAreaM2 > 0 ? g.columnsRegularizedCreditM3 / s.contAreaM2 : 0)
+        .toFixed(2)
+        .padStart(6),
+      trim.padStart(6),
+      ret.padStart(6),
+      String(g.columnsRetiredCells).padStart(7),
     ].join('  '),
   );
 }
