@@ -213,6 +213,76 @@ describe('C4 absolute maturation gate (crustal columns, site 10)', () => {
   });
 });
 
+describe('C7 dry-sea arc ceiling floor (crustal columns, the creation-datum re-key)', () => {
+  // Same surgical shape as the C4 harness: one active margin cell, one
+  // continental 4-neighbor (belt rule satisfied), seaLevelDatums on with a
+  // chosen dynamic sea, so the sea-keyed island ceiling is datum-visible.
+  function growArc(
+    startElev: number,
+    columns: boolean,
+    seaLevelM: number,
+  ): { matured: boolean; elevation: number; thickness: number } {
+    const { state: base, cell, p0nb } = arcWorld(1);
+    const crustType = base.fields.crustType.slice();
+    const elevation = base.fields.elevation.slice();
+    crustType[p0nb[0]!] = 1;
+    elevation[cell] = startElev;
+    const state: PlanetState = {
+      ...base,
+      params: { ...base.params, seaLevelDatums: true },
+      globals: { ...base.globals, seaLevelM },
+      fields: { ...base.fields, crustType, elevation },
+    };
+    const workElev = state.fields.elevation.slice();
+    const workCrust = state.fields.crustType.slice();
+    const workThickness = columns ? foundCrustalThickness(workElev, workCrust) : null;
+    applyConvergentTopography(state, stressAt(cell), workElev, workCrust, DT, workThickness);
+    return {
+      matured: workCrust[cell] === 1,
+      elevation: workElev[cell]!,
+      thickness: workThickness !== null ? workThickness[cell]! : NaN,
+    };
+  }
+
+  const GATE = continentalElevationForThicknessM(ARC_MATURATION_THICKNESS_M); // ≈ −2306 m
+
+  it('columns: under a dry sea the ceiling floors at the maturation gate — creation stays alive', () => {
+    // Sea −5000 m (the C5 §3 collapse regime): the sea-keyed ceiling alone is
+    // −4000 m, below the absolute gate, and creation starves. With the floor,
+    // growth clips exactly AT the gate, the cell matures, and the inversion
+    // founds exactly the maturation thickness — a stop, never a boost above it.
+    const on = growArc(-3000, true, -5000);
+    expect(on.elevation).toBe(Math.fround(GATE));
+    expect(on.matured).toBe(true);
+    expect(on.thickness).toBeCloseTo(ARC_MATURATION_THICKNESS_M, 0);
+  });
+
+  it('legacy: the same dry world matures through its own sea-keyed pair — the mismatch was columns-only', () => {
+    // Legacy ceiling −4000 m sits above the legacy gate (sea − 500 = −5500 m):
+    // both ride the sea together, so legacy creation never starved. The C5
+    // finding was the columns-path datum mismatch, not a legacy defect.
+    const off = growArc(-3000, false, -5000);
+    expect(off.elevation).toBe(-4000);
+    expect(off.matured).toBe(true);
+  });
+
+  it('columns: on wet seas the floor is inert — the sea-keyed ceiling binds unchanged', () => {
+    // Sea −2000 m (the measured scale-1.0 regime): ceiling = sea + 1 km =
+    // −1000 m, above the gate, so max() returns the sea-keyed value and the
+    // wet-regime arithmetic is bit-identical to C6.
+    const on = growArc(-400, true, -2000);
+    expect(on.elevation).toBe(-1000);
+    expect(on.matured).toBe(true); // −1000 ≥ the absolute gate, as at C6
+  });
+
+  it('columns: the floor never lifts an arc already at the gate', () => {
+    // A dry-sea arc sitting exactly at the floored ceiling stays there —
+    // Math.min(grown, ceiling) is a clip, not an attractor from above.
+    const on = growArc(Math.fround(GATE), true, -5000);
+    expect(on.elevation).toBe(Math.fround(GATE));
+  });
+});
+
 describe('emergent-arc growth taper (#91)', () => {
   function grow(startElev: number, emergentArcTaper: boolean): number {
     const { state: base, cell } = arcWorld(1);

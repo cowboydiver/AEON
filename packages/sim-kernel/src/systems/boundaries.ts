@@ -261,7 +261,6 @@ export function applyConvergentTopography(
   // "matures 500 m before emerging"); the offset anchors them to the dynamic
   // sea level when the mechanism is on, and is exactly 0 when off.
   const datumOffset = platformDatumOffsetM(state);
-  const arcCeiling = datumOffset + ARC_MAX_ELEVATION_M;
   // C4 (site 10, gate only — the growth term above is untouched): on the
   // columns path the maturation gate is the ABSOLUTE derived-equivalent
   // elevation e(ARC_MATURATION_THICKNESS_M) ≈ −2306 m — one condition, two
@@ -275,6 +274,24 @@ export function applyConvergentTopography(
     crustalThicknessM !== null
       ? continentalElevationForThicknessM(ARC_MATURATION_THICKNESS_M)
       : datumOffset + ARC_MATURATION_ELEVATION_M;
+  // C7 (the creation-datum re-key — the C5 §3 dry-half starvation fix): the
+  // island ceiling is a sea-relative statement about EMERGENT edifices ("a
+  // 1 km island"); read verbatim under a sea more than ~3.3 km below the
+  // datum it caps arc columns at ~12 km thickness-equivalent — below the
+  // cited 20–35 km arc-crust range the maturation threshold is built on —
+  // and continental creation starves while consumption continues (measured:
+  // crust fraction 40% → 3.5% at water scale 0.5, C5 gate record §3). On
+  // the columns path the ceiling therefore never falls below the absolute
+  // maturation gate: an arc column can always build at least to the
+  // thickness at which arc crust IS continental, whatever the sea does. The
+  // sea-keyed ceiling still owns the wet regime (it binds whenever the sea
+  // sits above ≈ −3.3 km — every measured scale ≥ 1.0 sea), so scale-1.0
+  // behavior is unchanged wherever the floor never engages. Legacy path
+  // untouched (flag-off byte-identity is structural).
+  const arcCeiling =
+    crustalThicknessM !== null
+      ? Math.max(datumOffset + ARC_MAX_ELEVATION_M, maturationGate)
+      : datumOffset + ARC_MAX_ELEVATION_M;
   // Freeboard regulation (datums.ts): the orogeny ceiling is a land-relief
   // datum ("mountains cap near 9 km" — above the SEA); under the freeboard
   // mechanism it rides the dynamic sea level, and is exactly the absolute

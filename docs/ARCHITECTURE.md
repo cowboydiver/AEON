@@ -830,6 +830,19 @@ key:
   reads sea level" now holds; shelf shallowness stays owned by the
   sea-graded sediment machinery). The thinned volume is the declared
   post-rift subsidence debit, counted (`columnsMarginThinnedM3`).
+  Since C7, the arc growth CEILING learns the absolute datum's reach (the
+  creation-datum re-key, resolving the C5 gate record §3 dry-half
+  starvation): on the columns path the sea-keyed island ceiling
+  (`platformDatumOffsetM + ARC_MAX_ELEVATION_M`) floors at the absolute
+  maturation gate e(ARC_MATURATION_THICKNESS_M) ≈ −2306 m — an arc column
+  can always build at least to the thickness at which arc crust IS
+  continental, whatever the sea does (the 1 km island ceiling is a
+  statement about emergent edifices; read verbatim under a sea > ~3.3 km
+  below the datum it capped arc columns at ~12 km thickness-equivalent,
+  below the cited 20–35 km arc-crust range, and creation starved while
+  consumption continued: crust fraction 40% → 3.5% at water scale 0.5).
+  The floor is inert on seas above ≈ −3.3 km (every measured
+  scale ≥ 1.0 sea), where the sea-keyed ceiling binds unchanged.
   All writers re-derive elevation
   from the STORED thickness, so `e === fround(C + k·T)` holds bit-exactly
   after every post-onset step (the derivation-coherence fixture). Branch flips: ocean→continent
