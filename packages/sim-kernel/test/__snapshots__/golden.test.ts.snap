@@ -376,22 +376,22 @@ exports[`golden field hashes: blockIsostasy on (#84) > seed 1337: after 10 steps
 exports[`golden field hashes: crustalColumns (isolated + engaged) > seed 42, N=32: after 30 steps on the DEFAULT world, derivation engaged 1`] = `
 {
   "after30Steps": {
-    "biome": "61abcdf8",
+    "biome": "8fae6618",
     "boundaryStress": "b4e9edf0",
     "crustAge": "1e28b79c",
     "crustType": "2f8087d8",
-    "crustalThicknessM": "c7b15b9d",
-    "elevation": "5071b7d5",
-    "iceFraction": "77f3f1b2",
-    "marineLife": "785572ad",
+    "crustalThicknessM": "2dc157d6",
+    "elevation": "4954e7f4",
+    "iceFraction": "920c4db3",
+    "marineLife": "6a9ea45e",
     "plateId": "3a8fc4f8",
-    "precipitation": "eae94c17",
-    "sedimentM": "48e0456b",
+    "precipitation": "5f53012d",
+    "sedimentM": "b8a0db40",
     "sutureYears": "c8929ebd",
-    "temperature": "9dae691b",
+    "temperature": "4086dcc2",
     "timeYears": 30000000,
-    "windU": "13a8fa85",
-    "windV": "d78282c5",
+    "windU": "cf92cf05",
+    "windV": "57258125",
   },
 }
 `;

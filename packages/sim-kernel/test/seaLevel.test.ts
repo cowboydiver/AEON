@@ -66,6 +66,7 @@ function bathyState(
       columnsFounderTrimM3: 0,
       columnsRetiredDebitM3: 0,
       columnsRetiredCells: 0,
+      columnsMarginThinnedM3: 0,
     },
     fields,
     plates: [],

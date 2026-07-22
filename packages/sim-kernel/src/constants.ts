@@ -2183,7 +2183,8 @@ export const ARC_MATURATION_THICKNESS_M = 20000;
 /** v1 rift-margin stretch budget β (McKenzie 1978: typical passive margins
  *  β ≈ 1.2–2). Margins thin toward CONTINENTAL_REFERENCE_THICKNESS_M / β
  *  = 30 km — a finite stop, never the identity floor (the T2 unbounded-grind
- *  shape; proposal §5 site 21). Activates at stage C6. */
+ *  shape; proposal §5 site 21). Active since stage C6: the site-21
+ *  rift-margin thinning in freeboard.ts (the model's last shim retired). */
 export const MARGIN_STRETCH_FACTOR = 1.3;
 
 /**

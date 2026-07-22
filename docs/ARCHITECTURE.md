@@ -756,11 +756,11 @@ key:
   > accordingly (still 2% of the 1e6 clamp).
 
 - **`crustalColumns` (docs/CRUSTAL_COLUMN_PROPOSAL.md; `isostasy.ts` +
-  shims in tectonics/boundaries/crustFates/blockIsostasy/freeboard;
-  default OFF, stage C5 of the staged landing plan — erosion, the vertical
-  injectors, the creation re-key, the epeirogenic-servo retirement and the
-  founder/retirement re-keys are real thickness physics; only the site-21
-  margin writer remains a shim, until C6):**
+  thickness writers in tectonics/boundaries/erosion/crustFates/
+  blockIsostasy/freeboard; default OFF, stage C6 of the staged landing
+  plan — the migration is mechanism-complete: every continental write
+  site is a thickness transaction, no shims remain; C7 calibration + the
+  water sweep gate promotion):**
   `crustalThicknessM`
   becomes the primary vertical state for continental crust and elevation
   its derived cache — dry Airy isostasy over a FIXED datum,
@@ -806,20 +806,31 @@ key:
   re-keys to thickness — a small component retires only when wholly
   submerged AND wholly at the floor (on seas below e(T_min) foundered
   fragments stand emergent and crust is hoarded — physical, watched via
-  `columnsRetiredCells`); every sea-keyed thinning stop (the site-21
-  margin shim, erosion's export/planation base levels, the site-17
-  blockIsostasy cap) bottoms out at `CONTINENTAL_FLOOR_ELEVATION_M` =
-  e(T_min), inert on seas above the floor. The onset re-inversion applies
+  `columnsRetiredCells`); every sea-keyed thinning stop (erosion's
+  export/planation base levels, the site-17 blockIsostasy cap) bottoms
+  out at `CONTINENTAL_FLOOR_ELEVATION_M` = e(T_min), inert on seas above
+  the floor. The onset re-inversion applies
   the ONE-TIME regularization `T := max(T, T_min)` (the shim-era lobe
   lifted; the credit counted in `columnsRegularizedCreditM3`), so from the
   onset step on no continental cell sits below e(T_min) — the T2 fixture
   asserts it through the full default pipeline. Founder trims and
   retirement debits are counted (`columnsFounderTrimM3`,
   `columnsRetiredDebitM3`) — the consumption side answering the C4
-  creation print. The one remaining continental elevation writer on the
-  legacy arithmetic (the site-21 passive margin, stage C6) still routes
-  its Δe through thickness (ΔT = Δe/k — the C1 mechanical shim, now
-  floored). All writers re-derive elevation
+  creation print. Since C6, the LAST shim is retired: the site-21
+  passive-margin band (same geometry — same-plate ocean adjacency,
+  convergent coasts excluded) is rift-margin THINNING, a native thickness
+  transaction at the legacy surface rate read through the derivation
+  (dT = (2e-5 m/yr)/k, so the surface answers at exactly the old
+  subsidence rate) with a FINITE stretch budget for a stop:
+  `CONTINENTAL_REFERENCE_THICKNESS_M / MARGIN_STRETCH_FACTOR` = 30 km
+  (β = 1.3, McKenzie 1978), e(30 km) ≈ −882 m — a fixed thickness, never
+  the 20 km identity floor (the T2 unbounded-grind shape) and never a
+  sea-keyed level (the model's LAST sea-keyed relaxation target retires
+  here — the trap-T1 property "no relaxation target in the final model
+  reads sea level" now holds; shelf shallowness stays owned by the
+  sea-graded sediment machinery). The thinned volume is the declared
+  post-rift subsidence debit, counted (`columnsMarginThinnedM3`).
+  All writers re-derive elevation
   from the STORED thickness, so `e === fround(C + k·T)` holds bit-exactly
   after every post-onset step (the derivation-coherence fixture). Branch flips: ocean→continent
   (arc maturation, weld bridges, consolidation hole fills) found T by
@@ -833,15 +844,14 @@ key:
   at any onset year. The shim-era validity domain (C1–C4: pump-flooded
   cells inverting to unphysically thin columns) is CLOSED at C5 by that
   regularization — post-onset thickness is physical everywhere. Zero
-  RNG anywhere in the model. Stage C6 replaces the last shim with
-  mass-budget physics (rift-margin thinning with the finite β budget),
-  gated in the proposal's acceptance grid; the mass ledger
+  RNG anywhere in the model. Next is stage C7 (calibration + the water
+  sweep + the promotion gate); the mass ledger
   (`computeCrustalMassLedger`, true solid angles × R²) closes per-system
   for the C2 erosion terms and the C4 sediment accretion (kernel
-  fixtures), carries orogeny/collision as the declared shortening influx
-  (C3) and arc maturation as the declared creation credit (counted in
-  `columnsMaturationCreditM3`), and remains a reported tripwire over the
-  remaining shim flows.
+  fixtures), and every non-conserving flow is now DECLARED AND COUNTED:
+  orogeny/collision shortening influx (C3), arc-maturation creation
+  (`columnsMaturationCreditM3`), founder trims, retirement debits, and
+  the C6 margin thinning — no uncounted shim flows remain.
 
 `energyBalance` (#30): the Phase 3 climate hub. A Budyko–Sellers **zonal
 energy-balance model** solved on `ENERGY_BALANCE_BANDS` (90) equal-area

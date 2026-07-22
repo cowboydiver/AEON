@@ -100,6 +100,7 @@ function ridgeWorld(gridN: number, windUms: number, ridgePeakM = 3500): PlanetSt
       columnsFounderTrimM3: 0,
       columnsRetiredDebitM3: 0,
       columnsRetiredCells: 0,
+      columnsMarginThinnedM3: 0,
     },
     fields,
     plates: [],

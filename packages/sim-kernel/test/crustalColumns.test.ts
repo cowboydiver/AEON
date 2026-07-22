@@ -6,10 +6,12 @@ import {
   CONTINENTAL_REFERENCE_THICKNESS_M,
   CONTINENTAL_THICKNESS_MIN_M,
   CRUST_DENSITY_CONTINENTAL_KG_M3,
+  MARGIN_STRETCH_FACTOR,
   OCEANIC_CRUST_THICKNESS_M,
+  PASSIVE_MARGIN_SUBSIDENCE_M_PER_YR,
   SEDIMENT_DENSITY_KG_M3,
 } from '../src/constants';
-import { cellSolidAngleTable, faceRCToIndex, neighborTable } from '../src/grid';
+import { cellSolidAngleTable, faceRCToIndex } from '../src/grid';
 import {
   CONTINENTAL_FLOOR_ELEVATION_M,
   computeCrustalMassLedger,
@@ -421,63 +423,6 @@ describe('stage C5 — the structural floor (trap T2) and the founder re-keys', 
     expect(off.globals.columnsFounderTrimM3).toBe(0);
   });
 
-  it('site 21 shim floor: margin subsidence stops at e(T_min) on a low sea instead of grinding to sea − 150', () => {
-    // A continental block with a same-plate oceanic fringe, sea at −4000 m
-    // (the dry half of the water sweep): the legacy shelf target (−4150)
-    // sits far below the identity floor, so on the columns path the coastal
-    // subsidence must bottom out at e(T_min) — the T2 stop — not the sea.
-    const N32 = 32;
-    const s = twoPlateState(N32, { pole: [0, 0, 1], omega: 0 }, { pole: [0, 1, 0], omega: 0 });
-    const crustType = s.fields.crustType.slice();
-    const elevation = s.fields.elevation.slice();
-    // Ocean strip at cols 0..7 of face 0's center rows; continent elsewhere.
-    for (let r = 0; r < N32; r++) {
-      for (let c = 0; c < 8; c++) {
-        const i = faceRCToIndex(0, r, c, N32);
-        crustType[i] = 0;
-        elevation[i] = -5000;
-      }
-    }
-    // Continental cells start 30 m above the floor (T = T_min + 30/k).
-    const startT = CONTINENTAL_THICKNESS_MIN_M + 30 / CONTINENTAL_BUOYANCY_FACTOR;
-    const crustalThicknessM = s.fields.crustalThicknessM.slice();
-    for (let i = 0; i < crustType.length; i++) {
-      if (crustType[i] === 1) {
-        crustalThicknessM[i] = startT;
-        elevation[i] = continentalElevationForThicknessM(Math.fround(startT));
-      }
-    }
-    const world: PlanetState = {
-      ...s,
-      params: { ...s.params, freeboard: true, crustalColumns: true },
-      globals: { ...s.globals, seaLevelM: -4000 },
-      fields: { ...s.fields, crustType, elevation, crustalThicknessM },
-    };
-    // Two steps of 20 m/step subsidence would take the coast 10 m below the
-    // floor — the floor must bind on the second step.
-    const out = runSystems(world, 2, [freeboardSystem]);
-    const nbTable = neighborTable(N32);
-    let coastChecked = 0;
-    for (let i = 0; i < crustType.length; i++) {
-      if (out.fields.crustType[i] !== 1) continue;
-      const e = out.fields.elevation[i]!;
-      expect(e).toBeGreaterThanOrEqual(E_FLOOR_F32 - 0.01);
-      expect(out.fields.crustalThicknessM[i]!).toBeGreaterThanOrEqual(
-        CONTINENTAL_THICKNESS_MIN_M - 0.01,
-      );
-      // Coastal cells (oceanic 4-neighbor) provably subsided AND stopped.
-      for (let k = 0; k < 4; k++) {
-        if (out.fields.crustType[nbTable[i * 4 + k]!] === 0) {
-          expect(e).toBeLessThan(continentalElevationForThicknessM(startT) - 1);
-          coastChecked++;
-          break;
-        }
-      }
-    }
-    expect(coastChecked).toBeGreaterThan(0);
-    assertCoherent(out.fields, 'post-margin-floor');
-  });
-
   it('erosion floor: coastal export on a low sea cannot thin a column below T_min', () => {
     // Sea at −4000 m: a near-floor emergent cell (relative to that sea) with
     // a submerged oceanic neighbor would legacy-erode toward the sea; the
@@ -541,6 +486,161 @@ describe('stage C5 — the structural floor (trap T2) and the founder re-keys', 
       frames++;
     });
     expect(frames).toBeGreaterThan(1);
+  });
+});
+
+describe('stage C6 — rift-margin thinning (site 21: the last shim retired)', () => {
+  const N32 = 32;
+  // The finite stretch budget: CONTINENTAL_REFERENCE_THICKNESS_M / β = 30 km,
+  // exact in f32 — pinned below so a constants drift cannot silently move it.
+  const T_STOP = Math.fround(CONTINENTAL_REFERENCE_THICKNESS_M / MARGIN_STRETCH_FACTOR);
+  const E_STOP = Math.fround(
+    CONTINENTAL_ISOSTASY_DATUM_M + CONTINENTAL_BUOYANCY_FACTOR * T_STOP,
+  );
+
+  /** Two static plates, same-plate ocean strip at face-0 cols 0..7, uniform
+   *  continental thickness elsewhere — the C5 margin fixture's geometry. */
+  function marginWorld(columns: boolean, contThicknessM: number, seaLevelM: number): PlanetState {
+    const s = twoPlateState(N32, { pole: [0, 0, 1], omega: 0 }, { pole: [0, 1, 0], omega: 0 });
+    const crustType = s.fields.crustType.slice();
+    const elevation = s.fields.elevation.slice();
+    for (let r = 0; r < N32; r++) {
+      for (let c = 0; c < 8; c++) {
+        const i = faceRCToIndex(0, r, c, N32);
+        crustType[i] = 0;
+        elevation[i] = -5000;
+      }
+    }
+    const crustalThicknessM = s.fields.crustalThicknessM.slice();
+    for (let i = 0; i < crustType.length; i++) {
+      if (crustType[i] === 1) {
+        crustalThicknessM[i] = contThicknessM;
+        elevation[i] = continentalElevationForThicknessM(Math.fround(contThicknessM));
+      }
+    }
+    return {
+      ...s,
+      params: { ...s.params, freeboard: true, crustalColumns: columns },
+      globals: { ...s.globals, seaLevelM },
+      fields: { ...s.fields, crustType, elevation, crustalThicknessM },
+    };
+  }
+
+  it('pins the budget arithmetic: T_stop = 30 km, e(T_stop) ≈ −882 m — above the identity floor', () => {
+    expect(T_STOP).toBe(30000);
+    expect(E_STOP).toBeCloseTo(-881.8, 1);
+    expect(T_STOP).toBeGreaterThan(CONTINENTAL_THICKNESS_MIN_M);
+  });
+
+  it('band cells thin at the thickness rate and STOP at the 30 km budget, debit counted (never below — the β gate)', () => {
+    // Start 2.5 thinning-steps above the budget: the stop must bind on the
+    // third step and hold bit-exactly through the fifth.
+    const thinStep =
+      (PASSIVE_MARGIN_SUBSIDENCE_M_PER_YR / CONTINENTAL_BUOYANCY_FACTOR) *
+      createPlanetParams({ seed: 7, gridN: N32 }).stepYears;
+    const startT = Math.fround(T_STOP + 2.5 * thinStep);
+    const world = marginWorld(true, startT, -500);
+    const out = runSystems(world, 5, [freeboardSystem]);
+
+    const solidAngle = cellSolidAngleTable(N32);
+    const r2 = world.params.radiusMeters * world.params.radiusMeters;
+    let thinned = 0;
+    let expectedDebitM3 = 0;
+    for (let i = 0; i < out.fields.crustType.length; i++) {
+      if (out.fields.crustType[i] !== 1) continue;
+      const t = out.fields.crustalThicknessM[i]!;
+      // Margin action alone can never leave a column below the budget.
+      expect(t).toBeGreaterThanOrEqual(T_STOP - 0.01);
+      if (t !== startT) {
+        // A thinned band cell: settled exactly AT the stop, coherent.
+        thinned++;
+        expect(t).toBe(T_STOP);
+        expect(out.fields.elevation[i]).toBe(E_STOP);
+        expectedDebitM3 += (startT - T_STOP) * solidAngle[i]! * r2;
+      }
+    }
+    expect(thinned).toBeGreaterThan(0);
+    // A deep-interior cell is outside the band: untouched bit-for-bit.
+    const interior = faceRCToIndex(0, 16, 20, N32);
+    expect(out.fields.crustalThicknessM[interior]).toBe(startT);
+    // The declared post-rift subsidence debit, on true areas (T7).
+    expect(out.globals.columnsMarginThinnedM3).toBeCloseTo(expectedDebitM3, -9);
+    assertCoherent(out.fields, 'post-C6-margin');
+  });
+
+  it('the budget is a stop, not an attractor: below-budget margin columns are never touched', () => {
+    // 25 km columns (erosion/founder territory — below the budget, above the
+    // identity floor): margin action must not thin OR thicken them.
+    const world = marginWorld(true, 25000, -500);
+    const out = runSystems(world, 3, [freeboardSystem]);
+    expect(out.fields.crustalThicknessM).toEqual(world.fields.crustalThicknessM);
+    expect(out.fields.elevation).toEqual(world.fields.elevation);
+    expect(out.globals.columnsMarginThinnedM3).toBe(0);
+  });
+
+  it('margin thinning is sea-independent (T1: the stop is a fixed thickness, not a sea-keyed level)', () => {
+    // Identical worlds under a shallow and a deep sea: the thinning writes
+    // identical bytes — the term provably reads no sea level.
+    const shallow = runSystems(marginWorld(true, 39000, -500), 2, [freeboardSystem]);
+    const dry = runSystems(marginWorld(true, 39000, -4000), 2, [freeboardSystem]);
+    expect(shallow.fields.crustalThicknessM).toEqual(dry.fields.crustalThicknessM);
+    expect(shallow.fields.elevation).toEqual(dry.fields.elevation);
+    expect(shallow.globals.columnsMarginThinnedM3).toBe(dry.globals.columnsMarginThinnedM3);
+  });
+
+  it('surface-rate equivalence: the columns band drops k·dT = 20 m/step — exactly the legacy subsidence rate', () => {
+    // T(500 m) ≈ 39.7 km is above the budget, so band cells thin; interiors
+    // are untouched (no epeirogenic term on the columns path). The visible
+    // surface rate must be the legacy shim's PASSIVE_MARGIN_SUBSIDENCE
+    // (k·(2e-5/k) = 2e-5 m/yr) — C6 changes the STOP, not the rate.
+    const startT = Math.fround(continentalThicknessForElevationM(500));
+    const world = marginWorld(true, startT, -4000);
+    // The f32-stored entry elevation — the exact basis interior cells keep.
+    const e0 = Math.fround(continentalElevationForThicknessM(startT));
+    const out = runSystems(world, 1, [freeboardSystem]);
+    let banded = 0;
+    let interior = 0;
+    for (let i = 0; i < out.fields.crustType.length; i++) {
+      if (out.fields.crustType[i] !== 1) continue;
+      const drop = e0 - out.fields.elevation[i]!;
+      if (drop === 0) {
+        interior++;
+      } else {
+        banded++;
+        expect(drop).toBeCloseTo(PASSIVE_MARGIN_SUBSIDENCE_M_PER_YR * world.params.stepYears, 2);
+      }
+    }
+    expect(banded).toBeGreaterThan(0);
+    expect(interior).toBeGreaterThan(0);
+    assertCoherent(out.fields, 'post-C6-rate');
+  });
+
+  it('legacy arm: the sea-keyed shim is unchanged (epeirogenic 20 m + band subsidence 20 m), columns untouched', () => {
+    // Flag-off, sea −4000, all-continental at 500 m: every cell takes the
+    // full epeirogenic step down (gap ≪ bound), band cells additionally
+    // subside toward sea − 150 — exactly today's arithmetic.
+    const startT = Math.fround(continentalThicknessForElevationM(500));
+    const world = marginWorld(false, startT, -4000);
+    const e0 = Math.fround(continentalElevationForThicknessM(startT));
+    const out = runSystems(world, 1, [freeboardSystem]);
+    const epeiro = 20; // FREEBOARD_RELAX_M_PER_YR × 1 Myr, downward (bound binds)
+    const subside = PASSIVE_MARGIN_SUBSIDENCE_M_PER_YR * world.params.stepYears;
+    let banded = 0;
+    let interior = 0;
+    let other = 0;
+    for (let i = 0; i < out.fields.crustType.length; i++) {
+      if (out.fields.crustType[i] !== 1) continue;
+      const drop = e0 - out.fields.elevation[i]!;
+      if (Math.abs(drop - epeiro) < 0.01) interior++;
+      else if (Math.abs(drop - (epeiro + subside)) < 0.01) banded++;
+      else other++;
+    }
+    expect(banded).toBeGreaterThan(0);
+    expect(interior).toBeGreaterThan(0);
+    expect(other).toBe(0);
+    // The legacy arm never writes thickness and never counts the C6 debit.
+    expect(out.fields.crustalThicknessM).toEqual(world.fields.crustalThicknessM);
+    expect(out.globals.columnsMarginThinnedM3).toBe(0);
   });
 });
 

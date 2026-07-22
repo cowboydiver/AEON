@@ -116,7 +116,7 @@ export const MECHANISMS: readonly MechanismInfo[] = [
     key: 'crustalColumns',
     label: 'Crustal columns',
     summary:
-      'Crustal thickness becomes the primary vertical state: continental elevation is derived by Airy isostasy over a fixed datum (docs/CRUSTAL_COLUMN_PROPOSAL.md), so freeboard, cratonic platforms and foundering become consequences of a mass budget instead of servo targets. Stage C1: mechanical shims reproduce today’s behavior distributionally while the migration replaces them with physics one mechanism at a time.',
+      'Crustal thickness becomes the primary vertical state: continental elevation is derived by Airy isostasy over a fixed datum (docs/CRUSTAL_COLUMN_PROPOSAL.md), so freeboard, cratonic platforms and foundering become consequences of a mass budget instead of servo targets. Stage C6: the migration is mechanism-complete — every continental write site is a thickness transaction (the last shim, the passive margin, retired for finite-β rift thinning); C7 calibration + the water sweep gate promotion.',
   },
 ] satisfies readonly MechanismInfo[];
 

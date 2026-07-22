@@ -555,6 +555,15 @@ export interface Globals {
    *  e(T_min), where foundered fragments stand emergent and crust is
    *  hoarded — physical, watched, not silent). */
   columnsRetiredCells: number;
+  /** Crustal-columns C6: cumulative rock volume thinned off passive-margin
+   *  columns by the site-21 rift-margin thinning (the finite stretch
+   *  budget: bands thin toward CONTINENTAL_REFERENCE_THICKNESS_M /
+   *  MARGIN_STRETCH_FACTOR = 30 km and STOP — never the identity floor,
+   *  never a sea-keyed level), m³ — the declared post-rift subsidence debit
+   *  of the proposal-§5 mass ledger (v1's fixed grid cannot spread a
+   *  stretched column laterally, so the volume is declared, not
+   *  transported). */
+  columnsMarginThinnedM3: number;
 }
 
 export interface PlanetState {
@@ -745,6 +754,7 @@ export function createInitialState(params: PlanetParams): PlanetState {
       columnsFounderTrimM3: 0,
       columnsRetiredDebitM3: 0,
       columnsRetiredCells: 0,
+      columnsMarginThinnedM3: 0,
     },
     fields,
     plates: [],

@@ -93,6 +93,7 @@ export function twoPlateState(
       columnsFounderTrimM3: 0,
       columnsRetiredDebitM3: 0,
       columnsRetiredCells: 0,
+      columnsMarginThinnedM3: 0,
     },
     fields,
     plates: [makePlate(plate0), makePlate(plate1)],

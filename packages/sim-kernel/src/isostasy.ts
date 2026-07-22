@@ -63,11 +63,14 @@ export function continentalThicknessForElevationM(elevationM: number): number {
  * The structural continental floor elevation (stage C5, trap T2):
  * e(CONTINENTAL_THICKNESS_MIN_M) ≈ −2306 m — the surface of the thinnest
  * column any columns-path process may leave behind. Every sea-keyed thinning
- * stop (crustFates founder, the site-4 sliver trim, the site-21 margin shim,
- * erosion's export/planation base levels, the site-17 block cap) bottoms out
- * here on the columns path; on seas ABOVE this level the sea-keyed stop binds
- * first and the floor is inert, on seas BELOW it (the dry half of the water
- * sweep) the floor is what keeps thinning bounded.
+ * stop (crustFates founder, the site-4 sliver trim, erosion's
+ * export/planation base levels, the site-17 block cap) bottoms out here on
+ * the columns path; on seas ABOVE this level the sea-keyed stop binds first
+ * and the floor is inert, on seas BELOW it (the dry half of the water sweep)
+ * the floor is what keeps thinning bounded. The site-21 margin writer no
+ * longer appears in this list: since stage C6 its stop is the fixed 30 km
+ * stretch budget (e ≈ −882 m), above the floor by construction and never
+ * sea-keyed.
  */
 export const CONTINENTAL_FLOOR_ELEVATION_M = continentalElevationForThicknessM(
   CONTINENTAL_THICKNESS_MIN_M,

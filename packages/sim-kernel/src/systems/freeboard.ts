@@ -68,8 +68,20 @@
  * its buoyancy floor are RETIRED on the columns path — freeboard is the
  * mass budget's output there (site 20; pulled forward from stage C5 by the
  * §9 risk 3 escalation after the C3 gate measured the servo dominating the
- * honest injectors — see CRUSTAL_COLUMN_STAGE_C3_GATE.md). Term (2)
- * remains a ΔT = Δe/k shim until C6.
+ * honest injectors — see CRUSTAL_COLUMN_STAGE_C3_GATE.md). Term (2) is
+ * rift-margin THINNING since stage C6 (the last shim retired): the same
+ * band geometry, but a native thickness transaction — dT = (2e-5 m/yr)/k,
+ * so the surface answers at exactly the legacy subsidence rate — with the
+ * finite stretch budget CONTINENTAL_REFERENCE_THICKNESS_M /
+ * MARGIN_STRETCH_FACTOR = 30 km (β = 1.3, McKenzie 1978) as its stop: a
+ * fixed thickness, never the 20 km identity floor (the T2 unbounded-grind
+ * shape) and never the sea (the model's last sea-keyed relaxation target
+ * retires here — trap T1 closed for the final model). Shelf shallowness
+ * stays owned by the sea-graded sediment machinery (base-level physics,
+ * self-limiting). The thinned volume is the declared post-rift subsidence
+ * debit of the proposal-§5 mass ledger (`columnsMarginThinnedM3` — v1's
+ * fixed grid cannot spread a stretched column laterally, so the volume is
+ * declared, not transported).
  *
  * Determinism: no RNG, fixed-order scans, one BFS in ascending seed order.
  * Gated behind params.freeboard (default off) with the standard
@@ -85,19 +97,18 @@
 
 import {
   ACTIVE_MARGIN_STRESS_M_PER_YR,
+  CONTINENTAL_BUOYANCY_FACTOR,
   CONTINENTAL_BUOYANCY_FLOOR_M,
+  CONTINENTAL_REFERENCE_THICKNESS_M,
   FREEBOARD_RELAX_M_PER_YR,
   FREEBOARD_TARGET_M,
+  MARGIN_STRETCH_FACTOR,
   PASSIVE_MARGIN_SHELF_M,
   PASSIVE_MARGIN_SUBSIDENCE_M_PER_YR,
   PASSIVE_MARGIN_WIDTH_CELLS,
 } from '../constants';
-import { cellCount, neighborTable } from '../grid';
-import {
-  CONTINENTAL_FLOOR_ELEVATION_M,
-  crustalColumnsActive,
-  reconcileContinentalColumns,
-} from '../isostasy';
+import { cellCount, cellSolidAngleTable, neighborTable } from '../grid';
+import { continentalElevationForThicknessM, crustalColumnsActive } from '../isostasy';
 import type { System } from '../step';
 
 export const freeboardSystem: System = {
@@ -123,7 +134,8 @@ export const freeboardSystem: System = {
     // onto its sea+400 target). Freeboard is now the mass budget's output;
     // the −17.8 km ratchet the floor guarded against is non-expressible in
     // thickness space (e ≥ C + k·T_min once C5 regularizes the shim lobe).
-    // Term (2), the margin band, remains a C1 shim until C6.
+    // Term (2), the margin band, is rift-margin thinning since stage C6
+    // (the header comment; the columns branch below the BFS).
     const columns = crustalColumnsActive(state);
 
     // --- (1) Epeirogenic relaxation: uniform shift of the continental stack.
@@ -173,46 +185,66 @@ export const freeboardSystem: System = {
       }
     }
 
-    // C5 structural floor (trap T2): on the columns path the margin shim's
-    // sea-keyed stop bottoms out at the identity floor e(T_min) ≈ −2306 m —
-    // no columns-path process may thin a column below it. Inert whenever the
-    // sea sits above e(T_min) + PASSIVE_MARGIN_SHELF_M (every measured
-    // scale-1.0 sea); it binds only on the dry half of the water sweep.
-    // Stage C6 replaces the whole term with the finite-β rift thinning.
-    const shelfLevel = columns
-      ? Math.max(seaLevel + PASSIVE_MARGIN_SHELF_M, CONTINENTAL_FLOOR_ELEVATION_M)
-      : seaLevel + PASSIVE_MARGIN_SHELF_M;
+    // Crustal columns, stage C6 (site 21 — the last shim retired): the band
+    // is rift-margin THINNING, a native thickness transaction. Rate: the
+    // legacy surface rate read through the derivation, dT = (2e-5 m/yr)/k,
+    // so k·dT reproduces PASSIVE_MARGIN_SUBSIDENCE_M_PER_YR at the surface.
+    // Stop: the finite stretch budget CONTINENTAL_REFERENCE_THICKNESS_M /
+    // MARGIN_STRETCH_FACTOR = 30 km (β = 1.3, McKenzie 1978) — a FIXED
+    // thickness. No sea level is read anywhere in the term (T1: the model's
+    // last sea-keyed relaxation target retires here), and the stop is far
+    // above the 20 km identity floor (an unbounded grind to the identity
+    // floor is exactly the T2 ratchet shape — a constant rate needs a stop;
+    // proposal §5 site 21 / §8 T2). The thinned volume is the declared
+    // post-rift subsidence debit, counted on true areas (T7).
+    if (columns) {
+      const budgetThicknessM = CONTINENTAL_REFERENCE_THICKNESS_M / MARGIN_STRETCH_FACTOR;
+      const thinM = (PASSIVE_MARGIN_SUBSIDENCE_M_PER_YR / CONTINENTAL_BUOYANCY_FACTOR) * dtYears;
+      const solidAngle = cellSolidAngleTable(N);
+      const r2 = state.params.radiusMeters * state.params.radiusMeters;
+      const elevation = old.slice();
+      const crustalThicknessM = state.fields.crustalThicknessM.slice();
+      let thinnedM3 = 0;
+      for (let i = 0; i < count; i++) {
+        if (depth[i] === -1) continue;
+        const t = crustalThicknessM[i]!;
+        // The budget is a stop, not an attractor: columns already at or
+        // below it (erosion/founder territory) are never touched — margin
+        // action alone cannot take a column below 30 km.
+        if (t <= budgetThicknessM) continue;
+        crustalThicknessM[i] = Math.max(budgetThicknessM, t - thinM);
+        // Coherence: elevation re-derived from the STORED (f32) thickness.
+        elevation[i] = continentalElevationForThicknessM(crustalThicknessM[i]!);
+        thinnedM3 += (t - crustalThicknessM[i]!) * solidAngle[i]! * r2;
+      }
+      return {
+        ...state,
+        globals: {
+          ...state.globals,
+          columnsMarginThinnedM3: state.globals.columnsMarginThinnedM3 + thinnedM3,
+        },
+        fields: { ...state.fields, elevation, crustalThicknessM },
+      };
+    }
+
+    // Legacy path: the epeirogenic shift and the sea-keyed margin shelf.
+    const shelfLevel = seaLevel + PASSIVE_MARGIN_SHELF_M;
     const floorLevel = seaLevel + CONTINENTAL_BUOYANCY_FLOOR_M;
     const subside = PASSIVE_MARGIN_SUBSIDENCE_M_PER_YR * dtYears;
     const elevation = old.slice();
     for (let i = 0; i < count; i++) {
       if (crustType[i] !== 1) continue;
       let e = elevation[i]!;
-      // The epeirogenic shift and its buoyancy floor apply on the LEGACY
-      // path only — retired on the columns path (see above). The downward
-      // shift stops at the buoyancy floor (continental crust floats — see
-      // CONTINENTAL_BUOYANCY_FLOOR_M for the unbounded-ratchet failure this
-      // prevents); cells already below the floor are left in place, never
-      // lifted. Upward shifts apply everywhere.
-      if (!columns) {
-        if (delta >= 0) e += delta;
-        else if (e > floorLevel) e = Math.max(floorLevel, e + delta);
-      }
+      // The downward shift stops at the buoyancy floor (continental crust
+      // floats — see CONTINENTAL_BUOYANCY_FLOOR_M for the unbounded-ratchet
+      // failure this prevents); cells already below the floor are left in
+      // place, never lifted. Upward shifts apply everywhere.
+      if (delta >= 0) e += delta;
+      else if (e > floorLevel) e = Math.max(floorLevel, e + delta);
       // Downward only, clamped at the shelf level — subsidence never raises
       // a cell and never digs the shelf past its target.
       if (depth[i] !== -1 && e > shelfLevel) e = Math.max(shelfLevel, e - subside);
       elevation[i] = e;
-    }
-
-    // Crustal columns (C1, site 21): the margin subsidence above ran with
-    // today's arithmetic; reconcile its continental Δe into thickness space
-    // at exit (ΔT = Δe/k — the mechanical shim). Stage C6 replaces it with
-    // the finite-budget rift-margin thinning (proposal §6). Site 20
-    // contributes no Δe here anymore — retired above.
-    if (columns) {
-      const crustalThicknessM = state.fields.crustalThicknessM.slice();
-      reconcileContinentalColumns(crustType, old, elevation, crustalThicknessM);
-      return { ...state, fields: { ...state.fields, elevation, crustalThicknessM } };
     }
 
     return { ...state, fields: { ...state.fields, elevation } };
