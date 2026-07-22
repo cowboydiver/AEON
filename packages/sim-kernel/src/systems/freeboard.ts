@@ -93,7 +93,11 @@ import {
   PASSIVE_MARGIN_WIDTH_CELLS,
 } from '../constants';
 import { cellCount, neighborTable } from '../grid';
-import { crustalColumnsActive, reconcileContinentalColumns } from '../isostasy';
+import {
+  CONTINENTAL_FLOOR_ELEVATION_M,
+  crustalColumnsActive,
+  reconcileContinentalColumns,
+} from '../isostasy';
 import type { System } from '../step';
 
 export const freeboardSystem: System = {
@@ -169,7 +173,15 @@ export const freeboardSystem: System = {
       }
     }
 
-    const shelfLevel = seaLevel + PASSIVE_MARGIN_SHELF_M;
+    // C5 structural floor (trap T2): on the columns path the margin shim's
+    // sea-keyed stop bottoms out at the identity floor e(T_min) ≈ −2306 m —
+    // no columns-path process may thin a column below it. Inert whenever the
+    // sea sits above e(T_min) + PASSIVE_MARGIN_SHELF_M (every measured
+    // scale-1.0 sea); it binds only on the dry half of the water sweep.
+    // Stage C6 replaces the whole term with the finite-β rift thinning.
+    const shelfLevel = columns
+      ? Math.max(seaLevel + PASSIVE_MARGIN_SHELF_M, CONTINENTAL_FLOOR_ELEVATION_M)
+      : seaLevel + PASSIVE_MARGIN_SHELF_M;
     const floorLevel = seaLevel + CONTINENTAL_BUOYANCY_FLOOR_M;
     const subside = PASSIVE_MARGIN_SUBSIDENCE_M_PER_YR * dtYears;
     const elevation = old.slice();

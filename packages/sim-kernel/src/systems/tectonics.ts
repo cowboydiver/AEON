@@ -32,8 +32,8 @@ import { seaKeyedOceanicDepthForAge } from '../bathymetry';
 import {
   ACTIVE_MARGIN_STRESS_M_PER_YR,
   COLLISION_THICKENING_FACTOR,
-  CONTINENTAL_BUOYANCY_FACTOR,
   CONTINENTAL_THICKNESS_MAX_M,
+  CONTINENTAL_THICKNESS_MIN_M,
   CRUST_DENSITY_CONTINENTAL_KG_M3,
   MARGIN_CONSOLIDATION_HOLE_MIN_NEIGHBORS,
   MICROCONTINENT_FOUNDER_ELEVATION_M,
@@ -205,6 +205,11 @@ function applyTectonics(state: PlanetState, dtYears: number): PlanetState {
   // waterline (datums.ts).
   const founderLevel = platformDatumOffsetM(next) + MICROCONTINENT_FOUNDER_ELEVATION_M;
   const nbTable = neighborTable(N);
+  // C5 (site 4): the founder trim debit, true areas (T7) — declared
+  // non-conservative, today's posture made visible. 0 flag-off.
+  let founderTrimM3 = 0;
+  const founderSolidAngle = crustalThicknessM !== null ? cellSolidAngleTable(N) : null;
+  const founderR2 = state.params.radiusMeters * state.params.radiusMeters;
   for (let i = 0; i < crustType.length; i++) {
     if (crustType[i] !== 1) continue;
     if (
@@ -214,13 +219,16 @@ function applyTectonics(state: PlanetState, dtYears: number): PlanetState {
       crustType[nbTable[i * 4 + 3]!] !== 1
     ) {
       if (crustalThicknessM !== null) {
-        // C1 shim (site 4): the clamp's Δe routes through thickness
-        // (ΔT = Δe/k) and elevation re-derives from the stored column —
-        // same value as the flag-off Math.min to within 1 f32 ULP.
-        const e = elevation[i]!;
-        if (e > founderLevel) {
-          crustalThicknessM[i] =
-            crustalThicknessM[i]! + (founderLevel - e) / CONTINENTAL_BUOYANCY_FACTOR;
+        // C5 (site 4): a stranded one-cell fragment is THINNED CRUST — the
+        // sliver trims to the identity floor (T := min(T,
+        // CONTINENTAL_THICKNESS_MIN_M), proposal §5 site 4) and its thin
+        // column sits low definitionally (e(T_min) ≈ −2306 m) instead of
+        // being clamped to the sea-keyed founder level. The trim is the
+        // declared founder debit, counted; idempotent like the legacy clamp.
+        const tCur = crustalThicknessM[i]!;
+        if (tCur > CONTINENTAL_THICKNESS_MIN_M) {
+          founderTrimM3 += (tCur - CONTINENTAL_THICKNESS_MIN_M) * founderSolidAngle![i]! * founderR2;
+          crustalThicknessM[i] = CONTINENTAL_THICKNESS_MIN_M;
           elevation[i] = continentalElevationForThicknessM(crustalThicknessM[i]!);
         }
       } else {
@@ -380,6 +388,8 @@ function applyTectonics(state: PlanetState, dtYears: number): PlanetState {
         next.globals.marginConsolidationFlipsTotal +
         (state.params.plateCensus ? consolidationFlips : 0),
       columnsSedimentZeroedM3: next.globals.columnsSedimentZeroedM3 + sedimentZeroedM3,
+      // C5 (site 4): the isolated-sliver trims to the identity floor.
+      columnsFounderTrimM3: next.globals.columnsFounderTrimM3 + founderTrimM3,
       // C3: advect-time collision binds are already in next.globals (advect
       // accumulates them); add this step's orogeny-BFS binds and the C4
       // sediment-accretion clips on top.

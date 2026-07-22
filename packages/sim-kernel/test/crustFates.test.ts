@@ -2,13 +2,20 @@ import { describe, expect, it } from 'vitest';
 import {
   CONTINENTAL_BUOYANCY_FACTOR,
   CONTINENTAL_ISOSTASY_DATUM_M,
+  CONTINENTAL_THICKNESS_MIN_M,
   CRUST_DENSITY_CONTINENTAL_KG_M3,
   CRUST_FATE_SUBSIDENCE_M_PER_YR,
   MICROCONTINENT_FOUNDER_ELEVATION_M,
+  OCEANIC_CRUST_THICKNESS_M,
   SEDIMENT_DENSITY_KG_M3,
 } from '../src/constants';
 import { cellSolidAngleTable, faceRCToIndex } from '../src/grid';
-import { continentalThicknessForElevationM } from '../src/isostasy';
+import {
+  CONTINENTAL_FLOOR_ELEVATION_M,
+  continentalElevationForThicknessM,
+  continentalThicknessForElevationM,
+  foundCrustalThickness,
+} from '../src/isostasy';
 import { crustFatesSystem } from '../src/systems/crustFates';
 import type { PlanetState } from '../src/state';
 import { runSystems, twoPlateState } from './helpers';
@@ -229,6 +236,102 @@ describe('crustFates system (#88)', () => {
     const big = paintBlock(oceanWorld(), 0, 6, 6, 8000);
     const outBig = crustFatesSystem.apply(big, big.params.stepYears, { rng: undefined as never });
     expect(outBig).toBe(big);
+  });
+
+  it('C5 (site 19): the columns founder THINS to the identity floor, then retirement fires thickness-keyed', () => {
+    // Anchor on face 1; isolated small 1×2 block on face 0 riding 100 m
+    // above the floor. Columns found coherently by inversion. Sea at 0, so
+    // the floor (−2306 m) is well below the waves.
+    let world = paintBlock(oceanWorld(), 1, 6, 6, 1000);
+    world = paintBlock(world, 0, 1, 2, CONTINENTAL_FLOOR_ELEVATION_M + 100);
+    const found = foundCrustalThickness(world.fields.elevation, world.fields.crustType);
+    const elevation = world.fields.elevation.slice();
+    for (let i = 0; i < elevation.length; i++) {
+      if (world.fields.crustType[i] === 1) {
+        elevation[i] = continentalElevationForThicknessM(found[i]!);
+      }
+    }
+    world = {
+      ...world,
+      params: { ...world.params, crustalColumns: true },
+      fields: { ...world.fields, elevation, crustalThicknessM: found },
+    };
+    const cells = blockCells(0, 1, 2);
+    const startT = Math.fround(
+      continentalThicknessForElevationM(Math.fround(CONTINENTAL_FLOOR_ELEVATION_M + 100)),
+    );
+
+    // Step 1: the subsidence quantum (1000 m surface ≈ 7 km of thickness)
+    // overshoots — the thinning CLAMPS at the floor, never below, the trim
+    // counted; the crust record survives (retirement reads pre-pass state).
+    const one = runSystems(world, 1, [crustFatesSystem]);
+    let expectedTrimM3 = 0;
+    for (const c of cells) {
+      expect(one.fields.crustType[c]).toBe(1);
+      expect(one.fields.crustalThicknessM[c]).toBe(CONTINENTAL_THICKNESS_MIN_M);
+      expect(one.fields.elevation[c]).toBe(
+        Math.fround(continentalElevationForThicknessM(CONTINENTAL_THICKNESS_MIN_M)),
+      );
+      expectedTrimM3 +=
+        (startT - CONTINENTAL_THICKNESS_MIN_M) *
+        cellSolidAngleTable(N)[c]! *
+        world.params.radiusMeters ** 2;
+    }
+    expect(one.globals.columnsFounderTrimM3).toBeCloseTo(expectedTrimM3, -9);
+    expect(one.globals.columnsRetiredCells).toBe(0);
+
+    // Step 2: the pre-pass component is wholly submerged AND wholly at the
+    // floor — the thickness-keyed retirement fires: crustType → 0, the cell
+    // re-founds a 7.1 km oceanic column, the debit counted, elevation left
+    // in place for the oceanic relaxation (no cliff).
+    const two = runSystems(world, 2, [crustFatesSystem]);
+    let expectedDebitM3 = 0;
+    for (const c of cells) {
+      expect(two.fields.crustType[c]).toBe(0);
+      expect(two.fields.sutureYears[c]).toBe(0);
+      expect(two.fields.crustalThicknessM[c]).toBe(OCEANIC_CRUST_THICKNESS_M);
+      expect(two.fields.elevation[c]).toBe(
+        Math.fround(continentalElevationForThicknessM(CONTINENTAL_THICKNESS_MIN_M)),
+      );
+      expectedDebitM3 +=
+        CONTINENTAL_THICKNESS_MIN_M *
+        cellSolidAngleTable(N)[c]! *
+        world.params.radiusMeters ** 2;
+    }
+    expect(two.globals.columnsRetiredCells).toBe(2);
+    expect(two.globals.columnsRetiredDebitM3).toBeCloseTo(expectedDebitM3, -9);
+  });
+
+  it('C5 (site 19): on a sea BELOW the floor, foundered fragments stand emergent and never retire (crust is hoarded)', () => {
+    // The retirement-reachability directional fixture: the same at-the-floor
+    // fragment under a dry sea (−3000 m < e(T_min)) is EMERGENT — the
+    // submergence half of the trigger can never pass, so the crust record
+    // survives indefinitely (the documented dry-world hoarding consequence;
+    // the legacy trigger would have retired it once it sat below sea − 200).
+    let world = paintBlock(oceanWorld(), 1, 6, 6, 1000);
+    world = paintBlock(world, 0, 1, 2, CONTINENTAL_FLOOR_ELEVATION_M);
+    const found = foundCrustalThickness(world.fields.elevation, world.fields.crustType);
+    const elevation = world.fields.elevation.slice();
+    for (let i = 0; i < elevation.length; i++) {
+      if (world.fields.crustType[i] === 1) {
+        elevation[i] = continentalElevationForThicknessM(found[i]!);
+      }
+    }
+    world = {
+      ...world,
+      params: { ...world.params, crustalColumns: true },
+      globals: { ...world.globals, seaLevelM: -3000 },
+      fields: { ...world.fields, elevation, crustalThicknessM: found },
+    };
+    const out = runSystems(world, 5, [crustFatesSystem]);
+    for (const c of blockCells(0, 1, 2)) {
+      expect(out.fields.crustType[c]).toBe(1);
+      expect(out.fields.crustalThicknessM[c]!).toBeGreaterThanOrEqual(
+        CONTINENTAL_THICKNESS_MIN_M - 0.01,
+      );
+    }
+    expect(out.globals.columnsRetiredCells).toBe(0);
+    expect(out.globals.columnsRetiredDebitM3).toBe(0);
   });
 
   it('is inert before crustFatesOnsetYears and active from it (#88 branched A/B)', () => {

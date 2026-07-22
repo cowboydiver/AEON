@@ -48,7 +48,11 @@ import {
 } from '../constants';
 import { platformDatumOffsetM } from '../datums';
 import { cellCount } from '../grid';
-import { crustalColumnsActive, reconcileContinentalColumns } from '../isostasy';
+import {
+  CONTINENTAL_FLOOR_ELEVATION_M,
+  crustalColumnsActive,
+  reconcileContinentalColumns,
+} from '../isostasy';
 import type { System } from '../step';
 
 /**
@@ -105,7 +109,17 @@ export const blockIsostasySystem: System = {
     );
     if (areasM2.length === 0) return state;
 
-    const caps = areasM2.map((area) => blockElevationCap(area, platformDatumOffsetM(state)));
+    // Crustal columns, C5 structural floor (trap T2 / site 17): the ramp's
+    // sea-keyed base bottoms out at the identity floor e(T_min) ≈ −2306 m on
+    // the columns path — this prototype may not thin a column below the
+    // floor either (inert on seas above e(T_min) − MICROCONTINENT founder
+    // depth; the C5 measurement scores whether thin-column foundering makes
+    // the whole cap redundant there).
+    const columns = crustalColumnsActive(state);
+    const caps = areasM2.map((area) => {
+      const cap = blockElevationCap(area, platformDatumOffsetM(state));
+      return columns ? Math.max(cap, CONTINENTAL_FLOOR_ELEVATION_M) : cap;
+    });
 
     // Rate-bounded subsidence toward the cap; never raises. The elevation
     // array is copied lazily so an all-continents-huge step (caps inert)
@@ -127,7 +141,7 @@ export const blockIsostasySystem: System = {
     // thickness space at exit (this prototype is default-off; the combined
     // world still keeps the derived-cache invariant). Stage C5 measures
     // whether thin-column foundering makes this cap redundant.
-    if (crustalColumnsActive(state)) {
+    if (columns) {
       const crustalThicknessM = state.fields.crustalThicknessM.slice();
       reconcileContinentalColumns(
         state.fields.crustType,

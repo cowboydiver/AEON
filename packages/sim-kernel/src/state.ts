@@ -531,6 +531,30 @@ export interface Globals {
    *  flips (inversion thickness × true cell area), m³ — the arc-accretion
    *  creation credit, the creation side of the §6 C4 budget print. */
   columnsMaturationCreditM3: number;
+  /** Crustal-columns C5: rock volume credited by the ONE-TIME onset
+   *  regularization `T := max(T, CONTINENTAL_THICKNESS_MIN_M)` over
+   *  continental cells (the shim-era below-floor lobe lifted to the physical
+   *  floor — a declared ledger credit whose magnitude is a reported A/B
+   *  statistic; proposal §6 C5 / §9 risk 3). Written once, at the onset
+   *  step, m³ of continental crust. */
+  columnsRegularizedCreditM3: number;
+  /** Crustal-columns C5: cumulative rock volume trimmed off columns by the
+   *  founder re-keys — the site-4 isolated-sliver trim to the identity floor
+   *  and the site-19 crustFates founder subsidence toward it — m³. The
+   *  declared non-conservative founder debit of the §5 mass ledger, now
+   *  counted (today's posture, made visible). */
+  columnsFounderTrimM3: number;
+  /** Crustal-columns C5: cumulative continental rock volume retired at the
+   *  thickness-keyed crustFates retirement (site 19: whole component
+   *  submerged AND at the floor), m³ — the ledger's one deliberate
+   *  continental debit, the consumption side answering the C4 creation
+   *  print. The retired cell re-founds a 7.1 km oceanic column. */
+  columnsRetiredDebitM3: number;
+  /** Crustal-columns C5: cumulative count of cells retired by that debit —
+   *  the retirement-reachability audit's numerator (0 on seas below
+   *  e(T_min), where foundered fragments stand emergent and crust is
+   *  hoarded — physical, watched, not silent). */
+  columnsRetiredCells: number;
 }
 
 export interface PlanetState {
@@ -717,6 +741,10 @@ export function createInitialState(params: PlanetParams): PlanetState {
       columnsMaturationFlips: 0,
       columnsMaturationElevSumM: 0,
       columnsMaturationCreditM3: 0,
+      columnsRegularizedCreditM3: 0,
+      columnsFounderTrimM3: 0,
+      columnsRetiredDebitM3: 0,
+      columnsRetiredCells: 0,
     },
     fields,
     plates: [],

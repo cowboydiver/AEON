@@ -48,6 +48,7 @@ import { labelContinentalComponents } from '../components';
 import {
   CONTINENTAL_BUOYANCY_FACTOR,
   CONTINENTAL_THICKNESS_MAX_M,
+  CONTINENTAL_THICKNESS_MIN_M,
   CRUST_DENSITY_CONTINENTAL_KG_M3,
   CRUST_FATE_MERGE_GAP_CELLS,
   CRUST_FATE_SMALL_AREA_M2,
@@ -139,10 +140,10 @@ export const crustFatesSystem: System = {
     // possible when two terranes dock across the same strait, are last-wins
     // in that order and therefore deterministic).
     const pre = state.fields;
-    // Crustal columns (C1, sites 18–19): dock welds found their columns by
-    // inversion, founder subsidence mirrors ΔT = Δe/k, and retirement
-    // re-founds 7.1 km oceanic columns (the ledger debit — the retirement
-    // TRIGGER itself re-keys to thickness at stage C5).
+    // Crustal columns (sites 18–19): dock welds found their columns by
+    // inversion (C1); since C5 the founder subsides by THINNING toward the
+    // identity floor and retirement is thickness-keyed (wholly submerged AND
+    // wholly at the floor), the debit counted — see the founder branch below.
     const columns = crustalColumnsActive(state);
     let elevation: Float32Array | null = null;
     let crustType: Float32Array | null = null;
@@ -157,8 +158,25 @@ export const crustFatesSystem: System = {
     let sedimentZeroedM3 = 0;
     // C4: weld accretions clipped by the 70 km collapse ceiling.
     let capBinds = 0;
+    // C5 (site 19): founder-subsidence trim + retirement debit, true areas.
+    let founderTrimM3 = 0;
+    let retiredDebitM3 = 0;
+    let retiredCells = 0;
     const solidAngle = columns ? cellSolidAngleTable(N) : null;
     const r2 = state.params.radiusMeters * state.params.radiusMeters;
+    // C5 (site 19): the retirement trigger re-keys to thickness — a component
+    // retires when it is wholly SUBMERGED (below the previous step's dynamic
+    // sea level — the #33 lag, so retirement stays "already invisible in the
+    // land mask") AND wholly AT THE FLOOR (T ≤ CONTINENTAL_THICKNESS_MIN_M
+    // + ε). The legacy elevation trigger (max elev ≤ sea − 200) is
+    // unreachable once foundered columns rest at e(T_min) ≈ −2306 m on any
+    // sea above −2106 m... and on seas BELOW e(T_min) foundered fragments
+    // stand emergent and rarely retire — a dry planet hoards continental
+    // crust (physical; the sweep's crust-fraction watch carries it, and
+    // `columnsRetiredCells` is the reachability audit's numerator). ε covers
+    // f32 store rounding of shim-reconciled columns near the floor.
+    const seaLevelM = state.globals.seaLevelM;
+    const FLOOR_EPS_M = 1;
 
     for (let comp = 0; comp < nComps; comp++) {
       if (!isSmall[comp]) continue;
@@ -248,12 +266,31 @@ export const crustFatesSystem: System = {
         continue;
       }
 
-      // --- Founder. Out of docking range: subside toward the founder level,
+      // --- Founder. Out of docking range: subside toward the founder stop,
       // and retire the crust record only once the whole component (pre-pass)
-      // already sits at or below it — never a visible land-mask pop.
+      // is already invisible in the land mask — never a visible pop. The two
+      // paths differ in what the stop and the retirement trigger are:
+      // legacy keys both on the sea-keyed founder level; the columns path
+      // (C5, site 19) keys both on the identity floor — foundering is
+      // crustal THINNING toward CONTINENTAL_THICKNESS_MIN_M (the same
+      // surface rate, read through the derivation: ΔT = Δe/k), and
+      // retirement fires only for a component wholly submerged AND wholly
+      // at the floor.
       let maxElev = -Infinity;
       for (const m of cells) if (pre.elevation[m]! > maxElev) maxElev = pre.elevation[m]!;
-      if (maxElev <= founderLevel) {
+      let retire: boolean;
+      if (columns) {
+        let maxThickness = -Infinity;
+        for (const m of cells) {
+          const t = pre.crustalThicknessM[m]!;
+          if (t > maxThickness) maxThickness = t;
+        }
+        retire =
+          maxElev < seaLevelM && maxThickness <= CONTINENTAL_THICKNESS_MIN_M + FLOOR_EPS_M;
+      } else {
+        retire = maxElev <= founderLevel;
+      }
+      if (retire) {
         crustType ??= pre.crustType.slice();
         sutureYears ??= pre.sutureYears.slice();
         for (const m of cells) {
@@ -262,29 +299,39 @@ export const crustFatesSystem: System = {
           // elevation/crustAge stay: the drowned platform re-enters the
           // oceanic ledger where the age-depth relaxation (tectonics.ts)
           // takes it down at its bounded rate — no cliff.
-          // C1 branch flip (site 19): the retired column's mass leaves the
-          // continental ledger (the one deliberate debit); the cell re-founds
-          // a 7.1 km oceanic column. Elevation semantics above unchanged.
+          // Branch flip (site 19): the retired column's mass leaves the
+          // continental ledger (the one deliberate debit, C5-counted); the
+          // cell re-founds a 7.1 km oceanic column.
           if (columns) {
             crustalThicknessM ??= pre.crustalThicknessM.slice();
+            retiredDebitM3 += crustalThicknessM[m]! * solidAngle![m]! * r2;
+            retiredCells++;
             crustalThicknessM[m] = OCEANIC_CRUST_THICKNESS_M;
           }
         }
       } else {
         const relax = CRUST_FATE_SUBSIDENCE_M_PER_YR * dtYears;
         for (const m of cells) {
-          const e = (elevation ?? pre.elevation)[m]!;
-          if (e <= founderLevel) continue;
-          elevation ??= pre.elevation.slice();
           if (columns) {
-            // C1 shim (site 19): the founder subsidence Δe routes through
-            // thickness — same value to within 1 f32 ULP.
+            // C5 (site 19): founder subsidence is thinning with a physical
+            // stop — the identity floor, never the sea-keyed level (trap T2:
+            // a rate needs a stop; e(T_min) is where thin fragments rest).
+            // The removed rock is the declared founder debit, counted.
             crustalThicknessM ??= pre.crustalThicknessM.slice();
-            const eNew = Math.max(founderLevel, e - relax);
-            crustalThicknessM[m] =
-              crustalThicknessM[m]! + (eNew - e) / CONTINENTAL_BUOYANCY_FACTOR;
+            const tCur = crustalThicknessM[m]!;
+            if (tCur <= CONTINENTAL_THICKNESS_MIN_M) continue;
+            elevation ??= pre.elevation.slice();
+            const tNew = Math.max(
+              CONTINENTAL_THICKNESS_MIN_M,
+              tCur - relax / CONTINENTAL_BUOYANCY_FACTOR,
+            );
+            founderTrimM3 += (tCur - tNew) * solidAngle![m]! * r2;
+            crustalThicknessM[m] = tNew;
             elevation[m] = continentalElevationForThicknessM(crustalThicknessM[m]!);
           } else {
+            const e = (elevation ?? pre.elevation)[m]!;
+            if (e <= founderLevel) continue;
+            elevation ??= pre.elevation.slice();
             elevation[m] = Math.max(founderLevel, e - relax);
           }
         }
@@ -305,13 +352,21 @@ export const crustFatesSystem: System = {
 
     let next: PlanetState = {
       ...state,
-      ...(sedimentZeroedM3 > 0 || capBinds > 0
+      ...(sedimentZeroedM3 > 0 ||
+      capBinds > 0 ||
+      founderTrimM3 > 0 ||
+      retiredDebitM3 > 0 ||
+      retiredCells > 0
         ? {
             globals: {
               ...state.globals,
               columnsSedimentZeroedM3:
                 state.globals.columnsSedimentZeroedM3 + sedimentZeroedM3,
               columnsThicknessCapBinds: state.globals.columnsThicknessCapBinds + capBinds,
+              // C5 (site 19): founder thinning debit + retirement debit.
+              columnsFounderTrimM3: state.globals.columnsFounderTrimM3 + founderTrimM3,
+              columnsRetiredDebitM3: state.globals.columnsRetiredDebitM3 + retiredDebitM3,
+              columnsRetiredCells: state.globals.columnsRetiredCells + retiredCells,
             },
           }
         : {}),

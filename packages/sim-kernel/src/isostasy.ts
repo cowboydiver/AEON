@@ -20,11 +20,16 @@
  * for every continental cell after every post-onset step. That is what the
  * derivation-coherence fixture asserts with zero tolerance.
  *
- * Shim-era validity domain (C1–C4, proposal §6): cells the legacy freeboard
- * pump holds below e(T_min) invert to unphysically thin — even negative —
- * columns. This is retained Δ-space bookkeeping, not clamped, so shim
- * equivalence stays exact; nothing physical consumes raw shim-era thickness
- * until stage C5 regularizes it (a declared, reported credit).
+ * Shim-era validity domain (C1–C4, proposal §6) — CLOSED at stage C5: cells
+ * the legacy freeboard pump held below e(T_min) inverted to unphysically
+ * thin, even negative, columns; the onset re-inversion now regularizes them
+ * with the one-time `T := max(T, CONTINENTAL_THICKNESS_MIN_M)` credit
+ * (declared, counted in `columnsRegularizedCreditM3`). Post-onset the floor
+ * is STRUCTURAL (trap T2): no columns-path process thins a continental
+ * column below the identity floor, therefore no continental cell sits below
+ * `CONTINENTAL_FLOOR_ELEVATION_M` = e(T_min) ≈ −2306 m — asserted as a
+ * fixture, not policed by a clamp constant. The −17.8 km ratchet is
+ * non-expressible.
  *
  * Determinism: every helper is closed-form arithmetic — no RNG, no loops
  * beyond fixed ascending-index sweeps, no I/O, no input mutation.
@@ -33,6 +38,7 @@
 import {
   CONTINENTAL_BUOYANCY_FACTOR,
   CONTINENTAL_ISOSTASY_DATUM_M,
+  CONTINENTAL_THICKNESS_MIN_M,
   CRUST_DENSITY_CONTINENTAL_KG_M3,
   CRUST_DENSITY_OCEANIC_KG_M3,
   OCEANIC_CRUST_THICKNESS_M,
@@ -52,6 +58,20 @@ export function continentalElevationForThicknessM(thicknessM: number): number {
 export function continentalThicknessForElevationM(elevationM: number): number {
   return (elevationM - CONTINENTAL_ISOSTASY_DATUM_M) / CONTINENTAL_BUOYANCY_FACTOR;
 }
+
+/**
+ * The structural continental floor elevation (stage C5, trap T2):
+ * e(CONTINENTAL_THICKNESS_MIN_M) ≈ −2306 m — the surface of the thinnest
+ * column any columns-path process may leave behind. Every sea-keyed thinning
+ * stop (crustFates founder, the site-4 sliver trim, the site-21 margin shim,
+ * erosion's export/planation base levels, the site-17 block cap) bottoms out
+ * here on the columns path; on seas ABOVE this level the sea-keyed stop binds
+ * first and the floor is inert, on seas BELOW it (the dry half of the water
+ * sweep) the floor is what keeps thinning bounded.
+ */
+export const CONTINENTAL_FLOOR_ELEVATION_M = continentalElevationForThicknessM(
+  CONTINENTAL_THICKNESS_MIN_M,
+);
 
 /** The standard mechanism gate: on AND past its onset year (the branched-A/B
  *  contract — no RNG is consumed anywhere in this model, so pre-onset history
@@ -96,6 +116,16 @@ export function foundCrustalThickness(
  * The crossing test uses this step's dt: the onset step is the one with
  * `timeYears ∈ [onset, onset + dt)` under the fixed step cadence (the final
  * partial step can only shrink dt after the crossing has already fired).
+ *
+ * Stage C5 adds the ONE-TIME regularization to the same pass: continental
+ * cells whose inversion lands below `CONTINENTAL_THICKNESS_MIN_M` (the legacy
+ * pump's flooded lobe — the shim-era validity domain) are lifted to the floor,
+ * the lift counted as a declared ledger credit (`columnsRegularizedCreditM3`,
+ * true areas — T7). Onset elevation is therefore continuous EXCEPT on those
+ * below-floor cells, which snap up to e(T_min) ≈ −2306 m — the C3-addendum
+ * measurement puts this credit ≈ nil on the shipped stack (the lobe dissipated
+ * once the pump retired), and the A/B statistic reports whatever it actually
+ * is (§9 risk 3's re-staging trigger if large).
  */
 export function crustalColumnsOnsetReinversion(state: PlanetState, dtYears: number): PlanetState {
   if (!state.params.crustalColumns) return state;
@@ -105,14 +135,29 @@ export function crustalColumnsOnsetReinversion(state: PlanetState, dtYears: numb
   const crustType = state.fields.crustType;
   const elevation = state.fields.elevation.slice();
   const thickness = foundCrustalThickness(elevation, crustType);
+  const solidAngle = cellSolidAngleTable(state.params.gridN);
+  const r2 = state.params.radiusMeters * state.params.radiusMeters;
+  let regularizedCreditM3 = 0;
   for (let i = 0; i < elevation.length; i++) {
     if (crustType[i] === 1) {
+      // C5 regularization: the physical floor, applied once at onset.
+      if (thickness[i]! < CONTINENTAL_THICKNESS_MIN_M) {
+        regularizedCreditM3 += (CONTINENTAL_THICKNESS_MIN_M - thickness[i]!) * solidAngle[i]! * r2;
+        thickness[i] = CONTINENTAL_THICKNESS_MIN_M;
+      }
       // Snap onto the derived manifold: read back the STORED (f32-rounded)
       // thickness so the coherence invariant is bit-exact from here on.
       elevation[i] = continentalElevationForThicknessM(thickness[i]!);
     }
   }
-  return { ...state, fields: { ...state.fields, elevation, crustalThicknessM: thickness } };
+  return {
+    ...state,
+    globals: {
+      ...state.globals,
+      columnsRegularizedCreditM3: state.globals.columnsRegularizedCreditM3 + regularizedCreditM3,
+    },
+    fields: { ...state.fields, elevation, crustalThicknessM: thickness },
+  };
 }
 
 /**

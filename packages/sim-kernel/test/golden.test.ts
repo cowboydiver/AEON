@@ -285,10 +285,11 @@ describe('golden field hashes: bathymetryDatum engaged (#102)', () => {
 
 /**
  * Crustal-columns flag-arm spines (docs/CRUSTAL_COLUMN_PROPOSAL.md §6),
- * currently at stage C4 (erosion C2, the vertical injectors C3, the site-20
- * servo retirement pulled forward from C5, and the C4 creation re-key —
- * absolute maturation gate + sediment accretion — are thickness-space mass
- * transactions; margin/founder writers remain C1 shims). Regenerated at each
+ * currently at stage C5 (erosion C2, the vertical injectors C3, the site-20
+ * servo retirement, the C4 creation re-key, and the C5 founder/retirement
+ * re-keys + onset regularization + structural floor — the T2 fixture is
+ * live; the site-21 margin writer remains a floored C1 shim until C6).
+ * Regenerated at each
  * stage per the owner's KBV-cadence decision (proposal §11 answer 4): the
  * flag-off MAIN goldens are untouched, only this arm moves. Two arms: the
  * ISOLATED arm pins the path under ALL_MECHANISMS_OFF (the cleanest

@@ -757,9 +757,10 @@ key:
 
 - **`crustalColumns` (docs/CRUSTAL_COLUMN_PROPOSAL.md; `isostasy.ts` +
   shims in tectonics/boundaries/crustFates/blockIsostasy/freeboard;
-  default OFF, stage C4 of the staged landing plan — erosion, the vertical
-  injectors, the creation re-key and the epeirogenic-servo retirement are
-  real thickness physics):**
+  default OFF, stage C5 of the staged landing plan — erosion, the vertical
+  injectors, the creation re-key, the epeirogenic-servo retirement and the
+  founder/retirement re-keys are real thickness physics; only the site-21
+  margin writer remains a shim, until C6):**
   `crustalThicknessM`
   becomes the primary vertical state for continental crust and elevation
   its derived cache — dry Airy isostasy over a FIXED datum,
@@ -796,9 +797,29 @@ key:
   crustFates weld bridges): ΔT = sed·ρ_sed/ρ_cc, mass-conserving, clipped
   at the collapse ceiling (only the above-cap remainder is destroyed,
   counted as a bind) — closing the ledger leak the C1–C3 shims declared.
-  The remaining continental elevation writers (passive margins,
-  founder/caps — stages C5–C6) still route their Δe through thickness
-  (ΔT = Δe/k — the C1 mechanical shims). All writers re-derive elevation
+  Since C5, the FOUNDER/RETIREMENT layer is thickness-keyed and the
+  identity floor is STRUCTURAL (trap T2): an isolated continental sliver
+  (site 4) trims to `CONTINENTAL_THICKNESS_MIN_M` (20 km — its thin column
+  sits at e(T_min) ≈ −2306 m definitionally, no sea-keyed clamp); the
+  crustFates founder (site 19) THINS toward the same floor (surface rate
+  unchanged, read through the derivation) and its retirement trigger
+  re-keys to thickness — a small component retires only when wholly
+  submerged AND wholly at the floor (on seas below e(T_min) foundered
+  fragments stand emergent and crust is hoarded — physical, watched via
+  `columnsRetiredCells`); every sea-keyed thinning stop (the site-21
+  margin shim, erosion's export/planation base levels, the site-17
+  blockIsostasy cap) bottoms out at `CONTINENTAL_FLOOR_ELEVATION_M` =
+  e(T_min), inert on seas above the floor. The onset re-inversion applies
+  the ONE-TIME regularization `T := max(T, T_min)` (the shim-era lobe
+  lifted; the credit counted in `columnsRegularizedCreditM3`), so from the
+  onset step on no continental cell sits below e(T_min) — the T2 fixture
+  asserts it through the full default pipeline. Founder trims and
+  retirement debits are counted (`columnsFounderTrimM3`,
+  `columnsRetiredDebitM3`) — the consumption side answering the C4
+  creation print. The one remaining continental elevation writer on the
+  legacy arithmetic (the site-21 passive margin, stage C6) still routes
+  its Δe through thickness (ΔT = Δe/k — the C1 mechanical shim, now
+  floored). All writers re-derive elevation
   from the STORED thickness, so `e === fround(C + k·T)` holds bit-exactly
   after every post-onset step (the derivation-coherence fixture). Branch flips: ocean→continent
   (arc maturation, weld bridges, consolidation hole fills) found T by
@@ -808,12 +829,12 @@ key:
   re-found a 7.1 km oceanic column, the ledger debit. Founding: t=0
   inversion at init (unconditional — flag-off/A/B arms carry identical
   bytes) + an onset re-inversion over the current elevation (zero-snap:
-  ≤ 1 f32 ULP), so the branched A/B is clean at any onset year. Shim-era
-  validity domain (C1–C4): legacy-pump-flooded cells invert to unphysically
-  thin, even negative, columns — declared Δ-space bookkeeping (measured
-  ≈ dissipated after the servo retirement), regularized at stage C5. Zero
-  RNG anywhere in the model. Stages C5–C6 replace the remaining shims with
-  mass-budget physics (founder/caps/retirement re-keys → margins), each
+  ≤ 1 f32 ULP + the C5 floor regularization), so the branched A/B is clean
+  at any onset year. The shim-era validity domain (C1–C4: pump-flooded
+  cells inverting to unphysically thin columns) is CLOSED at C5 by that
+  regularization — post-onset thickness is physical everywhere. Zero
+  RNG anywhere in the model. Stage C6 replaces the last shim with
+  mass-budget physics (rift-margin thinning with the finite β budget),
   gated in the proposal's acceptance grid; the mass ledger
   (`computeCrustalMassLedger`, true solid angles × R²) closes per-system
   for the C2 erosion terms and the C4 sediment accretion (kernel
@@ -1111,20 +1132,26 @@ Globals     = { landFraction, co2, meanTemperatureK, seaLevelM, waterInventoryM,
                 // pair-flips, accumulated by the tectonics pass under
                 // params.plateCensus (0 otherwise):
                 marginConsolidationFlipsTotal,
-                // Crustal-columns C2/C3/C4 throughput counters (cumulative;
+                // Crustal-columns C2–C5 throughput counters (cumulative;
                 // accumulated by erosion/tectonics/boundaries/crustFates
                 // ONLY while crustalColumnsActive, else 0; same
                 // diagnostic-only contract as the census scalars — sim-cli
                 // --crust-stats differences the C2 ones into src/sat%/sink
-                // rates and the C4 ones into matF/matE/crea/accr;
-                // columnsThicknessCapBinds counts 70 km-cap clips
-                // (orogeny/collision C3 + sediment accretion C4); the C4
-                // trio carries the maturation-depth distribution and the
-                // arc-accretion creation credit):
+                // rates, the C4 ones into matF/matE/crea/accr and the C5
+                // ones into trim/ret rates; columnsThicknessCapBinds counts
+                // 70 km-cap clips (orogeny/collision C3 + sediment
+                // accretion C4); the C4 trio carries the maturation-depth
+                // distribution and the arc-accretion creation credit; the
+                // C5 quartet carries the one-time onset regularization
+                // credit, the founder trims (sites 4/19), and the
+                // thickness-keyed retirement debit + cell count (the
+                // reachability audit's numerator):
                 columnsExportedRockM3, columnsExportShelfLimited,
                 columnsExportVisits, columnsSedimentZeroedM3,
                 columnsThicknessCapBinds, columnsMaturationFlips,
-                columnsMaturationElevSumM, columnsMaturationCreditM3 }
+                columnsMaturationElevSumM, columnsMaturationCreditM3,
+                columnsRegularizedCreditM3, columnsFounderTrimM3,
+                columnsRetiredDebitM3, columnsRetiredCells }
 ```
 
 The **plate census** (Tectonics V2 stage 0, #110) is a pure, RNG-free

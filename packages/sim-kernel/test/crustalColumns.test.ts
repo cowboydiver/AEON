@@ -4,12 +4,14 @@ import {
   CONTINENTAL_ISOSTASY_DATUM_M,
   CONTINENTAL_REFERENCE_ELEVATION_M,
   CONTINENTAL_REFERENCE_THICKNESS_M,
+  CONTINENTAL_THICKNESS_MIN_M,
   CRUST_DENSITY_CONTINENTAL_KG_M3,
   OCEANIC_CRUST_THICKNESS_M,
   SEDIMENT_DENSITY_KG_M3,
 } from '../src/constants';
-import { cellSolidAngleTable, faceRCToIndex } from '../src/grid';
+import { cellSolidAngleTable, faceRCToIndex, neighborTable } from '../src/grid';
 import {
+  CONTINENTAL_FLOOR_ELEVATION_M,
   computeCrustalMassLedger,
   continentalElevationForThicknessM,
   continentalThicknessForElevationM,
@@ -19,6 +21,7 @@ import {
 import { createRng } from '../src/rng';
 import { createInitialState, createPlanetParams, type PlanetState } from '../src/state';
 import { run, type Keyframe } from '../src/step';
+import { erosionSystem } from '../src/systems/erosion';
 import { freeboardSystem } from '../src/systems/freeboard';
 import { tectonicsSystem } from '../src/systems/tectonics';
 import { runSystems, twoPlateState } from './helpers';
@@ -333,6 +336,211 @@ describe('C4 sediment accretion (site 22 — the ledger leak closed)', () => {
     expect(out.globals.columnsSedimentZeroedM3).toBe(0);
     expect(out.globals.columnsMaturationFlips).toBe(0);
     expect(out.globals.columnsMaturationCreditM3).toBe(0);
+  });
+});
+
+describe('stage C5 — the structural floor (trap T2) and the founder re-keys', () => {
+  const E_FLOOR_F32 = Math.fround(
+    CONTINENTAL_ISOSTASY_DATUM_M + CONTINENTAL_BUOYANCY_FACTOR * CONTINENTAL_THICKNESS_MIN_M,
+  );
+
+  it('pins the floor arithmetic: e(T_min) ≈ −2306 m', () => {
+    expect(CONTINENTAL_FLOOR_ELEVATION_M).toBeCloseTo(-2306.06, 1);
+    expect(CONTINENTAL_FLOOR_ELEVATION_M).toBe(
+      continentalElevationForThicknessM(CONTINENTAL_THICKNESS_MIN_M),
+    );
+  });
+
+  it('onset regularization: below-floor inversions lift to T_min, counted; the rest is pure inversion', () => {
+    // A continental world with one cell held at −4000 m (the legacy pump's
+    // flooded-lobe shape): its inversion lands at ~8.1 km — below the floor —
+    // and must be lifted to exactly T_min with the credit counted on true
+    // areas; every other cell keeps the pure (unclamped) inversion and its
+    // elevation is continuous through onset.
+    const N32 = 32;
+    const LOBE = faceRCToIndex(0, 16, 16, N32);
+    const s = twoPlateState(N32, { pole: [0, 0, 1], omega: 0 }, { pole: [0, 1, 0], omega: 0 });
+    const elevation = s.fields.elevation.slice();
+    elevation.fill(500);
+    elevation[LOBE] = -4000;
+    const world: PlanetState = {
+      ...s,
+      params: { ...s.params, crustalColumns: true },
+      fields: { ...s.fields, elevation },
+    };
+    const out = crustalColumnsOnsetReinversion(world, world.params.stepYears);
+
+    // The lobe cell: lifted to the floor, elevation snapped up to e(T_min).
+    expect(out.fields.crustalThicknessM[LOBE]).toBe(CONTINENTAL_THICKNESS_MIN_M);
+    expect(out.fields.elevation[LOBE]).toBe(E_FLOOR_F32);
+    // The credit is the lift × true area, and nothing else contributed.
+    const liftM = CONTINENTAL_THICKNESS_MIN_M - continentalThicknessForElevationM(-4000);
+    const areaM2 = cellSolidAngleTable(N32)[LOBE]! * world.params.radiusMeters ** 2;
+    expect(out.globals.columnsRegularizedCreditM3).toBeCloseTo(liftM * areaM2, -8);
+    // An above-floor cell: the pure inversion, elevation continuous (≤ 1 ULP).
+    const other = faceRCToIndex(0, 16, 20, N32);
+    expect(out.fields.crustalThicknessM[other]).toBe(
+      Math.fround(continentalThicknessForElevationM(500)),
+    );
+    expect(Math.abs(out.fields.elevation[other]! - 500)).toBeLessThan(1e-3);
+    assertCoherent(out.fields, 'post-C5-reinversion');
+  });
+
+  it('site 4: an isolated sliver TRIMS to the identity floor on the columns path (counted), clamps to the sea-keyed level on the legacy path', () => {
+    const N32 = 32;
+    const SLIVER = faceRCToIndex(0, 16, 16, N32);
+    const mk = (columns: boolean): PlanetState => {
+      const s = twoPlateState(N32, { pole: [0, 0, 1], omega: 0 }, { pole: [0, 1, 0], omega: 0 });
+      const crustType = s.fields.crustType.slice().fill(0);
+      const elevation = s.fields.elevation.slice().fill(-4000);
+      crustType[SLIVER] = 1;
+      elevation[SLIVER] = 3000; // ~57 km column — far above the floor
+      return {
+        ...s,
+        params: { ...s.params, crustalColumns: columns },
+        fields: { ...s.fields, crustType, elevation },
+      };
+    };
+
+    const on = runSystems(mk(true), 1, [tectonicsSystem]);
+    // The sliver is thinned crust: T := min(T, T_min), the surface at e(T_min).
+    expect(on.fields.crustType[SLIVER]).toBe(1);
+    expect(on.fields.crustalThicknessM[SLIVER]).toBe(CONTINENTAL_THICKNESS_MIN_M);
+    expect(on.fields.elevation[SLIVER]).toBe(E_FLOOR_F32);
+    // The trim is the declared founder debit, on true areas.
+    const trimM = continentalThicknessForElevationM(3000) - CONTINENTAL_THICKNESS_MIN_M;
+    const areaM2 = cellSolidAngleTable(N32)[SLIVER]! * on.params.radiusMeters ** 2;
+    expect(on.globals.columnsFounderTrimM3).toBeCloseTo(trimM * areaM2, -9);
+    // Idempotent: a second step trims nothing more.
+    const twice = runSystems(mk(true), 2, [tectonicsSystem]);
+    expect(twice.globals.columnsFounderTrimM3).toBeCloseTo(trimM * areaM2, -9);
+
+    // Legacy arm: today's clamp to the founder level, no counters.
+    const off = runSystems(mk(false), 1, [tectonicsSystem]);
+    expect(off.fields.elevation[SLIVER]).toBe(-200);
+    expect(off.globals.columnsFounderTrimM3).toBe(0);
+  });
+
+  it('site 21 shim floor: margin subsidence stops at e(T_min) on a low sea instead of grinding to sea − 150', () => {
+    // A continental block with a same-plate oceanic fringe, sea at −4000 m
+    // (the dry half of the water sweep): the legacy shelf target (−4150)
+    // sits far below the identity floor, so on the columns path the coastal
+    // subsidence must bottom out at e(T_min) — the T2 stop — not the sea.
+    const N32 = 32;
+    const s = twoPlateState(N32, { pole: [0, 0, 1], omega: 0 }, { pole: [0, 1, 0], omega: 0 });
+    const crustType = s.fields.crustType.slice();
+    const elevation = s.fields.elevation.slice();
+    // Ocean strip at cols 0..7 of face 0's center rows; continent elsewhere.
+    for (let r = 0; r < N32; r++) {
+      for (let c = 0; c < 8; c++) {
+        const i = faceRCToIndex(0, r, c, N32);
+        crustType[i] = 0;
+        elevation[i] = -5000;
+      }
+    }
+    // Continental cells start 30 m above the floor (T = T_min + 30/k).
+    const startT = CONTINENTAL_THICKNESS_MIN_M + 30 / CONTINENTAL_BUOYANCY_FACTOR;
+    const crustalThicknessM = s.fields.crustalThicknessM.slice();
+    for (let i = 0; i < crustType.length; i++) {
+      if (crustType[i] === 1) {
+        crustalThicknessM[i] = startT;
+        elevation[i] = continentalElevationForThicknessM(Math.fround(startT));
+      }
+    }
+    const world: PlanetState = {
+      ...s,
+      params: { ...s.params, freeboard: true, crustalColumns: true },
+      globals: { ...s.globals, seaLevelM: -4000 },
+      fields: { ...s.fields, crustType, elevation, crustalThicknessM },
+    };
+    // Two steps of 20 m/step subsidence would take the coast 10 m below the
+    // floor — the floor must bind on the second step.
+    const out = runSystems(world, 2, [freeboardSystem]);
+    const nbTable = neighborTable(N32);
+    let coastChecked = 0;
+    for (let i = 0; i < crustType.length; i++) {
+      if (out.fields.crustType[i] !== 1) continue;
+      const e = out.fields.elevation[i]!;
+      expect(e).toBeGreaterThanOrEqual(E_FLOOR_F32 - 0.01);
+      expect(out.fields.crustalThicknessM[i]!).toBeGreaterThanOrEqual(
+        CONTINENTAL_THICKNESS_MIN_M - 0.01,
+      );
+      // Coastal cells (oceanic 4-neighbor) provably subsided AND stopped.
+      for (let k = 0; k < 4; k++) {
+        if (out.fields.crustType[nbTable[i * 4 + k]!] === 0) {
+          expect(e).toBeLessThan(continentalElevationForThicknessM(startT) - 1);
+          coastChecked++;
+          break;
+        }
+      }
+    }
+    expect(coastChecked).toBeGreaterThan(0);
+    assertCoherent(out.fields, 'post-margin-floor');
+  });
+
+  it('erosion floor: coastal export on a low sea cannot thin a column below T_min', () => {
+    // Sea at −4000 m: a near-floor emergent cell (relative to that sea) with
+    // a submerged oceanic neighbor would legacy-erode toward the sea; the
+    // columns path must stop the thinning at the identity floor.
+    const N32 = 32;
+    const s = twoPlateState(N32, { pole: [0, 0, 1], omega: 0 }, { pole: [0, 1, 0], omega: 0 });
+    const crustType = s.fields.crustType.slice().fill(0);
+    const elevation = s.fields.elevation.slice().fill(-5000);
+    const crustalThicknessM = s.fields.crustalThicknessM.slice().fill(OCEANIC_CRUST_THICKNESS_M);
+    // A 2×2 continental block a hair above the floor.
+    const startT = CONTINENTAL_THICKNESS_MIN_M + 0.5 / CONTINENTAL_BUOYANCY_FACTOR;
+    const block: number[] = [];
+    for (const dr of [0, 1]) {
+      for (const dc of [0, 1]) {
+        const i = faceRCToIndex(0, 16 + dr, 16 + dc, N32);
+        block.push(i);
+        crustType[i] = 1;
+        crustalThicknessM[i] = startT;
+        elevation[i] = continentalElevationForThicknessM(Math.fround(startT));
+      }
+    }
+    const world: PlanetState = {
+      ...s,
+      params: { ...s.params, crustalColumns: true },
+      globals: { ...s.globals, seaLevelM: -4000 },
+      fields: { ...s.fields, crustType, elevation, crustalThicknessM },
+    };
+    const out = runSystems(world, 5, [erosionSystem]);
+    for (const i of block) {
+      expect(out.fields.crustalThicknessM[i]!).toBeGreaterThanOrEqual(
+        CONTINENTAL_THICKNESS_MIN_M - 0.01,
+      );
+      expect(out.fields.elevation[i]!).toBeGreaterThanOrEqual(E_FLOOR_F32 - 0.01);
+    }
+    assertCoherent(out.fields, 'post-erosion-floor');
+  });
+
+  it('T2 fixture: no continental cell below the floor through the full DEFAULT pipeline', () => {
+    // The structural claim the stage exists for — active from C5 on (it
+    // cannot hold in the shim era, and this fixture is why): after the onset
+    // regularization, every continental cell of the default stack (+
+    // blockIsostasy to cover site 17's floored cap) rides at or above
+    // e(T_min) at every keyframe.
+    const params = createPlanetParams({
+      seed: 42,
+      gridN: 32,
+      crustalColumns: true,
+      blockIsostasy: true,
+    });
+    let frames = 0;
+    run(params, 30e6, (kf) => {
+      if (kf.timeYears === 0) return; // predates the onset regularization
+      const { elevation, crustType, crustalThicknessM } = kf.fields;
+      let below = 0;
+      for (let i = 0; i < elevation.length; i++) {
+        if (crustType[i] !== 1) continue;
+        if (elevation[i]! < E_FLOOR_F32 - 0.01) below++;
+        if (crustalThicknessM[i]! < CONTINENTAL_THICKNESS_MIN_M - 0.01) below++;
+      }
+      expect(below, `t=${kf.timeYears}: ${below} below-floor continental cells`).toBe(0);
+      frames++;
+    });
+    expect(frames).toBeGreaterThan(1);
   });
 });
 

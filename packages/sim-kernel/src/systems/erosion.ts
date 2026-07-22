@@ -100,7 +100,11 @@ import {
 } from '../constants';
 import { bathymetryDatumOffsetM, landDatumOffsetM, platformDatumOffsetM } from '../datums';
 import { cellCount, cellSolidAngleTable, neighborTable } from '../grid';
-import { continentalElevationForThicknessM, crustalColumnsActive } from '../isostasy';
+import {
+  CONTINENTAL_FLOOR_ELEVATION_M,
+  continentalElevationForThicknessM,
+  crustalColumnsActive,
+} from '../isostasy';
 import type { PlanetState } from '../state';
 import type { System } from '../step';
 
@@ -163,6 +167,14 @@ function applyColumns(state: PlanetState, dtYears: number): PlanetState {
   // Meters of sediment per meter of eroded rock at equal area: rock is denser,
   // so the pile is thicker than the column it came from (site 14's ρ_cc/ρ_sed).
   const rockToSed = CRUST_DENSITY_CONTINENTAL_KG_M3 / SEDIMENT_DENSITY_KG_M3;
+  // C5 structural floor (trap T2): the export and planation base levels
+  // bottom out at e(T_min) ≈ −2306 m — erosion may not thin a column below
+  // the identity floor (below ~20 km real crust is hyperextended-margin
+  // domain, and the sea-keyed base levels would otherwise grind unboundedly
+  // on the dry half of the water sweep). Inert whenever the sea sits above
+  // the floor — every measured scale-1.0 sea.
+  const exportStop = Math.max(seaLevel, CONTINENTAL_FLOOR_ELEVATION_M);
+  const planationStop = Math.max(planationLevel, CONTINENTAL_FLOOR_ELEVATION_M);
 
   // C2 gate instrumentation (cumulative globals counters, state.ts).
   let exportedRockM3 = 0;
@@ -216,7 +228,7 @@ function applyColumns(state: PlanetState, dtYears: number): PlanetState {
             shelfCeiling - (seaKeyedOceanicDepthForAge(crustAge[j]!, bathyOffset) + sedimentM[j]!);
           // Rock the shelf can still take: sediment room × density × area ratio.
           const roomRock = room > 0 ? (room / rockToSed) * (aj / ai) : 0;
-          const surfaceRock = Math.max(0, elevation[i]! - seaLevel) / k;
+          const surfaceRock = Math.max(0, elevation[i]! - exportStop) / k;
           if (roomRock < Math.min(desired, surfaceRock)) shelfLimited++;
           const X = Math.min(desired, roomRock, surfaceRock);
           if (X > 0) {
@@ -238,8 +250,9 @@ function applyColumns(state: PlanetState, dtYears: number): PlanetState {
           const room =
             shelfCeiling - (seaKeyedOceanicDepthForAge(crustAge[j]!, bathyOffset) + sedimentM[j]!);
           const roomRock = room > 0 ? (room / rockToSed) * (aj / ai) : 0;
-          // Never plane the SURFACE below the founder level, hence /k.
-          const surfaceRock = Math.max(0, elevation[i]! - planationLevel) / k;
+          // Never plane the SURFACE below the founder level (or the C5
+          // identity floor, whichever is higher), hence /k.
+          const surfaceRock = Math.max(0, elevation[i]! - planationStop) / k;
           if (roomRock < Math.min(desired, surfaceRock)) shelfLimited++;
           const X = Math.min(desired, roomRock, surfaceRock);
           if (X > 0) {
