@@ -42,6 +42,11 @@ export function twoPlateState(
   // hand-built directional fixture predates the datum stack and the systems
   // tested on it (tectonics/erosion/freeboard/…) expect the 0 m-datum substrate.
   // Individual datum tests re-enable a flag explicitly when exercising it.
+  // crustalColumns pinned off for the same reason (promoted to default-on at the
+  // KBV 20 C7 gate): these fixtures paint elevation directly and expect it to be
+  // primary state, not a derived cache of thickness — flag-on would re-derive
+  // (and f32-quantize) every hand-set value. The columns-stage tests here
+  // (erosion C2, convergence C3) re-enable the flag explicitly when exercising it.
   const params = createPlanetParams({
     seed: 7,
     gridN: N,
@@ -49,6 +54,7 @@ export function twoPlateState(
     seaLevelDatums: false,
     freeboard: false,
     bathymetryDatum: false,
+    crustalColumns: false,
   });
   const count = cellCount(N);
   const fields = Object.fromEntries(

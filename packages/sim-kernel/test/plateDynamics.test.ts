@@ -381,7 +381,10 @@ describe('flag-on golden + engaged spine (#102 pattern)', () => {
   const runFlagOn = (seed: number): PlanetState => {
     // Datum trio pinned off (they promoted to default-on in #127 item 9): this
     // spine isolates the force balance, so it must stay byte-identical to the
-    // pre-promotion snapshot rather than fold in datum engagement.
+    // pre-promotion snapshot rather than fold in datum engagement. crustalColumns
+    // + waterInventoryScale pinned off/1 for the same reason (promoted at the KBV
+    // 20 C7 gate): the force balance is orthogonal to the crustal representation
+    // and the water endowment.
     const params = createPlanetParams({
       seed,
       gridN: 32,
@@ -391,6 +394,8 @@ describe('flag-on golden + engaged spine (#102 pattern)', () => {
       seaLevelDatums: false,
       freeboard: false,
       bathymetryDatum: false,
+      crustalColumns: false,
+      waterInventoryScale: 1,
     });
     const ctx = makeCtx(seed);
     let s = createInitialState(params);
@@ -413,6 +418,12 @@ describe('flag-on golden + engaged spine (#102 pattern)', () => {
         seaLevelDatums: false,
         freeboard: false,
         bathymetryDatum: false,
+        // Pinned off (promoted at the KBV 20 C7 gate) for the same reason the
+        // datum trio is: this spine isolates the force-balance kinematics path,
+        // which is orthogonal to the crustal representation and the water
+        // endowment — keeping it byte-identical across the columns promotion.
+        crustalColumns: false,
+        waterInventoryScale: 1,
       });
       const speed0 = createInitialState(params).plates.map((p) => p.angularVelRadPerYr);
       const final = runFlagOn(seed);

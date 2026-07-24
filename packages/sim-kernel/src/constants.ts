@@ -309,8 +309,31 @@
  *     the bump-5 `sutureYears` precedent (owner-confirmed cadence: C1 and the
  *     C7 promotion bump; stages C2–C6 regenerate only the flag-arm spines).
  *     Sim-only field — no codec/HISTORY_FORMAT_VERSION change.
+ * 20 — Crustal-column model promotion (docs/CRUSTAL_COLUMN_STAGE_C7_GATE.md, the
+ *     C7 water-sweep gate, owner-signed). Two default changes ship together:
+ *     `crustalColumns` OFF→ON (the thickness-primary Airy model becomes the
+ *     shipped vertical physics — continental elevation is derived C + k·T over a
+ *     fixed datum, so freeboard, cratonic platforms and foundering are mass-budget
+ *     consequences, not servo targets) and `waterInventoryScale` 1.0→1.5 (the C7
+ *     sweep §5 measured 1.5× the derived endowment to give the Earth-like
+ *     coastline regime — flooded shelves, ~25% submergence, in-band shallow seas
+ *     — the fixed datums are calibrated for; the 1.0 world is Earth's structure on
+ *     a drier coastline). Sweep evidence: monotonic freeboard/flooding on every
+ *     seed across scales 0.5–2.0, 11/12 cells alive at 4.5 Gyr, the one death a
+ *     pre-existing knife-edge V2 monopoly event at off-default endowment (§6).
+ *     The single kernel-code change under the flag (the C7 arc-ceiling re-key,
+ *     boundaries.ts) is guarded on the columns path (`crustalThicknessM !== null`),
+ *     so the flag-OFF / water-1.0 path is byte-identical to v19: main goldens
+ *     regenerated deliberately for the new defaults, the pre-promotion world
+ *     pinned unchanged by the legacy all-off, pre-V2, pre-datum spines AND a new
+ *     pre-crustal-columns default spine (`crustalColumns` off + `waterInventoryScale`
+ *     1 explicit, the rest at their v18 defaults — reproduced verbatim from the
+ *     v19 main hashes). Open watch item routed to #131, not blocking: the
+ *     shipped N=128 grid equilibrates ~6 pts of crust fraction below the N=64
+ *     calibration (§7), a founder/retirement granularity resolution-dependence.
+ *     Sim-behavior change only — no schema/codec/HISTORY_FORMAT_VERSION change.
  */
-export const KERNEL_BEHAVIOR_VERSION = 19;
+export const KERNEL_BEHAVIOR_VERSION = 20;
 
 /** IUGG mean Earth radius, m. */
 export const EARTH_RADIUS_M = 6.371e6;

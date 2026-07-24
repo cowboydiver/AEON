@@ -327,9 +327,16 @@ export interface PlanetParams {
    * coastline, which keeps t=0 sea level exactly 0 and adapts to a companion
    * `initialLandFraction` (#106) or grid resolution — and this scales it, so
    * the two knobs compose as base × scale. Init-time only, no RNG, no mechanism
-   * flag/onset: it is a `PlanetParams` number like `numPlates`. Default **1.0**
-   * — the derivation multiplies by exactly 1.0, so the main goldens are
-   * byte-identical by construction. Scale > 1 raises the deep-time sea (≈2.6
+   * flag/onset: it is a `PlanetParams` number like `numPlates`. Default **1.5**
+   * since the crustal-columns promotion (`KERNEL_BEHAVIOR_VERSION` 20): the C7
+   * water sweep (docs/CRUSTAL_COLUMN_STAGE_C7_GATE.md §5) measured 1.5× the
+   * derived endowment to give the Earth-like coastline regime — flooded shelves,
+   * ~25% submergence, in-band shallow seas — that the fixed Airy datums are
+   * calibrated for, where the 1.0 world is Earth's STRUCTURE on a drier
+   * coastline. Passing 1.0 explicitly recovers the pre-#105 byte-identical
+   * derivation (the pre-crustal-columns default spine pins that world; reproduce
+   * it with `--no-crustal-columns --water-scale 1`). Scale > 1 raises the
+   * deep-time sea (≈2.6
    * km-equiv ≈ Earth floats the ridge crests roughly awash; ≈3.4–4.7 submerges
    * them 1–2.5 km natively, making the #102 `bathymetryDatum` crest cap
    * redundant); scale < 1 gives a low-water world. Composes with
@@ -350,8 +357,13 @@ export interface PlanetParams {
    * flips and re-founding 7.1 km oceanic columns at continent→ocean flips.
    * At C1 behavior is distributionally today's (the shims are mechanical
    * equivalents; trajectories diverge at float level only); stages C2–C6
-   * replace shims with mass-budget physics one mechanism at a time. Default
-   * OFF: flag-off, every pre-existing field is byte-identical (the field
+   * replace shims with mass-budget physics one mechanism at a time. **Default
+   * ON** since the crustal-columns promotion (`KERNEL_BEHAVIOR_VERSION` 20,
+   * docs/CRUSTAL_COLUMN_STAGE_C7_GATE.md): the C7 water sweep gated the model in
+   * on the owner's sign-off, shipping alongside the 1.5× water endowment. The
+   * flag-OFF path stays byte-identical to the pre-promotion kernel — pinned by
+   * the legacy all-off, pre-V2, pre-datum, and pre-crustal-columns default
+   * spines — and every pre-existing field is byte-identical there (the field
    * itself is founded at init and advected regardless of the flag, so both
    * A/B arms carry comparable bytes). Zero RNG anywhere in the model — the
    * branched-A/B contract holds by construction.
@@ -694,8 +706,8 @@ export function createPlanetParams(partial: Partial<PlanetParams> & { seed: numb
     abiogenesisRatePerYear: ABIOGENESIS_RATE_PER_YR,
     initialOxygenPAL: INITIAL_OXYGEN_PAL,
     initialLandFraction: DEFAULT_INITIAL_LAND_FRACTION,
-    waterInventoryScale: 1,
-    crustalColumns: false,
+    waterInventoryScale: 1.5,
+    crustalColumns: true,
     crustalColumnsOnsetYears: 0,
     plateCensus: false,
     ...partial,

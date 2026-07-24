@@ -332,6 +332,9 @@ describe('phase 1 invariant detectors catch planted bugs (#20)', () => {
     // uplift maxes at seaLevelM + OROGENY_MAX (~8 km, sea below 0), masking the
     // planted bug. This detector validates the ABSOLUTE-cap pipeline, so it runs
     // on the datum-off substrate where the 9 km bound (line ~173) is absolute.
+    // crustalColumns pinned off for the same reason (promoted at the KBV 20 C7
+    // gate): flag-on, elevation is a derived cache of thickness capped well below
+    // 9 km, so the planted uncapped uplift never reaches the absolute bound.
     const end = runPipeline(
       createPlanetParams({
         seed: 42,
@@ -339,6 +342,7 @@ describe('phase 1 invariant detectors catch planted bugs (#20)', () => {
         seaLevelDatums: false,
         freeboard: false,
         bathymetryDatum: false,
+        crustalColumns: false,
       }),
       400,
       undefined,

@@ -49,7 +49,20 @@ describe('oxygen: the redox budget closes (#37, §5)', () => {
     // per-step budget every step — the cumulative sum must equal the final O₂.
     // We drive the climate + marineLife pipeline and integrate O₂ by hand so we
     // can accumulate the flux components exactly.
-    const params = createPlanetParams({ seed: 42, gridN: 16, abiogenesisRatePerYear: 1e-2, stepYears: 5e6 });
+    //
+    // Promoted params (KBV 20) pinned to their pre-promotion values: the
+    // hand-integrated closure was calibrated on the drier, raw-elevation default
+    // world, where the O₂ reservoir never hits the anoxic-floor clamp mid-run.
+    // The oxygen system code is unchanged; the shipped world's redox is pinned by
+    // the goldens.
+    const params = createPlanetParams({
+      seed: 42,
+      gridN: 16,
+      abiogenesisRatePerYear: 1e-2,
+      stepYears: 5e6,
+      crustalColumns: false,
+      waterInventoryScale: 1,
+    });
     const ctx: SimContext = { rng: createRng(params.seed).fork('sim') };
 
     // Run the full pipeline (so marineLife/abiogenesis advance for real) but

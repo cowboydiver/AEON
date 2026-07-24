@@ -27,6 +27,9 @@ const ALL_OFF = {
   seaLevelDatums: false,
   freeboard: false,
   bathymetryDatum: false,
+  // Promoted to default-on at the KBV 20 C7 gate: the shared baseline must turn
+  // it off so the onset-gated crustalColumns arm has an inert-until-Y counterpart.
+  crustalColumns: false,
 } as const;
 
 const MECHANISMS: ReadonlyArray<Partial<PlanetParams>> = [

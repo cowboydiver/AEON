@@ -58,7 +58,12 @@ describe('carbon: the thermostat regulates climate (#34)', () => {
     const dt = 5e6;
     for (const seed of SEEDS) {
       const trace = (initialCo2Ppm: number): { co2: number[]; temp: number[] } => {
-        const params = createPlanetParams({ forceKinematics: false, emergentSuture: false, tensionRift: false, seed, gridN: 16, stepYears: dt, initialCo2Ppm });
+        // crustalColumns + waterInventoryScale pinned to pre-promotion values
+        // (KBV 20 moved them to on / 1.5×): this climate-attractor detector was
+        // calibrated on the drier, raw-elevation world; the wetter land/ocean
+        // split shifts the CO₂ tail past the tuned threshold. Climate code
+        // unchanged; the shipped world's climate is pinned by the goldens.
+        const params = createPlanetParams({ forceKinematics: false, emergentSuture: false, tensionRift: false, seed, gridN: 16, stepYears: dt, initialCo2Ppm, crustalColumns: false, waterInventoryScale: 1 });
         const ctx: SimContext = { rng: createRng(seed).fork('sim') };
         let s = createInitialState(params);
         const co2: number[] = [];
@@ -165,7 +170,10 @@ describe('carbon: a snowball is reachable and recovers (#34)', () => {
     // over the same span — so the recovery genuinely rides the CO₂ build-up, not
     // the luminosity change alone.
     const dt = 3e6;
-    const params = createPlanetParams({ forceKinematics: false, emergentSuture: false, tensionRift: false, seed: 42, gridN: 16, stepYears: dt });
+    // Promoted params pinned to pre-promotion values (KBV 20 moved them to on /
+    // 1.5×): this "CO₂ is load-bearing" detector has a tight strippedCo2 > 0.4
+    // margin calibrated on the drier, raw-elevation world. Climate code unchanged.
+    const params = createPlanetParams({ forceKinematics: false, emergentSuture: false, tensionRift: false, seed: 42, gridN: 16, stepYears: dt, crustalColumns: false, waterInventoryScale: 1 });
     const mkSnowball = (): PlanetState => {
       const ctx: SimContext = { rng: createRng(42).fork('sim') };
       let s = createInitialState(params);

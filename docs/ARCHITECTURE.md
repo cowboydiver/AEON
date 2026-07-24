@@ -757,10 +757,13 @@ key:
 
 - **`crustalColumns` (docs/CRUSTAL_COLUMN_PROPOSAL.md; `isostasy.ts` +
   thickness writers in tectonics/boundaries/erosion/crustFates/
-  blockIsostasy/freeboard; default OFF, stage C6 of the staged landing
-  plan — the migration is mechanism-complete: every continental write
-  site is a thickness transaction, no shims remain; C7 calibration + the
-  water sweep gate promotion):**
+  blockIsostasy/freeboard; **default ON since the C7 promotion,
+  `KERNEL_BEHAVIOR_VERSION` 20** — the thickness-primary Airy model is the
+  shipped vertical physics, gated in by the C7 water sweep on the owner's
+  sign-off (docs/CRUSTAL_COLUMN_STAGE_C7_GATE.md), shipping with the 1.5×
+  water endowment; the flag-OFF path stays byte-identical to v19, pinned by
+  the legacy all-off, pre-V2, pre-datum, and pre-crustal-columns default
+  spines):**
   `crustalThicknessM`
   becomes the primary vertical state for continental crust and elevation
   its derived cache — dry Airy isostasy over a FIXED datum,
@@ -857,14 +860,34 @@ key:
   at any onset year. The shim-era validity domain (C1–C4: pump-flooded
   cells inverting to unphysically thin columns) is CLOSED at C5 by that
   regularization — post-onset thickness is physical everywhere. Zero
-  RNG anywhere in the model. Next is stage C7 (calibration + the water
-  sweep + the promotion gate); the mass ledger
+  RNG anywhere in the model. The mass ledger
   (`computeCrustalMassLedger`, true solid angles × R²) closes per-system
   for the C2 erosion terms and the C4 sediment accretion (kernel
   fixtures), and every non-conserving flow is now DECLARED AND COUNTED:
   orogeny/collision shortening influx (C3), arc-maturation creation
   (`columnsMaturationCreditM3`), founder trims, retirement debits, and
   the C6 margin thinning — no uncounted shim flows remain.
+
+  > **Crustal-columns promotion (C7 gate, `KERNEL_BEHAVIOR_VERSION` 20).**
+  > The C7 water sweep (docs/CRUSTAL_COLUMN_STAGE_C7_GATE.md) gated the
+  > thickness-primary model in as the default on the owner's sign-off, with
+  > two default changes shipping together: `crustalColumns` OFF→ON and the
+  > water endowment `waterInventoryScale` 1.0→1.5 (the sweep §5 measured 1.5×
+  > to give the Earth-like coastline regime — flooded shelves, ~25%
+  > submergence, in-band shallow seas — the fixed Airy datums are calibrated
+  > for; 1.0 is Earth's structure on a drier coastline). Sweep evidence:
+  > monotonic freeboard and flooding on every seed across scales 0.5–2.0 (the
+  > redesign's reason to exist), 11/12 cells tectonically alive at 4.5 Gyr,
+  > the one death a pre-existing knife-edge V2 monopoly event at an off-default
+  > endowment. The single kernel-code change under the flag (the C7 arc-ceiling
+  > re-key above) is guarded on the columns path, so the flag-off / water-1.0
+  > world is byte-identical to v19 — the main goldens regenerated deliberately,
+  > the pre-promotion world pinned verbatim by the pre-crustal-columns default
+  > spine (`crustalColumns` off + `waterInventoryScale` 1). Reproduce the
+  > pre-promotion world with `--no-crustal-columns --water-scale 1`. One open
+  > watch item, routed to #131 rather than blocking: the shipped N=128
+  > grid equilibrates ~6 points of crust fraction below the N=64 stage
+  > calibration (a founder/retirement granularity resolution-dependence).
 
 `energyBalance` (#30): the Phase 3 climate hub. A Budyko–Sellers **zonal
 energy-balance model** solved on `ENERGY_BALANCE_BANDS` (90) equal-area

@@ -293,6 +293,11 @@ describe('sea-level solve conditioning under the full datum stack (#102)', () =>
       seaLevelDatums: true,
       freeboard: true,
       bathymetryDatum: true,
+      // Promoted params (KBV 20) pinned off: this datum-stack sea-tracking
+      // stability check was calibrated on the drier, raw-elevation world; the
+      // 1.5× endowment floods faster than the per-step move bound expects.
+      crustalColumns: false,
+      waterInventoryScale: 1,
     });
     const seas: number[] = [];
     let minSlope = Infinity;

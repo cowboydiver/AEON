@@ -95,7 +95,10 @@ describe('initialLandFraction (#106)', () => {
     // land fraction shapes the derived base; the water scale multiplies it. The
     // two knobs are independent and compose by construction.
     for (const f of [0.1, 0.39]) {
-      const base = initState(42, { initialLandFraction: f }).globals.waterInventoryM;
+      // base = the unscaled (×1.0) derived inventory. The shipped default scale
+      // is 1.5 since the KBV 20 promotion, so name scale 1 explicitly here.
+      const base = initState(42, { initialLandFraction: f, waterInventoryScale: 1 }).globals
+        .waterInventoryM;
       for (const scale of [0.5, 2]) {
         const scaled = initState(42, { initialLandFraction: f, waterInventoryScale: scale }).globals.waterInventoryM;
         expect(scaled).toBe(base * scale);

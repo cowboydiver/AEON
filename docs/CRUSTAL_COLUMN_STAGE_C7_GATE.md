@@ -1,7 +1,9 @@
 # Crustal columns — stage C7 gate record (calibration + the water sweep)
 
-**Status: C7 measured, default-off, STOPPED AT THE OWNER SIGN-OFF GATE —
-this record is the promotion evidence, not the promotion. One mechanism
+**Status: C7 measured; OWNER-SIGNED AND PROMOTED — the crustal-column model
+is default-ON at `KERNEL_BEHAVIOR_VERSION` 20, shipping with the 1.5× water
+endowment (§10 records the sign-off and execution). Below is the measurement
+evidence exactly as it stood at the sign-off gate. One mechanism
 change landed (the creation-datum re-key the C5 record scoped here: on the
 columns path the arc growth ceiling floors at the absolute maturation gate,
 so continental creation cannot starve under dry seas — zero new constants,
@@ -44,8 +46,10 @@ gate the coarse grid missed by 3× — but the creation–consumption
 equilibrium drifts with resolution (crust fraction 0.30–0.32 late,
 below the T3 band; the founder/retirement granularity is the
 un-N-scaled consumption family), a named pre-promotion calibration
-item. Promotion, KBV bump, golden regen and the default flip all await
-sign-off.**
+item. The owner signed off on this evidence and the promotion was
+executed (§10): default flip, KBV 20, golden regen, the pre-promotion
+spine pinned verbatim, and the resolution item routed to a follow-up
+issue.**
 
 Companions: `CRUSTAL_COLUMN_PROPOSAL.md` (§3 scoreboard, §6 C7, §10
 acceptance grid, §11 owner decisions), `CRUSTAL_COLUMN_STAGE_C6_GATE.md`
@@ -493,3 +497,46 @@ freeboard sweep-win reading under §11.2; (3) the band-gate miss routed
 to successors vs blocking; (4) the default-endowment product choice
 (§5); (5) if promoting: at which endowment, and whether the water sweep
 becomes a standing CI probe.
+
+## 10. Promotion executed (owner-signed)
+
+The owner reviewed the §1–§9 evidence and signed off. The six decisions:
+
+1. **Bless the mechanism change** — the C7 arc-ceiling re-key (§1) is
+   accepted.
+2. **Accept the survival scorecard** — 11/12 alive; the seed-1337 × 1.5
+   monopoly death (§6) is accepted as the pre-existing off-default V2
+   kinematic-fragility family, not a C7 regression or a promotion blocker.
+3. **Confirm the freeboard reading** — the T5 win is "the vertical axis
+   answers the water endowment correctly across the sweep" (§3, §11.2), not
+   "the default planet matches Earth's freeboard"; the drier scale-1.0 world
+   is correct physics for a drier planet.
+4. **Default water endowment = 1.5×** — the Earth-likeness optimum (§5):
+   flooded shelves, ~25% submergence, in-band shallow seas, Earth-band land,
+   at the cost of the supercontinent story and the one dead cell.
+5. **Resolution drift → follow-up issue** — the N=128 crust-budget
+   under-run (§7, watch item §8.6) is routed to a resolution-invariance pass
+   on the founder/retirement granularity rather than fixed pre-flip; the T3
+   band is not re-anchored in this commit.
+6. **Final go** — promote.
+
+Executed on branch `claude/crustal-column-phase-4-c7-ubc6i9`:
+
+- `crustalColumns` default false→true and `waterInventoryScale` default
+  1.0→1.5 (`state.ts`); `KERNEL_BEHAVIOR_VERSION` 19→20 with the rationale
+  entry (`constants.ts`).
+- Main field goldens + codec byte goldens + the water-2.0 / land-0.15 /
+  engaged-columns arms regenerated for the new default world. The
+  flag-off / water-1.0 path is byte-identical to v19: a new
+  **pre-crustal-columns default spine** (`crustalColumns` off +
+  `waterInventoryScale` 1) pins the pre-promotion main hashes verbatim, and
+  the legacy all-off, pre-V2, pre-datum, forceKinematics-engaged and
+  mechanism-isolation spines are all unchanged (their newly-promoted params
+  pinned to their old values). Reproduce the pre-promotion world with
+  `--no-crustal-columns --water-scale 1`.
+- `ARCHITECTURE.md` carries the promotion rewrite (the `crustalColumns`
+  mechanism entry + a promotion note); this record's status banner and §10
+  record the sign-off.
+- Full kernel suite green (511/511). The resolution-invariance follow-up is
+  filed as #131 (decision 5); the "water sweep as a standing CI probe" idea
+  from §9(5) is noted but not wired in this commit.

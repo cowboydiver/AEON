@@ -8,9 +8,11 @@ import { step, type SimContext } from '../src/step';
 /**
  * #105 — the water inventory is a planet parameter. `waterInventoryScale` is a
  * dimensionless multiplier on the derived inventory (the ocean volume below the
- * t=0 coastline). Default 1.0 must leave the derivation byte-identical; any other
- * scale must multiply the inventory exactly and preserve the water-mass invariant
- * over the pipeline.
+ * t=0 coastline). Since the crustal-columns promotion (KBV 20) the shipped
+ * default is 1.5× (the Earth-like coastline endowment, C7 gate §5); passing 1.0
+ * explicitly recovers the pre-#105 byte-identical derivation. Any scale must
+ * multiply the inventory exactly and preserve the water-mass invariant over the
+ * pipeline.
  */
 
 const SEEDS = [1, 42, 1337] as const;
@@ -20,21 +22,25 @@ function fieldHash(field: Float32Array): string {
 }
 
 describe('waterInventoryScale (#105)', () => {
-  it('defaults to 1.0', () => {
-    expect(createPlanetParams({ seed: 42 }).waterInventoryScale).toBe(1);
+  it('defaults to 1.5 (the crustal-columns promotion endowment, KBV 20)', () => {
+    expect(createPlanetParams({ seed: 42 }).waterInventoryScale).toBe(1.5);
   });
 
-  it('scale 1.0 leaves the derived inventory bit-identical to omitting the param', () => {
+  it('passing the default scale explicitly matches omitting the param', () => {
     for (const seed of SEEDS) {
-      const base = createInitialState(createPlanetParams({ seed }));
-      const explicit = createInitialState(createPlanetParams({ seed, waterInventoryScale: 1 }));
-      expect(explicit.globals.waterInventoryM).toBe(base.globals.waterInventoryM);
+      const omitted = createInitialState(createPlanetParams({ seed }));
+      const explicit = createInitialState(createPlanetParams({ seed, waterInventoryScale: 1.5 }));
+      expect(explicit.globals.waterInventoryM).toBe(omitted.globals.waterInventoryM);
     }
   });
 
   it('scales the derived inventory linearly and exactly', () => {
     for (const seed of SEEDS) {
-      const base = createInitialState(createPlanetParams({ seed })).globals.waterInventoryM;
+      // Base = the unscaled (×1.0) derived inventory. The shipped default is now
+      // 1.5×, so name scale 1 explicitly rather than relying on the default.
+      const base = createInitialState(
+        createPlanetParams({ seed, waterInventoryScale: 1 }),
+      ).globals.waterInventoryM;
       for (const scale of [0.5, 1.5, 2, 2.7]) {
         const scaled = createInitialState(
           createPlanetParams({ seed, waterInventoryScale: scale }),
@@ -53,10 +59,10 @@ describe('waterInventoryScale (#105)', () => {
   it('t=0 fields are byte-identical across scales — only the inventory global moves', () => {
     // The scale changes only globals.waterInventoryM at init; every field array
     // (elevation, biome, temperature, …) is produced before/independent of the
-    // inventory, so the t=0 field hashes must not move. This is why the default
-    // scale is byte-identical to the pre-#105 kernel: the goldens hash fields.
+    // inventory, so the t=0 field hashes must not move across scales — the reason
+    // a scale change never touches the t=0 golden field hashes (they hash fields).
     for (const seed of SEEDS) {
-      const a = createInitialState(createPlanetParams({ seed }));
+      const a = createInitialState(createPlanetParams({ seed, waterInventoryScale: 1 }));
       const b = createInitialState(createPlanetParams({ seed, waterInventoryScale: 2 }));
       for (const name of FIELD_NAMES) {
         expect(fieldHash(b.fields[name]), `${name} @ seed ${seed}`).toBe(fieldHash(a.fields[name]));

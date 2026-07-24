@@ -194,7 +194,9 @@ describe('derivation coherence through the full pipeline (the C1 invariant fixtu
     // Guard against this fixture silently pinning an inert path (#102
     // engaged-golden precedent): with the flag off, elevation evolves rawly
     // and thickness goes stale, so coherence must NOT hold after stepping.
-    const params = createPlanetParams({ seed: 42, gridN: 32 });
+    // crustalColumns pinned off explicitly — it is default-ON since the KBV 20
+    // promotion, and this test's whole point is the FLAG-OFF (raw) world.
+    const params = createPlanetParams({ seed: 42, gridN: 32, crustalColumns: false });
     let last: Keyframe | undefined;
     run(params, 30e6, (kf) => {
       last = kf;

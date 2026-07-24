@@ -202,7 +202,13 @@ describe('seaLevel: water-mass invariant over the real pipeline (#33, §5)', () 
   // level leaves a sub-metre slack — ice sheets sit far above the shoreline.
   it('conserves ocean liquid + grounded ice = the init inventory, every step', () => {
     for (const seed of GOLDEN_SEEDS) {
-      const params = createPlanetParams({ seed, gridN: 16, stepYears: 2e6 });
+      // waterInventoryScale pinned to 1 (default is 1.5 since the KBV 20
+      // promotion): the physical closure ocean+ice == inventory holds exactly
+      // only when the scaled inventory equals the actual t=0 ocean volume, i.e.
+      // scale 1. crustalColumns stays at its default (ON) — the sea solve is
+      // representation-agnostic, so this still proves conservation on the
+      // shipped columns world.
+      const params = createPlanetParams({ seed, gridN: 16, stepYears: 2e6, waterInventoryScale: 1 });
       const count = cellCount(params.gridN);
       const ctx: SimContext = { rng: createRng(params.seed).fork('sim') };
       let s = createInitialState(params);

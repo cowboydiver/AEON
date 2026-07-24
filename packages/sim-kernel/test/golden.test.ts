@@ -66,15 +66,15 @@ describe('golden field hashes', () => {
  * Non-default golden arm for the #105 water-inventory parameter. Unlike the
  * mechanism prototypes this is a base `PlanetParams` number (like `numPlates`),
  * so it is pinned on the shipped DEFAULT world — the realistic path a
- * higher-water planet takes — with only `waterInventoryScale` changed. The
- * default 1.0 is byte-identical to the pre-#105 kernel (the multiply is exactly
- * ×1.0), so it needs no arm of its own; the MAIN goldens above pin it. This arm
- * pins scale 2.0. The scale changes only `globals.waterInventoryM` at init (not
- * a single field), so the t=0 hashes equal the default's and only the stepped
- * hashes are pinned. The `seaLevelM > 0` assertion guards ENGAGEMENT — a scale-2
- * planet floods above the 0 m datum within ten steps, where the default sea is
- * ~−900 m and falling — so this spine can never silently pin an inert path
- * (the #102 engaged-golden precedent).
+ * higher-water planet takes — with only `waterInventoryScale` changed. Since the
+ * crustal-columns promotion (KBV 20) that default world is columns-on at 1.5×,
+ * and this arm pins scale 2.0 riding it (the shipped default's own water default
+ * is pinned by the MAIN goldens above). The scale changes only
+ * `globals.waterInventoryM` at init (not a single field), so the t=0 hashes equal
+ * the default's and only the stepped hashes are pinned. The `seaLevelM > 0`
+ * assertion guards ENGAGEMENT — a scale-2 planet floods above the 0 m datum
+ * within ten steps — so this spine can never silently pin an inert path (the
+ * #102 engaged-golden precedent).
  */
 describe('golden field hashes: waterInventoryScale 2.0 (#105)', () => {
   it('seed 42: after 10 steps, with the sea flooded above the 0 m datum', () => {
@@ -94,10 +94,9 @@ describe('golden field hashes: waterInventoryScale 2.0 (#105)', () => {
 /**
  * Non-default golden arm for the #106 initial-land-fraction parameter. Like the
  * #105 water arm this is a base `PlanetParams` number, pinned on the shipped
- * DEFAULT world with only `initialLandFraction` changed. The default 0.3 is
- * byte-identical to the pre-#106 kernel (the sea quantile uses the same `0.3`
- * literal), so the MAIN goldens above pin it and it needs no arm. This arm pins
- * an ocean-dominated 0.15 start. UNLIKE the water arm, the parameter moves the
+ * DEFAULT world (columns-on at 1.5× since the KBV 20 promotion) with only
+ * `initialLandFraction` changed. The default 0.3 is pinned by the MAIN goldens
+ * above; this arm pins an ocean-dominated 0.15 start. UNLIKE the water arm, the parameter moves the
  * t=0 elevation quantile itself, so EVERY t=0 field differs from the default —
  * hence both the initial and stepped hashes are pinned. The `landFraction ≈ 0.15`
  * assertion guards ENGAGEMENT: it proves the coastline quantile actually shifted
@@ -134,7 +133,11 @@ describe('golden field hashes: initialLandFraction 0.15 (#106)', () => {
 describe('golden field hashes: legacy all-mechanisms-off', () => {
   for (const seed of GOLDEN_SEEDS) {
     it(`seed ${seed}: initial state and after 10 steps`, () => {
-      const params = createPlanetParams({ seed, ...ALL_MECHANISMS_OFF });
+      // `waterInventoryScale: 1` is pinned explicitly: the crustal-columns
+      // promotion (KBV 20) moved the water default to 1.5, so this historical
+      // spine must name the old value to keep pinning the pre-promotion world
+      // byte-identically (crustalColumns off is already in ALL_MECHANISMS_OFF).
+      const params = createPlanetParams({ seed, ...ALL_MECHANISMS_OFF, waterInventoryScale: 1 });
       const initial = createInitialState(params);
       const ctx: SimContext = { rng: createRng(params.seed).fork('sim') };
       let stepped = initial;
@@ -172,6 +175,11 @@ describe('golden field hashes: pre-V2-promotion default (V2 + datum trio off)', 
         seaLevelDatums: false,
         freeboard: false,
         bathymetryDatum: false,
+        // Pin the two params the crustal-columns promotion (KBV 20) moved to
+        // their pre-promotion defaults, so this pre-V2 spine keeps pinning the
+        // pre-V2 world byte-identically instead of inheriting columns-on/1.5×.
+        crustalColumns: false,
+        waterInventoryScale: 1,
       });
       const initial = createInitialState(params);
       const ctx: SimContext = { rng: createRng(params.seed).fork('sim') };
@@ -205,7 +213,41 @@ describe('golden field hashes: pre-datum-promotion default (seaLevelDatums/freeb
         seaLevelDatums: false,
         freeboard: false,
         bathymetryDatum: false,
+        // Pin the crustal-columns promotion's two moved defaults (KBV 20) to
+        // their pre-promotion values, so this pre-datum spine keeps pinning the
+        // pre-datum V2 world byte-identically.
+        crustalColumns: false,
+        waterInventoryScale: 1,
       });
+      const initial = createInitialState(params);
+      const ctx: SimContext = { rng: createRng(params.seed).fork('sim') };
+      let stepped = initial;
+      for (let i = 0; i < 10; i++) {
+        stepped = step(stepped, params.stepYears, ctx);
+      }
+      expect({
+        initial: fieldHashes(initial),
+        after10Steps: { timeYears: stepped.timeYears, ...fieldHashes(stepped) },
+      }).toMatchSnapshot();
+    });
+  }
+});
+
+/**
+ * Pre-crustal-columns-promotion default spine (KBV 20, the C7 gate): the shipped
+ * DEFAULT world with ONLY the two promoted params — `crustalColumns` and
+ * `waterInventoryScale` — pinned to their pre-promotion values (off / 1.0), the
+ * whole v18 datum + V2 stack at its defaults. These are the exact hashes the MAIN
+ * goldens carried BEFORE the promotion (reproduced verbatim: the C7 arc-ceiling
+ * re-key is guarded on the columns path, so columns-off + water-1.0 exercises the
+ * unchanged v19 default code path). They pin that the promotion changed ONLY those
+ * two defaults — the flag-off / water-1.0 world stays byte-identical on the real
+ * shipped stack, not merely on the all-off world the legacy spine covers.
+ */
+describe('golden field hashes: pre-crustal-columns-promotion default (crustalColumns off + waterInventoryScale 1)', () => {
+  for (const seed of GOLDEN_SEEDS) {
+    it(`seed ${seed}: initial state and after 10 steps`, () => {
+      const params = createPlanetParams({ seed, crustalColumns: false, waterInventoryScale: 1 });
       const initial = createInitialState(params);
       const ctx: SimContext = { rng: createRng(params.seed).fork('sim') };
       let stepped = initial;
@@ -230,7 +272,12 @@ describe('golden field hashes: pre-datum-promotion default (seaLevelDatums/freeb
 describe('golden field hashes: blockIsostasy on (#84)', () => {
   for (const seed of GOLDEN_SEEDS) {
     it(`seed ${seed}: after 10 steps`, () => {
-      const params = createPlanetParams({ seed, ...ALL_MECHANISMS_OFF, blockIsostasy: true });
+      const params = createPlanetParams({
+        seed,
+        ...ALL_MECHANISMS_OFF,
+        blockIsostasy: true,
+        waterInventoryScale: 1, // pin pre-promotion water default (KBV 20 moved it to 1.5)
+      });
       const ctx: SimContext = { rng: createRng(params.seed).fork('sim') };
       let stepped = createInitialState(params);
       for (let i = 0; i < 10; i++) {
@@ -270,6 +317,7 @@ describe('golden field hashes: bathymetryDatum engaged (#102)', () => {
       gridN: 32,
       ...ALL_MECHANISMS_OFF,
       bathymetryDatum: true,
+      waterInventoryScale: 1, // pin pre-promotion water default (KBV 20 moved it to 1.5)
     });
     const ctx: SimContext = { rng: createRng(params.seed).fork('sim') };
     let stepped = createInitialState(params);
@@ -303,7 +351,12 @@ describe('golden field hashes: bathymetryDatum engaged (#102)', () => {
  */
 describe('golden field hashes: crustalColumns (isolated + engaged)', () => {
   it('seed 42: after 10 steps, isolated under ALL_MECHANISMS_OFF', () => {
-    const params = createPlanetParams({ seed: 42, ...ALL_MECHANISMS_OFF, crustalColumns: true });
+    const params = createPlanetParams({
+      seed: 42,
+      ...ALL_MECHANISMS_OFF,
+      crustalColumns: true,
+      waterInventoryScale: 1, // pin pre-promotion water default so this isolated columns spine stays byte-identical to its C7 value
+    });
     const ctx: SimContext = { rng: createRng(params.seed).fork('sim') };
     let stepped = createInitialState(params);
     for (let i = 0; i < 10; i++) {
@@ -351,7 +404,12 @@ describe('golden field hashes: #88-#91 mechanism prototypes on', () => {
   ] as const;
   for (const [name, partial] of MECHS) {
     it(`${name} on, seed 42: after 10 steps`, () => {
-      const params = createPlanetParams({ seed: 42, ...ALL_MECHANISMS_OFF, ...partial });
+      const params = createPlanetParams({
+        seed: 42,
+        ...ALL_MECHANISMS_OFF,
+        ...partial,
+        waterInventoryScale: 1, // pin pre-promotion water default (KBV 20 moved it to 1.5)
+      });
       const ctx: SimContext = { rng: createRng(params.seed).fork('sim') };
       let stepped = createInitialState(params);
       for (let i = 0; i < 10; i++) {
